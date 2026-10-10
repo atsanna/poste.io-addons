@@ -1,0 +1,137 @@
+/*
+ * Dark theme for the Poste.io admin (add-on, not part of Poste.io).
+ *
+ * base.css is Bootstrap 5.3: with data-bs-theme="dark" on <html>, background,
+ * text, borders, tables, inputs and alerts turn dark by themselves. This file
+ * only fixes the colors that base.scss (and chosen.bootstrap.css) hard-code for
+ * the light look. Every rule is scoped to [data-bs-theme=dark]: the light theme
+ * does not change a single pixel. The attribute is set by
+ * templates/Base/DarkTheme/_head.html.twig.
+ */
+
+/* ---- top bar ---------------------------------------------------------- */
+[data-bs-theme=dark] .navbar-header.topnav,
+[data-bs-theme=dark] .topnav,
+[data-bs-theme=dark] #subnavbar {
+  background-color: var(--bs-body-bg);
+  border-bottom-color: var(--bs-border-color);
+}
+[data-bs-theme=dark] #subnavbar a,
+[data-bs-theme=dark] .navbar-brand { color: var(--bs-body-color); }
+[data-bs-theme=dark] .navbar-brand .io,
+[data-bs-theme=dark] .navbar-brand .mailserver { color: var(--bs-secondary-color); }
+
+/* ---- left menu ------------------------------------------------------- */
+[data-bs-theme=dark] .nav-sidebar > li > a { color: var(--bs-body-color); }
+[data-bs-theme=dark] .nav-sidebar > li > a:hover,
+[data-bs-theme=dark] .nav-sidebar > li > a:focus { background-color: var(--bs-tertiary-bg); }
+[data-bs-theme=dark] .nav-sidebar > .active > a,
+[data-bs-theme=dark] .nav-sidebar > .active > a:hover,
+[data-bs-theme=dark] .nav-sidebar > .active > a:focus { color: var(--bs-emphasis-color); }
+
+/* ---- text hard-coded in black ---------------------------------------- */
+[data-bs-theme=dark] th a,
+[data-bs-theme=dark] .ip-info,
+[data-bs-theme=dark] .ip-info a { color: var(--bs-emphasis-color); }
+[data-bs-theme=dark] .required:after { color: #ff6b6b; }
+[data-bs-theme=dark] .sub-header { border-bottom-color: var(--bs-border-color); }
+
+/* ---- buttons with the white gradient (pretty-buttons) ----------------- */
+[data-bs-theme=dark] .btn-default,
+[data-bs-theme=dark] .btn-light,
+[data-bs-theme=dark] .tool,
+[data-bs-theme=dark] .btn-edit,
+[data-bs-theme=dark] form.search button[type="submit"] {
+  color: var(--bs-body-color);
+  background-color: var(--bs-secondary-bg);
+  background-image: linear-gradient(to bottom, #3d434a 0%, #2f343a 100%);
+  border-color: var(--bs-border-color);
+  border-bottom-color: #23272b;
+}
+[data-bs-theme=dark] .btn-default:hover, [data-bs-theme=dark] .btn-default:focus,
+[data-bs-theme=dark] .btn-default:active, [data-bs-theme=dark] .btn-default.active,
+[data-bs-theme=dark] .btn-light:hover, [data-bs-theme=dark] .tool:hover,
+[data-bs-theme=dark] .btn-edit:hover,
+[data-bs-theme=dark] form.search button[type="submit"]:hover {
+  color: var(--bs-emphasis-color);
+  background-image: linear-gradient(to bottom, #474e56 0%, #383e45 100%);
+  border-color: #6c757d;
+}
+
+/* ---- pagination ------------------------------------------------------- */
+[data-bs-theme=dark] .pagination > li > a,
+[data-bs-theme=dark] .pagination > li > span {
+  background-color: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+}
+/* Poste.io's #337ab7 blue on the dark background has a 3.4 contrast: use the dark-theme link blue */
+[data-bs-theme=dark] .pagination > li > a,
+[data-bs-theme=dark] .pagination > .active > a,
+[data-bs-theme=dark] .pagination > .active > span { color: var(--bs-link-color); }
+[data-bs-theme=dark] .pagination > li > a:hover,
+[data-bs-theme=dark] .pagination > li > span:hover,
+[data-bs-theme=dark] .paging .pagination li span:hover { background-color: var(--bs-tertiary-bg); }
+[data-bs-theme=dark] .pagination > .disabled > span,
+[data-bs-theme=dark] .pagination > .disabled > a { color: var(--bs-secondary-color); background-color: var(--bs-body-bg); }
+
+/* ---- help and status boxes -------------------------------------------- */
+[data-bs-theme=dark] .help {
+  background-color: #3b3320;
+  border-left-color: #8a6d1f;
+  color: var(--bs-body-color);
+}
+[data-bs-theme=dark] .label-wating { background-color: #495057; }
+
+/* ---- Chosen drop-down menus ------------------------------------------- */
+[data-bs-theme=dark] .chosen-container-single .chosen-single,
+[data-bs-theme=dark] .chosen-container-active.chosen-with-drop .chosen-single,
+[data-bs-theme=dark] .chosen-container-multi .chosen-choices,
+[data-bs-theme=dark] .chosen-container .chosen-drop {
+  background-color: var(--bs-body-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+[data-bs-theme=dark] .chosen-container-active .chosen-single,
+[data-bs-theme=dark] .chosen-container-active .chosen-choices { border-color: #4d8fd6; }
+[data-bs-theme=dark] .chosen-container .chosen-results,
+[data-bs-theme=dark] .chosen-container-multi .chosen-choices .search-field input[type="text"],
+[data-bs-theme=dark] .chosen-container-active .chosen-choices .search-field input[type="text"] { color: var(--bs-body-color) !important; }
+[data-bs-theme=dark] .chosen-container-single .chosen-default,
+[data-bs-theme=dark] .chosen-container .chosen-results li.disabled-result,
+[data-bs-theme=dark] .chosen-container .chosen-results li.group-result { color: var(--bs-secondary-color); }
+[data-bs-theme=dark] .chosen-container .chosen-results li em { background: #5c5420; }
+[data-bs-theme=dark] .chosen-container .chosen-results .no-results,
+[data-bs-theme=dark] .chosen-container-multi .chosen-choices .search-choice,
+[data-bs-theme=dark] .chosen-container-multi .chosen-choices .search-choice-focus,
+[data-bs-theme=dark] .chosen-container .chosen-results-scroll {
+  background: var(--bs-tertiary-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+[data-bs-theme=dark] .chosen-container-single .chosen-search input[type="text"],
+[data-bs-theme=dark] .chosen-rtl .chosen-search input[type="text"] {
+  background-color: var(--bs-tertiary-bg);
+  border-color: var(--bs-border-color);
+  color: var(--bs-body-color);
+}
+
+/* ---- dashboard (styles inside the Base/Dashboard/*.html.twig templates) */
+/* .blockinfo { background-color: #fafafa } in index.html.twig: the section boxes */
+[data-bs-theme=dark] .blockinfo { background-color: var(--bs-tertiary-bg); }
+/* the loading spinner has a black border (_loading.html.twig) */
+[data-bs-theme=dark] .loading { border-color: rgba(255, 255, 255, 0.2); border-top-color: var(--bs-body-color); }
+
+/* ---- black written inline in the templates (style="color: black…") --- */
+/* dashboard Top users, login, Le/index, Domain/_additionals: inline styles win
+   over the stylesheet, hence !important; the START of the attribute is matched
+   so that background-color is not affected */
+[data-bs-theme=dark] [style^="color: black"],
+[data-bs-theme=dark] [style^="color: #333"] { color: var(--bs-body-color) !important; }
+
+/* ---- external mailbox logs page --------------------------------------- */
+[data-bs-theme=dark] .log-level-error { background-color: #44232a; }
+[data-bs-theme=dark] .log-level-warning { background-color: #3d3520; }
+[data-bs-theme=dark] .log-level-success { background-color: #1f3a27; }
+
+/* ---- theme item in the top bar ---------------------------------------- */
+#theme-toggle { cursor: pointer; }

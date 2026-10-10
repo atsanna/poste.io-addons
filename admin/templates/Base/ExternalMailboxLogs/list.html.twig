@@ -1,0 +1,102 @@
+
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'external_mailbox_logs.list.title'|trans }}{% endblock %}
+
+{% block body -%}
+
+    {% for flashMessage in app.session.flashbag.get('notice') %}
+    <div class="alert alert-info">
+        {{ flashMessage }}
+    </div>
+    {% endfor %}
+
+    {% for flashMessage in app.session.flashbag.get('error') %}
+    <div class="alert alert-danger">
+        {{ flashMessage }}
+    </div>
+    {% endfor %}
+
+    {# filter bar: flex to align labels, Chosen menus, field and buttons vertically #}
+    <style>
+        {# base.css limits every form to 560px: here the bar uses the whole column #}
+        .em-logs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: none; }
+        .em-logs-bar .form-group { display: flex; align-items: center; gap: 6px; margin: 0; }
+        .em-logs-bar label { margin: 0; white-space: nowrap; }
+        .em-logs-bar input[name="search"] { width: 220px; }
+    </style>
+    <div class="row">
+        <div class="col-md-8">
+            <form method="get" class="em-logs-bar">
+                <div class="form-group">
+                    <label for="type">{{ 'external_mailbox_logs.log_type.label'|trans }}:</label>
+                    <select name="type" id="type" class="form-control" onchange="this.form.submit()">
+                        {% for type, name in logTypes %}
+                            <option value="{{ type }}" {% if logType == type %}selected{% endif %}>{{ ('external_mailbox_logs.type.' ~ type)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="lines">{{ 'external_mailbox_logs.lines.label'|trans }}:</label>
+                    <select name="lines" id="lines" class="form-control" onchange="this.form.submit()">
+                        <option value="25" {% if lines == 25 %}selected{% endif %}>25</option>
+                        <option value="50" {% if lines == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if lines == 100 %}selected{% endif %}>100</option>
+                        <option value="200" {% if lines == 200 %}selected{% endif %}>200</option>
+                        <option value="500" {% if lines == 500 %}selected{% endif %}>500</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <input type="text" name="search" value="{{ search }}" placeholder="{{ 'external_mailbox_logs.search.placeholder'|trans }}" class="form-control">
+                </div>
+
+                <button type="submit" class="btn btn-default">
+                    <i class="fa fa-search"></i> {{ 'external_mailbox_logs.search.button'|trans }}
+                </button>
+            </form>
+        </div>
+
+        <div class="col-md-4 text-right">
+            <button class="btn btn-info" onclick="location.reload()">
+                <i class="fa fa-refresh"></i> {{ 'external_mailbox_logs.refresh.button'|trans }}
+            </button>
+
+            {% if logType == 'getmail' %}
+            <form method="post" action="{{ path('external_mailbox_logs_clear') }}" style="display: inline;" onsubmit="return confirm('{{ 'external_mailbox_logs.clear.confirm'|trans|e('js') }}')">
+                <input type="hidden" name="type" value="{{ logType }}">
+                <input type="hidden" name="_token" value="{{ csrf_token('external_mailbox_logs_clear') }}">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fa fa-trash"></i> {{ 'external_mailbox_logs.clear.button'|trans }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <br>
+
+    <div id="result">
+        {% include "Base/ExternalMailboxLogs/_logsList.html.twig" %}
+    </div>
+
+{% endblock %}
+
+{% block javascripts %}
+    <script>
+        // drop-down menus as in the rest of Poste.io (Chosen is loaded by
+        // base.html.twig); on change Chosen calls trigger("change"), which also
+        // runs the inline onchange and therefore submits the form as before
+        // explicit widths: otherwise Chosen copies the select width and truncates the text
+        $('#type').chosen({width: '190px', disable_search_threshold: 10});
+        $('#lines').chosen({width: '80px', disable_search_threshold: 10});
+
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            if (!document.hidden) {
+                $('#result').load('{{ path('external_mailbox_logs') }}?ajax&type={{ logType }}&lines={{ lines }}&search={{ search|url_encode }}');
+            }
+        }, 30000);
+    </script>
+{% endblock %}

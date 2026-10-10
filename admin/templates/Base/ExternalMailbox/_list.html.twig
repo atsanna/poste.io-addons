@@ -1,0 +1,62 @@
+{% set protocols = {
+    'SimplePOP3Retriever': 'external_mailboxes.form.protocol_pop3',
+    'SimplePOP3SSLRetriever': 'external_mailboxes.form.protocol_pop3_ssl',
+    'SimpleIMAPRetriever': 'external_mailboxes.form.protocol_imap',
+    'SimpleIMAPSSLRetriever': 'external_mailboxes.form.protocol_imap_ssl'
+} %}
+<table>
+    <tbody>
+    <thead>
+        <tr>
+            <th></th>
+            <th><i class="fa fa-envelope fa-fw" aria-hidden="true"></i> {{ 'external_mailboxes.column.email'|trans }}</th>
+            <th>{{ 'external_mailboxes.column.protocol'|trans }}</th>
+            <th>{{ 'external_mailboxes.column.server'|trans }}</th>
+            <th>{{ 'external_mailboxes.column.deliver_to'|trans }}</th>
+            <th>{{ 'external_mailboxes.column.check_every'|trans }}</th>
+            <th></th>
+        </tr>
+    </thead>
+    {% for subdir in fileList %}
+        {% for configurations in subdir %}
+            {% for config in configurations %}
+                {% set type = config.content.retriever.type %}
+                <tr data-href="{{ path('external_mailboxes_show', {'mailbox': config.email_address}) }}">
+                    <td class="status">
+                        <span class="{{ config.status }}"></span>
+                    </td>
+                    <th style="width: 30%">
+                        {{ config.email_address }}
+                    </th>
+                    <td>
+                        {{ protocols[type] is defined ? protocols[type]|trans : type }}
+                    </td>
+                    <td>
+                        {{ config.content.retriever.server }}
+                    </td>
+                    <td>
+                        {{ config.deliver_to }}
+                    </td>
+                    <td>
+                        {{ config.check_every == 'disabled' ? 'external_mailboxes.form.schedule_disabled'|trans : config.check_every }}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                        <span class="em-test-result" style="margin-right: 6px"></span>
+                        <button type="button" class="btn btn-default btn-xs em-test"
+                                data-url="{{ path('external_mailboxes_test_saved', {'mailbox': config.email_address}) }}">
+                            <i class="fa fa-plug"></i> {{ 'external_mailboxes.js.test_button'|trans }}
+                        </button>
+                        <a class="tool" href="{{ path('external_mailboxes_show', {'mailbox': config.email_address}) }}">{{ 'external_mailboxes.show.button'|trans }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        {% endfor %}
+    {% else %}
+        <tr>
+            <td colspan="99">
+                <em>{{ 'external_mailboxes.no_files'|trans }}</em>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>

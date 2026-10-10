@@ -1,0 +1,6 @@
+
+theme:
+  title: Color theme (automatic follows the system)
+  auto: "Theme: automatic"
+  dark: "Theme: dark"
+  light: "Theme: light"

@@ -1,0 +1,6 @@
+
+theme:
+  title: Barevný motiv (automatický se řídí systémem)
+  auto: "Motiv: automatický"
+  dark: "Motiv: tmavý"
+  light: "Motiv: světlý"

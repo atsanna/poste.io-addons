@@ -1,0 +1,153 @@
+{# External mailbox form: Chosen menus, IMAP-only fields, "Test connection", "Load folders" #}
+<script>
+$(function () {
+    // drop-down menus as in the rest of Poste.io: Chosen is loaded by
+    // base.html.twig, but every page has to enable it on its own selects
+    $('#form_type, #form_deliveryto, #form_checkevery, #form_optionsdeleteafter, #form_cleanupretention').chosen();
+
+    // IMAP fields are useless for a POP3 mailbox: they are hidden (they stay in
+    // the form, and saving ignores them for POP3). This must run AFTER .chosen():
+    // Chosen takes the width of the select, which would be 0 if hidden.
+    var imapOnly = ['#form_mailboxes', '#form_cleanuptrash', '#form_trashfolder',
+                    '#form_cleanupspam', '#form_spamfolder', '#form_cleanupretention'];
+    function toggleImapFields() {
+        var isImap = ($('#form_type').val() || '').indexOf('IMAP') !== -1;
+        $.each(imapOnly, function (i, sel) {
+            $(sel).closest('.form-group').toggle(isImap);
+        });
+    }
+    $('#form_type').on('change', toggleImapFields);
+    toggleImapFields();
+
+    // "Test connection": one login on the remote server, on click only (never
+    // automatic: providers lock the account after too many failed attempts)
+    var $password = $('#form_password');
+    if ($password.length) {
+        var $testBtn = $('<button type="button" class="btn btn-default" style="margin-top:5px">' +
+                         '<i class="fa fa-plug"></i> {{ 'external_mailboxes.js.test_button'|trans|e('js') }}</button>');
+        var $testResult = $('<div style="margin-top:5px"></div>');
+        $password.after($testResult).after($testBtn);
+
+        $testBtn.on('click', function () {
+            $testBtn.prop('disabled', true);
+            $testResult.html('<i class="fa fa-spinner fa-spin"></i> {{ 'external_mailboxes.js.connecting'|trans|e('js') }}');
+            $.post('{{ path('external_mailboxes_test') }}', {
+                type: $('#form_type').val(),
+                server: $('#form_server').val(),
+                port: $('#form_port').val(),
+                username: $('#form_username').val(),
+                password: $password.val(),
+                // when editing with an empty password, the server uses the saved one
+                // (only if server, port, protocol and username match)
+                email_address: $('#form_email_address').val(),
+                _token: '{{ csrf_token('external_mailboxes_test') }}'
+            }).done(function (data) {
+                $testResult.html('<span class="text-success"><i class="fa fa-check"></i> ' +
+                                 $('<i>').text(data.message).html() + '</span>');
+            }).fail(function (xhr) {
+                // jQuery 2.x has no xhr.responseJSON: the JSON body is parsed by hand
+                var msg = '{{ 'external_mailboxes.js.connection_error'|trans|e('js') }} (HTTP ' + xhr.status + ')';
+                try {
+                    var j = JSON.parse(xhr.responseText);
+                    if (j && j.error) msg = j.error;
+                } catch (e) {}
+                $testResult.html('<span class="text-danger"><i class="fa fa-times"></i> ' +
+                                 $('<i>').text(msg).html() + '</span>');
+            }).always(function () {
+                $testBtn.prop('disabled', false);
+            });
+        });
+    }
+
+    var $mailboxes = $('#form_mailboxes');
+    if (!$mailboxes.length) return;
+
+    var $btn = $('<button type="button" class="btn btn-default" style="margin-top:5px">' +
+                 '<i class="fa fa-cloud-download"></i> {{ 'external_mailboxes.js.load_folders'|trans|e('js') }}</button>');
+    var $result = $('<div style="margin-top:5px"></div>');
+    $mailboxes.after($result).after($btn);
+
+    function selectedFolders() {
+        return $.map($mailboxes.val().split(','), $.trim).filter(function (v) { return v !== ''; });
+    }
+
+    $btn.on('click', function () {
+        var type = $('#form_type').val();
+        if (type.indexOf('IMAP') === -1) {
+            $result.html('<span class="text-warning">{{ 'external_mailboxes.js.imap_only'|trans|e('js') }}</span>');
+            return;
+        }
+        $btn.prop('disabled', true);
+        $result.html('<i class="fa fa-spinner fa-spin"></i> {{ 'external_mailboxes.js.connecting'|trans|e('js') }}');
+        $.post('{{ path('external_mailboxes_folders') }}', {
+            type: type,
+            server: $('#form_server').val(),
+            port: $('#form_port').val(),
+            username: $('#form_username').val(),
+            password: $('#form_password').val(),
+            // when editing with an empty password, the server uses the saved one of
+            // this mailbox (only if server, port, protocol and username match)
+            email_address: $('#form_email_address').val(),
+            _token: '{{ csrf_token('external_mailboxes_folders') }}'
+        }).done(function (data) {
+            var current = selectedFolders();
+            var html = '<div class="well well-sm" style="max-height:200px;overflow-y:auto">';
+            $.each(data.folders, function (i, f) {
+                var checked = current.indexOf(f.name) !== -1 ? ' checked' : '';
+                html += '<label style="display:block;font-weight:normal;margin:2px 0">' +
+                        '<input type="checkbox" class="folder-pick" value="' + $('<i>').text(f.name).html() + '"' + checked + '> ' +
+                        $('<i>').text(f.label).html() + '</label>';
+            });
+            html += '</div>';
+            $result.html(data.folders.length ? html : '<span class="text-warning">{{ 'external_mailboxes.js.no_folders'|trans|e('js') }}</span>');
+            if (data.folders.length) offerFolderPickers(data.folders);
+        }).fail(function (xhr) {
+            // jQuery 2.x has no xhr.responseJSON: the JSON body is parsed by hand
+            var msg = '{{ 'external_mailboxes.js.connection_error'|trans|e('js') }} (HTTP ' + xhr.status + ')';
+            try {
+                var j = JSON.parse(xhr.responseText);
+                if (j && j.error) msg = j.error;
+            } catch (e) {}
+            $result.html('<span class="text-danger">' + $('<i>').text(msg).html() + '</span>');
+        }).always(function () {
+            $btn.prop('disabled', false);
+        });
+    });
+
+    $result.on('change', '.folder-pick', function () {
+        var names = [];
+        $result.find('.folder-pick:checked').each(function () { names.push($(this).val()); });
+        $mailboxes.val(names.join(','));
+    });
+
+    // Once the folders are loaded, the Trash/Spam text field is hidden and only
+    // the drop-down remains, writing into the field (still there, hidden,
+    // because it is the one submitted with the form; the text field is the
+    // fallback when the list has not been loaded)
+    function offerFolderPickers(folders) {
+        $.each(['#form_trashfolder', '#form_spamfolder'], function (i, sel) {
+            var $input = $(sel);
+            if (!$input.length) return;
+            // when the folders are reloaded, the Chosen menu of the previous round goes too
+            $input.parent().find('.folder-picker').each(function () { $(this).chosen('destroy'); }).remove();
+            var $pick = $('<select class="form-control folder-picker"></select>');
+            var current = $input.val();
+            var found = false;
+            $.each(folders, function (j, f) {
+                var opt = $('<option></option>').attr('value', f.name).text(f.label);
+                if (f.name === current) { opt.prop('selected', true); found = true; }
+                $pick.append(opt);
+            });
+            if (current && !found) {
+                // value configured but missing on the server: keep it and flag it
+                $pick.prepend($('<option selected></option>').attr('value', current)
+                    .text(current + ' {{ 'external_mailboxes.js.not_on_server'|trans|e('js') }}'));
+            }
+            $pick.on('change', function () { $input.val(this.value); });
+            $input.hide().after($pick);
+            $pick.chosen();
+            $input.val($pick.val());
+        });
+    }
+});
+</script>

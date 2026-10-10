@@ -1,0 +1,180 @@
+
+menu:
+  external_mailboxes: Externí schránky
+  external_mailbox_logs: Logy externích schránek
+
+external_mailboxes:
+  list:
+    title: Externí schránky
+  create:
+    button: Přidat externí schránku
+  title: Externí schránka
+  new:
+    title: Přidat externí schránku
+  edit:
+    title: Upravit externí schránku
+    button: Upravit
+  delete:
+    button: Odebrat
+  show:
+    button: zobrazit
+    retriever: Informace o stahování
+    destination: Informace o doručení
+    options: Možnosti
+    other: Další informace
+    type: Typ
+    path: Cesta
+    arguments: Argumenty
+    user: Uživatel
+    group: Skupina
+    delete: Mazat
+    delete_after: Mazat po
+    message_log: Log zpráv
+    message_log_verbose: Podrobný log zpráv
+    max_message_size: Max. velikost zprávy
+    delivered_to: Hlavička Delivered-To
+    check_every: Kontrolovat každých
+  back: Zpět na seznam
+  no_files: Žádné externí schránky
+  column:
+    email: E-mailová adresa
+    protocol: Protokol
+    server: Vzdálený poštovní server
+    deliver_to: Doručovat zprávy do
+    check_every: Kontrolovat tento účet každých
+  deliver:
+    redirect: "{address} → {targets} (přesměrování)"
+    copy: "{address} (+ kopie na {targets})"
+  form:
+    email_address: E-mailová adresa
+    protocol: Protokol
+    protocol_pop3: POP3
+    protocol_pop3_ssl: POP3 s SSL
+    protocol_imap: IMAP
+    protocol_imap_ssl: IMAP s SSL
+    server: Adresa serveru
+    port: Port
+    port_help: Ponechte prázdné pro výchozí port protokolu (110/995 POP3, 143/993 IMAP).
+    port_placeholder: výchozí
+    timeout: Časový limit spojení (sekundy)
+    timeout_help: Ponechte prázdné pro výchozí hodnotu getmailu (180 s). U pomalých nebo nespolehlivých serverů ji snižte, aby zaseknuté spojení nezdrželo celý cyklus cronu.
+    username: Uživatelské jméno
+    password: Heslo
+    password_help: Ponechte prázdné pro zachování současného hesla.
+    mailboxes: Vzdálené složky (pouze IMAP)
+    mailboxes_help: Složky IMAP ke stažení, oddělené čárkou. K jejich výběru použijte tlačítko „Načíst složky ze serveru“.
+    deliver_to: Doručovat zprávy do
+    check_every: Kontrolovat tento účet každých
+    schedule_disabled: vypnuto
+    read_all: Stahovat vše
+    read_all_help: "Pokud je zapnuto, getmail stáhne všechny dostupné zprávy. Pokud je vypnuto, stáhne jen zprávy, které ještě neviděl. Výchozí: zapnuto."
+    delete: Mazat zprávy
+    delete_help: "Pokud je zapnuto, getmail zprávy po stažení a úspěšném doručení smaže. Pokud je vypnuto, nechá je na serveru. Výchozí: vypnuto."
+    delete_after: Mazat zprávy po
+    delete_after_help: "Pokud je nastaveno, getmail smaže zprávy tolik dní poté, co je poprvé uviděl, pokud byly staženy a doručeny. Zprávy tak zůstanou na serveru zvolený počet dní. Volba „Mazat zprávy“ má přednost: pokud jsou zapnuty obě, zprávy se smažou hned. Výchozí: 0, tedy funkce vypnuta."
+    delete_after_never: Nikdy
+    delete_after_immediately: Ihned
+    delete_after_1d: Po 1 dni
+    delete_after_2d: Po 2 dnech
+    delete_after_3d: Po 3 dnech
+    delete_after_1w: Po 1 týdnu
+    delete_after_1m: Po 1 měsíci
+    delete_after_3m: Po 3 měsících
+    delete_after_1y: Po 1 roce
+    received: Hlavička Received
+    received_help: "Pokud je zapnuto, getmail přidá ke zprávě hlavičku Received:. Pokud je vypnuto, nepřidá ji. Výchozí: zapnuto."
+    syslog: Logovat do syslogu
+    syslog_help: "Pokud je zapnuto, getmail zaznamenává svou činnost do systémového logu. Syslog je ze své podstaty nespolehlivý a může zprávy ztrácet. Výchozí: vypnuto."
+    max_messages: Max. počet zpráv na běh
+    max_messages_help: Pokud je nastaveno, getmail stáhne při jednom běhu nejvýše tolik zpráv. Hodí se pro první import velké schránky. Ponechte prázdné bez omezení.
+    max_bytes: Max. bajtů na běh
+    max_bytes_help: Pokud je nastaveno, getmail přestane stahovat po tolika bajtech v jednom běhu. Hodí se pro první import velké schránky. Ponechte prázdné bez omezení.
+    unlimited: bez omezení
+    delete_bigger: Mazat zprávy větší než (bajty)
+    delete_bigger_help: Pokud je nastaveno, getmail smaže na vzdáleném serveru zprávy větší než tato velikost, ANIŽ by je stáhl. Ponechte prázdné pro vypnutí.
+    delete_bigger_placeholder: vypnuto
+    cleanup_trash: Vyprazdňovat vzdálený Koš (pouze IMAP)
+    cleanup_trash_help: Pravidelně vyprazdňuje vzdálenou složku Koš (zprávy se smažou na vzdáleném serveru, ANIŽ by se importovaly).
+    trash_folder: Název složky Koš
+    cleanup_spam: Vyprazdňovat vzdálený Spam (pouze IMAP)
+    cleanup_spam_help: Pravidelně vyprazdňuje vzdálenou složku Spam (zprávy se smažou na vzdáleném serveru, ANIŽ by se importovaly). Pokud je složka uvedena i ve „Vzdálených složkách“, volba „Smazat ihned“ se automaticky prodlouží na 1 den, aby se zprávy před smazáním vždy importovaly.
+    spam_folder: Název složky Spam
+    retention: Doba uchování při čištění
+    retention_help: Jak dlouho zprávy zůstávají ve vzdálených složkách Koš/Spam před smazáním.
+    retention_immediately: Smazat ihned
+    retention_1d: Ponechat 1 den
+    retention_3d: Ponechat 3 dny
+    retention_1w: Ponechat 1 týden
+    retention_2w: Ponechat 2 týdny
+    retention_1m: Ponechat 1 měsíc
+    save: Uložit
+  js:
+    test_button: Otestovat připojení
+    connecting: Připojování…
+    connection_error: Chyba připojení
+    load_folders: Načíst složky ze serveru
+    imap_only: Výpis složek je dostupný jen pro účty IMAP.
+    no_folders: Nebyly nalezeny žádné složky.
+    not_on_server: (není na serveru)
+  error:
+    prefix: "Externí schránky: {message}"
+    csrf: Neplatný token CSRF, načtěte stránku znovu
+    invalid_email: neplatná e-mailová adresa
+    invalid_protocol: neplatný protokol
+    invalid_schedule: neplatný interval
+    invalid_delete_after: neplatná hodnota „Mazat zprávy po“
+    invalid_retention: neplatná doba uchování
+    invalid_server: neplatná adresa serveru
+    invalid_delivery: neplatná cílová schránka
+    invalid_characters: "neplatné znaky v poli {field}"
+    username_required: uživatelské jméno je povinné
+    password_required: heslo je povinné
+    write_failed: konfigurační soubor nelze zapsat
+    protocol: Neplatný protokol
+    server_username_required: Server a uživatelské jméno jsou povinné
+    server_invalid: Neplatná adresa serveru
+    password_needed_folders: Pro načtení složek zadejte heslo
+    password_needed_test: Pro test připojení zadejte heslo
+    saved_mismatch_folders: "Protokol, server, port nebo uživatelské jméno se liší od uložených: pro načtení složek zadejte heslo"
+    saved_mismatch_test: "Protokol, server, port nebo uživatelské jméno se liší od uložených: pro test připojení zadejte heslo"
+    imap_missing: Rozšíření PHP imap není dostupné
+    imap_only: Výpis složek je dostupný jen pro účty IMAP
+    not_found: Externí schránka nebyla nalezena
+  login_ok: Připojení a přihlášení proběhlo úspěšně
+
+external_mailbox_logs:
+  list:
+    title: Logy externích schránek
+  log_type:
+    label: Typ logu
+  lines:
+    label: Řádky
+  search:
+    placeholder: Hledat...
+    button: Hledat
+  refresh:
+    button: Obnovit
+  clear:
+    button: Vymazat
+    confirm: Vymazat logy getmailu?
+    success: Logy getmailu byly vymazány
+    not_writable: "Logy getmailu nelze vymazat: soubor není zapisovatelný"
+    system: Systémové logy nelze vymazat
+    error: "Chyba při mazání logů: {message}"
+  load_error: "Logy nelze načíst: {message}"
+  level:
+    label: Úroveň
+  timestamp:
+    label: Čas
+  process:
+    label: Proces
+  message:
+    label: Zpráva
+  host: Hostitel
+  raw: Surový záznam
+  no_logs: Nebyly nalezeny žádné záznamy
+  type:
+    getmail: Log getmailu
+    cron: Log cronu
+    syslog: Systémový log
+    mail: Log pošty

@@ -1,0 +1,180 @@
+
+menu:
+  external_mailboxes: External Mailboxes
+  external_mailbox_logs: External Mailbox Logs
+
+external_mailboxes:
+  list:
+    title: External Mailboxes
+  create:
+    button: Add an external mailbox
+  title: External Mailbox
+  new:
+    title: Add External Mailbox
+  edit:
+    title: Edit External Mailbox
+    button: Edit
+  delete:
+    button: Remove
+  show:
+    button: show
+    retriever: Retriever information
+    destination: Destination information
+    options: Options information
+    other: Other information
+    type: Type
+    path: Path
+    arguments: Arguments
+    user: User
+    group: Group
+    delete: Delete
+    delete_after: Delete after
+    message_log: Message log
+    message_log_verbose: Message log verbose
+    max_message_size: Max message size
+    delivered_to: Delivered to
+    check_every: Check every
+  back: Back to the list
+  no_files: No external mailboxes
+  column:
+    email: Email address
+    protocol: Protocol
+    server: Remote mail server
+    deliver_to: Deliver messages to
+    check_every: Check this account every
+  deliver:
+    redirect: "{address} → {targets} (redirect)"
+    copy: "{address} (+ copy to {targets})"
+  form:
+    email_address: Email address
+    protocol: Protocol
+    protocol_pop3: POP3
+    protocol_pop3_ssl: POP3 with SSL
+    protocol_imap: Simple IMAP Retriever
+    protocol_imap_ssl: Simple IMAP SSL Retriever
+    server: Server address
+    port: Port
+    port_help: Leave empty for the protocol default (110/995 POP3, 143/993 IMAP).
+    port_placeholder: default
+    timeout: Connection timeout (seconds)
+    timeout_help: Leave empty for the getmail default (180s). Lower it for slow/unreliable servers so a stuck connection does not hold the whole cron cycle.
+    username: Username
+    password: Password
+    password_help: Leave empty to keep the current password.
+    mailboxes: Remote folders (IMAP only)
+    mailboxes_help: Comma-separated IMAP folders to download. Use the "Load folders from server" button to pick them.
+    deliver_to: Deliver messages to
+    check_every: Check this account every
+    schedule_disabled: disabled
+    read_all: Read all
+    read_all_help: "If set, getmail retrieves all available messages. If unset, getmail only retrieves messages it has not seen before. Default: True."
+    delete: Delete message
+    delete_help: "If set, getmail will delete messages after retrieving and successfully delivering them. If unset, getmail will leave messages on the server after retrieving them. Default: False."
+    delete_after: Delete message after
+    delete_after_help: "If set, getmail will delete messages this number of days after first seeing them, if they have been retrieved and delivered. This, in effect, leaves messages on the server for a configurable number of days after retrieving them. Note that the delete parameter has higher priority; if both are set, the messages will be deleted immediately. Default: 0, which means not to enable this feature."
+    delete_after_never: Never
+    delete_after_immediately: Immediately
+    delete_after_1d: After 1 day
+    delete_after_2d: After 2 days
+    delete_after_3d: After 3 days
+    delete_after_1w: After 1 week
+    delete_after_1m: After 1 month
+    delete_after_3m: After 3 months
+    delete_after_1y: After 1 year
+    received: Received
+    received_help: "If set, getmail adds a Received: header field to the message. If unset, it will not do so. Default: True."
+    syslog: Message Log Syslog
+    syslog_help: "If set, getmail will record a log of its actions using the system logger. Note that syslog is inherently unreliable and can lose log messages. Default: False."
+    max_messages: Max messages per session
+    max_messages_help: If set, getmail retrieves at most this many messages per run. Useful for the first import of a huge mailbox. Leave empty for no limit.
+    max_bytes: Max bytes per session
+    max_bytes_help: If set, getmail stops retrieving after this many bytes in a single run. Useful for the first import of a huge mailbox. Leave empty for no limit.
+    unlimited: unlimited
+    delete_bigger: Delete messages bigger than (bytes)
+    delete_bigger_help: If set, getmail deletes messages larger than this size on the remote server WITHOUT retrieving them. Leave empty to disable.
+    delete_bigger_placeholder: disabled
+    cleanup_trash: Empty remote Trash (IMAP only)
+    cleanup_trash_help: Periodically empty the remote Trash folder (messages are deleted on the remote server WITHOUT being imported).
+    trash_folder: Trash folder name
+    cleanup_spam: Empty remote Spam (IMAP only)
+    cleanup_spam_help: 'Periodically empty the remote Spam folder (messages are deleted on the remote server WITHOUT being imported). If the folder is also listed in "Remote folders", "Delete immediately" is automatically raised to 1 day so messages are always imported before deletion.'
+    spam_folder: Spam folder name
+    retention: Cleanup retention
+    retention_help: How long messages are kept in the remote Trash/Spam folders before deletion.
+    retention_immediately: Delete immediately
+    retention_1d: Keep 1 day
+    retention_3d: Keep 3 days
+    retention_1w: Keep 1 week
+    retention_2w: Keep 2 weeks
+    retention_1m: Keep 1 month
+    save: Save
+  js:
+    test_button: Test connection
+    connecting: Connecting…
+    connection_error: Connection error
+    load_folders: Load folders from server
+    imap_only: Folder listing is only available for IMAP accounts.
+    no_folders: No folders found.
+    not_on_server: (not on server)
+  error:
+    prefix: "External mailboxes: {message}"
+    csrf: Invalid CSRF token, reload the page
+    invalid_email: invalid email address
+    invalid_protocol: invalid protocol
+    invalid_schedule: invalid schedule
+    invalid_delete_after: invalid "delete message after" value
+    invalid_retention: invalid cleanup retention
+    invalid_server: invalid server address
+    invalid_delivery: invalid delivery mailbox
+    invalid_characters: "invalid characters in {field}"
+    username_required: username is required
+    password_required: password is required
+    write_failed: unable to write the configuration file
+    protocol: Invalid protocol
+    server_username_required: Server and username are required
+    server_invalid: Invalid server address
+    password_needed_folders: Enter the password to load the folders
+    password_needed_test: Enter the password to test the connection
+    saved_mismatch_folders: "Protocol, server, port or username differ from the saved ones: enter the password to load the folders"
+    saved_mismatch_test: "Protocol, server, port or username differ from the saved ones: enter the password to test the connection"
+    imap_missing: PHP imap extension not available
+    imap_only: Folder listing is only available for IMAP accounts
+    not_found: External mailbox not found
+  login_ok: Connection and login successful
+
+external_mailbox_logs:
+  list:
+    title: External Mailbox Logs
+  log_type:
+    label: Log Type
+  lines:
+    label: Lines
+  search:
+    placeholder: Search...
+    button: Search
+  refresh:
+    button: Refresh
+  clear:
+    button: Clear
+    confirm: Clear getmail logs?
+    success: Getmail logs cleared successfully
+    not_writable: "Cannot clear getmail logs: file not writable"
+    system: Cannot clear system logs
+    error: "Error clearing logs: {message}"
+  load_error: "Unable to load logs: {message}"
+  level:
+    label: Level
+  timestamp:
+    label: Time
+  process:
+    label: Process
+  message:
+    label: Message
+  host: Host
+  raw: Raw
+  no_logs: No logs found
+  type:
+    getmail: Getmail Log
+    cron: Cron Log
+    syslog: System Log
+    mail: Mail Log

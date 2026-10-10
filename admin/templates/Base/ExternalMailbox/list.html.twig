@@ -1,0 +1,74 @@
+{% import '_search.html.twig' as search %}
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'external_mailboxes.list.title'|trans }}{% endblock %}
+
+{% block body -%}
+
+    {% for flashMessage in app.session.flashbag.get('notice') %}
+    <div class="alert alert-info">
+        {{ flashMessage|trans }}
+    </div>
+    {% endfor %}
+
+    <p>
+        <a class="btn btn-primary" href="{{ path('external_mailboxes_new') }}">
+            <i class="fa fa-plus"></i> {{ 'external_mailboxes.create.button'|trans }}
+        </a>
+    </p>
+
+    <br />
+
+    <div id="result">
+        {% include "Base/ExternalMailbox/_list.html.twig" %}
+    </div>
+
+{% endblock %}
+
+{% block javascripts %}
+    {{ search.javascript(path('external_mailboxes'), 'external_mailboxes') }}
+
+    {# we will load full records after load #}
+    {% if query is empty %}
+    <script>
+        if (!runningAjax) {
+            {# don't load if we are already loading searched from session #}
+            showLoading();
+            $('#result').load('{{ path('external_mailboxes') }}?ajax', function() {
+                hideLoading();
+                hideReset();
+            });
+        }
+    </script>
+    {% endif %}
+
+    <script>
+    // "Test connection" on a row: tests the mailbox with its saved
+    // configuration. One login per click, never automatic. Delegated handler (the
+    // rows arrive via AJAX); stopPropagation: the click does not open the mailbox.
+    $(document).on('click', 'table tr[data-href] .em-test', function (e) {
+        e.stopPropagation();
+        var $btn = $(this);
+        var $out = $btn.siblings('.em-test-result');
+        $btn.prop('disabled', true);
+        $out.html('<i class="fa fa-spinner fa-spin"></i>');
+        $.post($btn.data('url'), {
+            _token: '{{ csrf_token('external_mailboxes_test') }}'
+        }).done(function (data) {
+            $out.html('<span class="text-success" title="' + $('<i>').text(data.message).html() + '">' +
+                      '<i class="fa fa-check"></i> ' + $('<i>').text(data.message).html() + '</span>');
+        }).fail(function (xhr) {
+            // jQuery 2.x has no xhr.responseJSON: the JSON body is parsed by hand
+            var msg = '{{ 'external_mailboxes.js.connection_error'|trans|e('js') }} (HTTP ' + xhr.status + ')';
+            try {
+                var j = JSON.parse(xhr.responseText);
+                if (j && j.error) msg = j.error;
+            } catch (err) {}
+            $out.html('<span class="text-danger"><i class="fa fa-times"></i> ' + $('<i>').text(msg).html() + '</span>');
+        }).always(function () {
+            $btn.prop('disabled', false);
+        });
+        return false;
+    });
+    </script>
+{% endblock %}

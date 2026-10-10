@@ -1,0 +1,142 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'external_mailboxes.title'|trans }} {{ mailbox }}{% endblock %}
+
+{% block body -%}
+    {% for flashMessage in app.session.flashbag.get('notice') %}
+    <div class="alert alert-info">
+        {{ flashMessage|trans }}
+    </div>
+    {% endfor %}
+
+    <div id="result">
+        {% for subdir in fileList %}
+            {% for configurations in subdir %}
+                {% for config in configurations %}    
+                    <h4>{{ 'external_mailboxes.show.retriever'|trans }}</h4>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th style="width: 30%;">{{ 'external_mailboxes.column.email'|trans }}</th>
+                                <td>{{ mailbox }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.type'|trans }}</th>
+                                <td>{{ config.content.retriever.type }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.form.server'|trans }}</th>
+                                <td>{{ config.content.retriever.server }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.form.username'|trans }}</th>
+                                <td>{{ config.content.retriever.username }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.form.password'|trans }}</th>
+                                <td>{{ config.content.retriever.password }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <h4>{{ 'external_mailboxes.show.destination'|trans }}</h4>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th style="width: 30%;">{{ 'external_mailboxes.show.type'|trans }}</th>
+                                <td>{{ config.content.destination.type }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.path'|trans }}</th>
+                                <td>{{ config.content.destination.path }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.arguments'|trans }}</th>
+                                <td>{{ config.content.destination.arguments }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.user'|trans }}</th>
+                                <td>{{ config.content.destination.user }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.group'|trans }}</th>
+                                <td>{{ config.content.destination.group }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <h4>{{ 'external_mailboxes.show.options'|trans }}</h4>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th style="width: 30%;">{{ 'external_mailboxes.form.read_all'|trans }}</th>
+                                <td>{{ config.content.options.read_all }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.delete'|trans }}</th>
+                                <td>{{ config.content.options.delete }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.delete_after'|trans }}</th>
+                                <td>{{ config.content.options.delete_after }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.form.received'|trans }}</th>
+                                <td>{{ config.content.options.received }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.form.syslog'|trans }}</th>
+                                <td>{{ config.content.options.message_log_syslog }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.message_log'|trans }}</th>
+                                <td>{{ config.content.options.message_log }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.message_log_verbose'|trans }}</th>
+                                <td>{{ config.content.options.message_log_verbose }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.max_message_size'|trans }}</th>
+                                <td>{{ config.content.options.max_message_size }}</td>
+                            </tr>
+                            <tr>
+                                <th>{{ 'external_mailboxes.show.delivered_to'|trans }}</th>
+                                <td>{{ config.content.options.delivered_to }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <h4>{{ 'external_mailboxes.show.other'|trans }}</h4>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th style="width: 30%;">{{ 'external_mailboxes.show.check_every'|trans }}</th>
+                                <td>{{ config.check_every }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                {% endfor %}
+            {% endfor %}
+        {% endfor %}
+    </div>
+    <br/>
+    <span class="default-button">
+    {{ form_start(editForm) }}
+    {{ form_widget(editForm) }}
+    {{ form_end(editForm) }}
+    </span>
+    <span class="delete-button">
+    {{ form_start(form) }}
+    {{ form_widget(form) }}
+    {# Symfony form CSRF is disabled by Poste.io's fos_rest (disable_csrf_role): explicit token #}
+    <input type="hidden" name="_token" value="{{ csrf_token('external_mailboxes_delete') }}">
+    {{ form_end(form) }}
+    </span>
+    <br/>
+    <br/>
+    <a href="{{ path('external_mailboxes') }}">
+        <span class="glyphicon glyphicon-chevron-left"></span> {{ 'external_mailboxes.back'|trans }}
+    </a>
+{% endblock %}
+

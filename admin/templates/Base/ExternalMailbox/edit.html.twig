@@ -1,0 +1,20 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'external_mailboxes.edit.title'|trans }}{% endblock %}
+
+{% block body %}
+   {{ form_start(form) }}
+   {{ form_widget(form) }}
+   {# Symfony form CSRF is disabled by Poste.io's fos_rest (disable_csrf_role): explicit token #}
+   <input type="hidden" name="_token" value="{{ csrf_token('external_mailboxes_form') }}">
+   {{ form_end(form) }}
+   <br/>
+   <a href="{{ path('external_mailboxes') }}">
+        <span class="glyphicon glyphicon-chevron-left"></span> {{ 'external_mailboxes.back'|trans }}
+    </a>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    {% include 'Base/ExternalMailbox/_form_js.html.twig' %}
+{% endblock %}

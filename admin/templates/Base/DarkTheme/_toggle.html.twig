@@ -1,0 +1,32 @@
+{# Dark theme (add-on): item in the top bar, next to Webmail and Logout.
+   Each click goes Automatic -> Dark -> Light -> Automatic. #}
+<li>
+    <a id="theme-toggle" role="button" tabindex="0"
+       data-label-auto="{{ 'theme.auto'|trans }}"
+       data-label-dark="{{ 'theme.dark'|trans }}"
+       data-label-light="{{ 'theme.light'|trans }}"
+       title="{{ 'theme.title'|trans }}">
+        <i class="fa fa-adjust"></i> <span class="theme-label">{{ 'theme.auto'|trans }}</span>
+    </a>
+</li>
+<script>
+(function () {
+    var link = document.getElementById('theme-toggle');
+    if (!link || !window.posteTheme) return;
+    var icons = { auto: 'fa-adjust', dark: 'fa-moon-o', light: 'fa-sun-o' };
+    var next = { auto: 'dark', dark: 'light', light: 'auto' };
+    function show() {
+        var mode = window.posteTheme.mode();
+        link.querySelector('i').className = 'fa ' + icons[mode];
+        link.querySelector('.theme-label').textContent = link.getAttribute('data-label-' + mode);
+    }
+    function cycle(e) {
+        e.preventDefault();
+        window.posteTheme.set(next[window.posteTheme.mode()]);
+        show();
+    }
+    link.addEventListener('click', cycle);
+    link.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') cycle(e); });
+    show();
+})();
+</script>

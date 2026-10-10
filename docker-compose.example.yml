@@ -1,0 +1,14 @@
+# Example only: adapt hostname, time zone and data path to your server.
+# Poste.io needs the mail ports (25, 465, 587, 110, 995, 143, 993) and the web
+# ports (80, 443); host networking is what the Poste.io documentation suggests.
+services:
+  mailserver:
+    image: my/poste.io:2.5.17          # the image built from this repository
+    container_name: mailserver
+    hostname: mail.example.com
+    network_mode: host
+    environment:
+      - TZ=Europe/Rome
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

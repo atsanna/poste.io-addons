@@ -1,0 +1,94 @@
+{# Dark theme (add-on): included in the <head> of base.html.twig.
+   The script runs BEFORE the page is painted, so there is no white flash:
+   the choice saved in the browser ("dark"/"light") wins, otherwise the system
+   setting is followed, even when it changes while the page is open. #}
+<link rel="stylesheet" href="{{ asset('dark-theme.css') }}?4">
+<script>
+(function () {
+    var KEY = 'poste-admin-theme';
+    var saved = null;
+    try { saved = window.localStorage.getItem(KEY); } catch (e) {}
+    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    function effective() {
+        if (saved === 'dark' || saved === 'light') return saved;
+        return mq && mq.matches ? 'dark' : 'light';
+    }
+    // Charts (Chart.js 2.9, with its own colors). Dark: light text and grid and,
+    // in the Server status doughnuts, the "#e9e9e9" border written in the
+    // template becomes the background color. Light: the original values.
+    var chartOrig = null;
+    var DARK_GRID = 'rgba(255, 255, 255, 0.12)';
+    function isDark() { return document.documentElement.getAttribute('data-bs-theme') === 'dark'; }
+    function chartColors() {
+        var C = chartRef || window.Chart;
+        if (!C || !C.defaults || !C.defaults.global || !C.defaults.scale || !C.defaults.scale.gridLines) return;
+        if (!chartOrig) {
+            chartOrig = { font: C.defaults.global.defaultFontColor, grid: C.defaults.scale.gridLines.color };
+            if (C.plugins && C.plugins.register) {
+                C.plugins.register({
+                    id: 'posteDarkTheme',
+                    beforeUpdate: function (chart) {
+                        if (chart.config.type !== 'doughnut' && chart.config.type !== 'pie') return;
+                        (chart.data.datasets || []).forEach(function (ds) {
+                            if (ds._posteBorder === undefined) ds._posteBorder = ds.borderColor;
+                            ds.borderColor = (isDark() && ds._posteBorder === '#e9e9e9')
+                                ? window.getComputedStyle(document.body).backgroundColor : ds._posteBorder;
+                        });
+                    }
+                });
+            }
+        }
+        var grid = isDark() ? DARK_GRID : chartOrig.grid;
+        C.defaults.global.defaultFontColor = isDark() ? '#adb5bd' : chartOrig.font;
+        C.defaults.scale.gridLines.color = grid;
+        // charts already drawn (theme changed with the button or by the system):
+        // the grid color was copied into their options at creation, so it is
+        // updated there (only if it is one of our two colors) and redrawn; text
+        // is read from the defaults at every draw, the border is redone by the plugin
+        var inst = C.instances || {};
+        Object.keys(inst).forEach(function (id) {
+            var ch = inst[id];
+            try {
+                var sc = ch.options && ch.options.scales;
+                ['xAxes', 'yAxes'].forEach(function (k) {
+                    ((sc && sc[k]) || []).forEach(function (ax) {
+                        if (ax.gridLines && (ax.gridLines.color === chartOrig.grid || ax.gridLines.color === DARK_GRID)) {
+                            ax.gridLines.color = grid;
+                        }
+                    });
+                });
+                ch.update();
+            } catch (e) {}
+        });
+    }
+    // Some pages draw their charts right after chart.min.js is loaded, before
+    // DOMContentLoaded: the assignment of window.Chart is intercepted, so colors
+    // and plugin are in place before the first chart.
+    var chartRef;
+    try {
+        Object.defineProperty(window, 'Chart', {
+            configurable: true, enumerable: true,
+            get: function () { return chartRef; },
+            set: function (v) { chartRef = v; chartColors(); }
+        });
+    } catch (e) {}
+    function apply() {
+        document.documentElement.setAttribute('data-bs-theme', effective());
+        chartColors();
+    }
+    apply();
+    document.addEventListener('DOMContentLoaded', chartColors);
+    // used by the menu item (_toggle.html.twig)
+    window.posteTheme = {
+        mode: function () { return (saved === 'dark' || saved === 'light') ? saved : 'auto'; },
+        set: function (mode) {
+            saved = (mode === 'dark' || mode === 'light') ? mode : null;
+            try {
+                if (saved) window.localStorage.setItem(KEY, saved);
+                else window.localStorage.removeItem(KEY);
+            } catch (e) {}
+            apply();
+        }
+    };
+})();
+</script>

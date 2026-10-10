@@ -1,0 +1,62 @@
+<div class="table-responsive">
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th width="5%">{{ 'external_mailbox_logs.level.label'|trans }}</th>
+                <th width="15%">{{ 'external_mailbox_logs.timestamp.label'|trans }}</th>
+                <th width="10%">{{ 'external_mailbox_logs.process.label'|trans }}</th>
+                <th width="70%">{{ 'external_mailbox_logs.message.label'|trans }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for log in logs %}
+            <tr data-log="{{ loop.index }}" class="log-level-{{ log.level }}">
+                <td>
+                    {% if log.level == 'error' %}
+                        <span class="label label-danger"><i class="fa fa-exclamation-triangle"></i></span>
+                    {% elseif log.level == 'warning' %}
+                        <span class="label label-warning"><i class="fa fa-exclamation"></i></span>
+                    {% elseif log.level == 'success' %}
+                        <span class="label label-success"><i class="fa fa-check"></i></span>
+                    {% else %}
+                        <span class="label label-info"><i class="fa fa-info"></i></span>
+                    {% endif %}
+                </td>
+                <td>
+                    <small>{{ log.timestamp }}</small>
+                </td>
+                <td>
+                    <small>{{ log.process }}{% if log.pid %}[{{ log.pid }}]{% endif %}</small>
+                </td>
+                <td>
+                    <div class="log-message">
+                        {{ log.message|nl2br }}
+                    </div>
+                    {% if log.parsed %}
+                    <div class="log-details" style="display: none;">
+                        <small class="text-muted">
+                            <strong>{{ 'external_mailbox_logs.host'|trans }}:</strong> {{ log.hostname }}<br>
+                            <strong>{{ 'external_mailbox_logs.raw'|trans }}:</strong> <code>{{ log.raw }}</code>
+                        </small>
+                    </div>
+                    {% endif %}
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="4" class="text-center">
+                    <em>{{ 'external_mailbox_logs.no_logs'|trans }}</em>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.log-level-error { background-color: #f2dede; }
+.log-level-warning { background-color: #fcf8e3; }
+.log-level-success { background-color: #d4edda; }
+.log-message { font-family: 'Courier New', monospace; font-size: 12px; }
+tr[data-log]:hover { cursor: pointer; }
+</style>
