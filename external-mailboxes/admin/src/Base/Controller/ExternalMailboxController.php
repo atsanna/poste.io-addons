@@ -587,7 +587,9 @@ if($data['email_address'] !== '*') {
         return in_array($type, ['SimpleIMAPRetriever', 'SimpleIMAPSSLRetriever'], true);
     }
 
-    // "INBOX,Spam" -> ("INBOX", "Spam") for getmail's mailboxes directive
+    // "INBOX,Spam" -> ("INBOX", "Spam") and "INBOX" -> ("INBOX",) for getmail's
+    // mailboxes directive: it must be a Python tuple, and ("INBOX") without the
+    // comma is a string (getmail: "incorrect format (not a tuple)")
     private function formatMailboxes($commaSeparated)
     {
         $names = array_filter(array_map('trim', explode(',', (string)$commaSeparated)));
@@ -595,7 +597,7 @@ if($data['email_address'] !== '*') {
             $names = ['INBOX'];
         }
         $quoted = array_map(function($n){ return '"' . str_replace('"', '', $n) . '"'; }, $names);
-        return '(' . implode(', ', $quoted) . ')';
+        return '(' . implode(', ', $quoted) . (count($quoted) === 1 ? ',' : '') . ')';
     }
 
     // ("INBOX", "Spam") -> "INBOX,Spam" to prefill the form

@@ -29,17 +29,21 @@ docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.i
 docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 ```
 
-The build:
+To build only some of the add-ons, see [choosing-addons.md](choosing-addons.md).
 
-1. installs `getmail6`;
-2. copies the add-on files into `/opt/admin` (new files only: no Poste.io file
-   is replaced);
-3. on Pro, rebuilds the Composer classmap (the Pro admin uses a
-   classmap-authoritative autoloader, new classes are invisible without it);
-4. appends the English and Czech translations;
-5. adds the two menu entries and hooks the dark theme into `base.html.twig`;
-6. applies the two [upstream fixes](upstream-fixes.md);
-7. prepares the getmail folders, `cron.sh` and the crontab of the `mail` user.
+The build, one Dockerfile section per add-on:
+
+1. **External Mailboxes**: installs `getmail6`, copies the admin pages into
+   `/opt/admin` (new files only: no Poste.io file is replaced), on Pro rebuilds
+   the Composer classmap (the Pro admin uses a classmap-authoritative
+   autoloader, new classes are invisible without it), appends the English and
+   Czech translations, adds the two menu entries, prepares the getmail
+   folders, `cron.sh` and the crontab of the `mail` user;
+2. **Dark theme**: copies its files into `/opt/admin` and hooks them into
+   `base.html.twig`;
+3. **Calendars and contacts over ActiveSync**: installs `libawl-php`,
+   configures Z-Push and adds its two backends;
+4. **Upstream fixes**: applies the two [upstream fixes](upstream-fixes.md).
 
 ## 2. Run it
 
@@ -77,6 +81,12 @@ docker exec mailserver sh -c 'chown mail:mail /data/var/getmail/cron.sh && chmod
 `cron.sh` stays on the volume: when a new release of this repository changes
 it, copy it again the same way.
 
+With **calendars and contacts over ActiveSync**, the first start of the new
+image changes Z-Push's folder identifiers: ask every device for a resync,
+otherwise phones end up with duplicated mail folders. The commands are in
+[activesync-dav.md](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync).
+Later rebuilds and Poste.io upgrades with the add-on inside do not need it.
+
 ## 4. Check that it works
 
 ```bash
@@ -105,7 +115,9 @@ image:
 - `dark-theme-install.sh` stops if `base.html.twig` no longer has `</head>` on
   its own line or the right navbar list exactly once;
 - the Bayes upstream fix stops if Poste.io changed the Junk learning scripts
-  (`grep -q` checks at the end of the block).
+  (`grep -q` checks at the end of the block);
+- `activesync-dav-install.sh` stops if any of the 19 Z-Push configuration
+  lines it changes is not exactly as expected.
 
 Before each upgrade, check whether the [upstream fixes](upstream-fixes.md) are
 still needed: when Poste.io ships them, delete the two blocks from the
@@ -116,3 +128,6 @@ Dockerfiles.
 Rebuild/run the official image. The add-ons only add files; the data they
 leave in the volume is `/data/var/getmail` (mailbox configurations, with
 passwords) and `/data/log/getmail`. Remove them if you no longer need them.
+If you used calendars and contacts over ActiveSync, resync every device after
+the switch (the folder identifiers change back). To drop only some add-ons,
+see [choosing-addons.md](choosing-addons.md).

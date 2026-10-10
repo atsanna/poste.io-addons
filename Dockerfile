@@ -1,33 +1,42 @@
-# Poste.io open source image with the External Mailboxes module, the admin dark
-# theme and two upstream fixes. See README.md and docs/installation.md.
+# Poste.io open source image with the add-ons of this repository: External
+# Mailboxes, admin dark theme, calendars and contacts over ActiveSync, and
+# two upstream fixes. Each add-on is one section below, between the
+# "ADD-ON" markers: delete a section to leave that add-on out, or run
+# select-addons.sh (see docs/choosing-addons.md). See README.md and
+# docs/installation.md.
 #
 #   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 #
-# Tested with Poste.io 2.5.17 PRO #230.
+# Tested with Poste.io 2.5.17 (Pro #230 and open source).
 ARG POSTE_IO_VERSION=2.5.17
 FROM analogic/poste.io:${POSTE_IO_VERSION}
 ARG POSTE_IO_VERSION
 ENV POSTE_IO_VERSION="${POSTE_IO_VERSION}"
 
 LABEL org.opencontainers.image.title="poste.io-addons (open source)" \
-      org.opencontainers.image.description="Poste.io with External Mailboxes (getmail), admin dark theme and upstream fixes" \
+      org.opencontainers.image.description="Poste.io with External Mailboxes (getmail), admin dark theme, ActiveSync calendars/contacts and upstream fixes" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.authors="Antonio Sanna"
 
+#######################################################################
+#  ADD-ON: External Mailboxes  [external-mailboxes]
+#  docs/external-mailboxes.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
 #======================================================================#
-#  getmail (used by External Mailboxes)
+#  getmail
 #======================================================================#
 RUN apt-get update && \
     apt-get -y install getmail6 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 #======================================================================#
-#  External Mailboxes + dark theme: admin files (new files only)
+#  Admin pages (new files only)
 #======================================================================#
-COPY admin /opt/admin
+COPY external-mailboxes/admin /opt/admin
 
 #======================================================================#
-#  External Mailboxes: translations (en, cs)
+#  Translations (en, cs)
 #======================================================================#
 # The Poste.io admin ships English and Czech only; the browser picks the language.
 COPY external-mailboxes/external-mailboxes.en.yml external-mailboxes/external-mailboxes.cs.yml /tmp/
@@ -38,7 +47,7 @@ RUN echo "" >> /opt/admin/translations/Base/messages+intl-icu.en.yml && \
     rm /tmp/external-mailboxes.en.yml /tmp/external-mailboxes.cs.yml
 
 #======================================================================#
-#  External Mailboxes: menu entries
+#  Menu entries
 #======================================================================#
 RUN sed -i '/^{% endif %}$/i\
 \
@@ -54,14 +63,67 @@ RUN sed -i '/^{% endif %}$/i\
     {% endif %}' /opt/admin/templates/_menu.html.twig
 
 #======================================================================#
-#  Dark theme for the admin (automatic + toggle)
+#  getmail folders, runner and schedule
+#======================================================================#
+# Everything belongs to "mail": the admin (php-fpm, user mail) writes the .cfg
+# files (passwords in clear text, 0600) and cron runs getmail as mail, never root.
+# NOTE: /data is a volume; on an existing installation these folders and
+# cron.sh are hidden by it (see docs/installation.md).
+RUN mkdir -p /data/var/getmail/5min /data/var/getmail/10min /data/var/getmail/15min \
+             /data/var/getmail/30min /data/var/getmail/60min /data/var/getmail/disabled \
+             /data/log/getmail && \
+    chown -R mail:mail /data/var/getmail /data/log/getmail && \
+    find /data/var/getmail /data/log/getmail -type d -exec chmod 0750 {} +
+COPY external-mailboxes/cron.sh /data/var/getmail/cron.sh
+RUN chown mail:mail /data/var/getmail/cron.sh && chmod 0750 /data/var/getmail/cron.sh
+# Crontab of the "mail" user; the file lives OUTSIDE /etc/cron.d (cron would
+# reject it there: no user column) and the logs page reads it from here.
+COPY external-mailboxes/external-mailboxes.crontab /etc/external-mailboxes.crontab
+RUN chmod 0644 /etc/external-mailboxes.crontab && \
+    crontab -u mail /etc/external-mailboxes.crontab
+
+#######################################################################
+#  ADD-ON: Dark theme for the admin  [dark-theme]
+#  docs/dark-theme.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
+#======================================================================#
+#  Admin files, hooks and translations
 #======================================================================#
 # dark-theme-install.sh hooks two templates into base.html.twig and appends the
 # translations; it FAILS the build if Poste.io changes the hook points.
+COPY dark-theme/admin /opt/admin
 COPY dark-theme/dark-theme.en.yml dark-theme/dark-theme.cs.yml dark-theme/dark-theme-install.sh /tmp/
 RUN sh /tmp/dark-theme-install.sh /opt/admin /tmp && \
     rm /tmp/dark-theme-install.sh /tmp/dark-theme.en.yml /tmp/dark-theme.cs.yml
 
+#######################################################################
+#  ADD-ON: Calendars and contacts over ActiveSync  [activesync-dav]
+#  docs/activesync-dav.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
+#======================================================================#
+#  Z-Push configuration and backends
+#======================================================================#
+# Z-Push (ActiveSync) goes from mail only to mail + calendars + contacts of the
+# Poste.io DAV server at https://localhost/dav/ (BackendCombined: IMAP, plus our
+# BackendPosteCalDAV and BackendPosteCardDAV). Calendars and address books are
+# still enabled per mailbox in the admin. The script checks the 19 Z-Push lines
+# it changes and FAILS the build if any of them is different.
+# libawl-php: library needed by Z-Push's CalDAV backend.
+# See docs/activesync-dav.md (existing installations: devices must resync).
+RUN apt-get update && \
+    apt-get -y install --no-install-recommends libawl-php && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY activesync-dav /tmp/activesync-dav
+RUN sh /tmp/activesync-dav/activesync-dav-install.sh /opt/z-push /tmp/activesync-dav && \
+    rm -rf /tmp/activesync-dav
+
+#######################################################################
+#  ADD-ON: Upstream fixes for spam learning  [upstream-fixes]
+#  docs/upstream-fixes.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
 #======================================================================#
 #  UPSTREAM-FIX 1: spam-learning scripts are world-writable
 #======================================================================#
@@ -96,23 +158,3 @@ RUN set -e; D=/etc/dovecot/sieve; \
       grep -qF "pipe :copy \"$c\" [\"\${IMAPUSER}\"];" $D/report-$c.sieve; \
     done; \
     chmod 0644 $D/report-spam.sieve $D/report-ham.sieve; chmod 0755 $D/spam $D/ham
-
-#======================================================================#
-#  External Mailboxes: getmail folders, runner and schedule
-#======================================================================#
-# Everything belongs to "mail": the admin (php-fpm, user mail) writes the .cfg
-# files (passwords in clear text, 0600) and cron runs getmail as mail, never root.
-# NOTE: /data is a volume; on an existing installation these folders and
-# cron.sh are hidden by it (see docs/installation.md).
-RUN mkdir -p /data/var/getmail/5min /data/var/getmail/10min /data/var/getmail/15min \
-             /data/var/getmail/30min /data/var/getmail/60min /data/var/getmail/disabled \
-             /data/log/getmail && \
-    chown -R mail:mail /data/var/getmail /data/log/getmail && \
-    find /data/var/getmail /data/log/getmail -type d -exec chmod 0750 {} +
-COPY external-mailboxes/cron.sh /data/var/getmail/cron.sh
-RUN chown mail:mail /data/var/getmail/cron.sh && chmod 0750 /data/var/getmail/cron.sh
-# Crontab of the "mail" user; the file lives OUTSIDE /etc/cron.d (cron would
-# reject it there: no user column) and the logs page reads it from here.
-COPY external-mailboxes/external-mailboxes.crontab /etc/external-mailboxes.crontab
-RUN chmod 0644 /etc/external-mailboxes.crontab && \
-    crontab -u mail /etc/external-mailboxes.crontab

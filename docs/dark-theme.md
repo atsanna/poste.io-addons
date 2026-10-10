@@ -32,7 +32,7 @@ touched.
 The Poste.io admin is built on Bootstrap 5.3, whose dark colour mode only
 needs `data-bs-theme="dark"` on `<html>`: backgrounds, text, borders, tables,
 inputs and alerts follow. What remains are the colours Poste.io hard-codes for
-the light look, fixed in [`admin/public/dark-theme.css`](../admin/public/dark-theme.css):
+the light look, fixed in [`dark-theme/admin/public/dark-theme.css`](../dark-theme/admin/public/dark-theme.css):
 
 - the top bar and the left menu, the "pretty" button gradients, pagination;
 - Chosen drop-down menus, help boxes, the dashboard section boxes and spinner;
@@ -42,9 +42,9 @@ Files:
 
 | File | Role |
 |---|---|
-| `admin/templates/Base/DarkTheme/_head.html.twig` | stylesheet + theme script, included before `</head>` |
-| `admin/templates/Base/DarkTheme/_toggle.html.twig` | the *Theme* item in the top bar |
-| `admin/public/dark-theme.css` | the dark-only corrections |
+| `dark-theme/admin/templates/Base/DarkTheme/_head.html.twig` | stylesheet + theme script, included before `</head>` |
+| `dark-theme/admin/templates/Base/DarkTheme/_toggle.html.twig` | the *Theme* item in the top bar |
+| `dark-theme/admin/public/dark-theme.css` | the dark-only corrections |
 | `dark-theme/dark-theme.{en,cs}.yml` | translations of the switch |
 | `dark-theme/dark-theme-install.sh` | adds the two `include`s to Poste.io's `base.html.twig` and the translations |
 

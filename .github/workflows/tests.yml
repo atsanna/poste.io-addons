@@ -1,0 +1,49 @@
+# End-to-end tests on the open source image (the Pro base image needs a
+# licence and cannot be pulled here). The Poste.io version is the one pinned
+# in the Dockerfile. Each job builds the image with all the add-ons, or with
+# one add-on only (select-addons.sh), and runs tests/run.sh: a throw-away
+# container, the admin driven like a browser, real IMAP and ActiveSync
+# requests. See docs/testing.md.
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  open-source:
+    name: open source (${{ matrix.addons }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        addons: [all, external-mailboxes, dark-theme, activesync-dav, upstream-fixes]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Poste.io version pinned in the Dockerfile
+        run: |
+          v=$(sed -n 's/^ARG POSTE_IO_VERSION=//p' Dockerfile)
+          test -n "$v"
+          echo "POSTE_IO_VERSION=$v" >> "$GITHUB_ENV"
+          echo "Poste.io $v"
+
+      - name: Dockerfile with the selected add-ons
+        run: |
+          if [ "${{ matrix.addons }}" = all ]; then
+            cp Dockerfile Dockerfile.ci
+          else
+            sh select-addons.sh Dockerfile ${{ matrix.addons }} > Dockerfile.ci
+          fi
+          grep '^#  ADD-ON:' Dockerfile.ci
+
+      - name: Build
+        run: docker build -f Dockerfile.ci --build-arg POSTE_IO_VERSION="$POSTE_IO_VERSION" -t poste-addons-test .
+
+      - name: Test
+        run: sh tests/run.sh poste-addons-test

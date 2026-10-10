@@ -1,5 +1,6 @@
 # poste.io-addons
 
+[![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](docs/testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tested with Poste.io 2.5.17](https://img.shields.io/badge/tested%20with-Poste.io%202.5.17%20(Pro%20%26%20open%20source)-2b9348.svg)](docs/installation.md)
 
@@ -10,12 +11,17 @@ image on top of the official one:
   and deliver it into Poste.io on a schedule, managed from the admin.
 - **Dark theme for the admin** — automatic (follows the system) with a switch
   in the top bar.
+- **Calendars and contacts over ActiveSync** — the phone's Exchange account
+  gets the calendars and contacts of Poste.io's DAV server, not only the mail.
 - **Two upstream fixes** that make "move to Junk" actually teach rspamd.
+
+Take all of them or only the ones you want: each add-on is one section of the
+Dockerfile ([choosing the add-ons](docs/choosing-addons.md)).
 
 English and Czech, like the Poste.io admin. Dockerfiles for the Pro and the
 open source edition: in production on **Poste.io 2.5.17 PRO #230**; the open
-source image (`analogic/poste.io:2.5.17`) was built and started in a test
-container (routes, menu, translations, theme, crontab and fixes checked).
+source image is built and tested end to end on every push, with all the
+add-ons and with each one alone ([tests](docs/testing.md)).
 
 > Not affiliated with or endorsed by Poste.io / Analogic. "Poste.io" is a
 > trademark of its owners; this project only contains add-ons and no Poste.io
@@ -59,6 +65,22 @@ container (routes, menu, translations, theme, crontab and fixes checked).
 
 → [docs/dark-theme.md](docs/dark-theme.md)
 
+### Calendars and contacts over ActiveSync
+
+- One Exchange/ActiveSync account on the phone: mail, calendars, tasks and
+  contacts, both ways, from Poste.io's built-in CalDAV/CardDAV server.
+- Enabled per mailbox in the admin, as before (*Create calendar*, *Create
+  address book*); a mailbox without them keeps mail only.
+- A colleague's calendar shared **read-only** appears as an additional
+  calendar: see whether someone is busy before booking them.
+- If the DAV server is switched off or broken, mail keeps working.
+- Fixes three Z-Push issues found while testing (an event refused by the
+  server confirmed as saved, a crash on contacts without an address book,
+  ActiveSync down with the DAV server).
+
+→ [docs/activesync-dav.md](docs/activesync-dav.md) (existing installations:
+devices must resync once)
+
 ### Upstream fixes
 
 On 2.5.17 moving a message to Junk does not train rspamd: the learning scripts
@@ -78,30 +100,40 @@ cd poste.io-addons
 docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 # or open source
 docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+
+# only some add-ons, e.g. the dark theme and calendars/contacts
+sh select-addons.sh Dockerfile-pro dark-theme activesync-dav > Dockerfile.custom
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 ```
 
 Run the image as you run the official one (see
 [`docker-compose.example.yml`](docker-compose.example.yml)). On an **existing**
 installation, read [docs/installation.md](docs/installation.md#3-existing-installations-the-data-volume)
-first: the `/data` volume hides the folders the image prepares.
+first: the `/data` volume hides the folders the image prepares, and phones
+using ActiveSync must resync once.
 
 ## Repository layout
 
 ```
-admin/                 files copied into /opt/admin (controllers, templates, dark-theme.css)
-external-mailboxes/    translations, crontab of the mail user, cron.sh (the getmail runner)
-dark-theme/            translations and the script that hooks the theme into base.html.twig
+external-mailboxes/    admin pages (admin/), translations, crontab of the mail user, cron.sh (the getmail runner)
+dark-theme/            admin files (admin/), translations, the script that hooks the theme into base.html.twig
+activesync-dav/        Z-Push backends and the script that configures Z-Push
+tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client)
 docs/                  documentation and screenshots
-Dockerfile             open source edition (analogic/poste.io)
-Dockerfile-pro         Pro edition (poste.io/mailserver)
+Dockerfile             open source edition (analogic/poste.io), one section per add-on
+Dockerfile-pro         Pro edition (poste.io/mailserver), one section per add-on
+select-addons.sh       prints a Dockerfile with only the add-ons you name
 ```
 
 ## Documentation
 
 - [Installation, upgrades and checks](docs/installation.md)
+- [Choosing the add-ons](docs/choosing-addons.md)
 - [External Mailboxes](docs/external-mailboxes.md)
 - [Dark theme](docs/dark-theme.md)
+- [Calendars and contacts over ActiveSync](docs/activesync-dav.md)
 - [Upstream fixes](docs/upstream-fixes.md)
+- [Tests](docs/testing.md)
 - [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 Screenshots use demo data (`example.com`, documentation IP ranges).
