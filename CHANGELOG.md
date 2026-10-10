@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [1.1.0] - 2026-10-11
 
+Tested on Poste.io 2.5.17 (Pro #230 in production; open source image built and
+started in a test container).
+
 ### Added
 - **Calendars and contacts over ActiveSync** (`activesync-dav`): Z-Push goes
   from mail only to mail, calendars, tasks and contacts of Poste.io's
