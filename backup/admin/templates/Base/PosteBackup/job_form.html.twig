@@ -1,0 +1,86 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ (id ? 'poste_backup.job.edit' : 'poste_backup.job.new')|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup_jobs') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.jobs.title'|trans }}</a></p>
+{% if errors %}<div class="alert alert-danger"><ul style="margin:0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+<form method="post" class="bk-form">
+    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_job') }}">
+    <div class="form-group"><label class="control-label" for="bk-name">{{ 'poste_backup.field.name'|trans }}</label>
+        <input class="form-control" id="bk-name" name="name" style="max-width:400px" maxlength="60" value="{{ values.name }}" required></div>
+
+    <div class="form-group"><label class="control-label">{{ 'poste_backup.job.what'|trans }}</label>
+        <div class="checkbox"><label><input type="checkbox" name="config" value="1"{% if values.config %} checked{% endif %}>
+            {{ 'poste_backup.job.config'|trans }} <span class="bk-muted">{{ 'poste_backup.job.config_help'|trans }}</span></label></div>
+        {% for m in ['none', 'all', 'selected'] %}
+        <div class="radio"><label><input type="radio" name="mail" value="{{ m }}"{% if values.mail == m %} checked{% endif %}> {{ ('poste_backup.job.mail_' ~ m)|trans }}</label></div>
+        {% endfor %}
+        <select id="bk-boxes" name="mailboxes[]" class="form-control" multiple data-placeholder="{{ 'poste_backup.job.mailboxes_placeholder'|trans }}">
+            {% for b in mailboxes %}
+                <option value="{{ b }}"{% if b in values.mailboxes %} selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="bk-row">
+        <div class="form-group"><label class="control-label" for="bk-every">{{ 'poste_backup.job.when'|trans }}</label>
+            <select class="form-control" id="bk-every" name="every">
+                {% for e in ['hour', 'day', 'week', 'month'] %}<option value="{{ e }}"{% if values.schedule.every == e %} selected{% endif %}>{{ ('poste_backup.every.' ~ e)|trans }}</option>{% endfor %}
+            </select></div>
+        <div class="form-group bk-sched" data-every="week"><label class="control-label" for="bk-weekday">{{ 'poste_backup.job.weekday'|trans }}</label>
+            <select class="form-control" id="bk-weekday" name="weekday">
+                {% for d in weekdays %}<option value="{{ d }}"{% if values.schedule.weekday == d %} selected{% endif %}>{{ ('poste_backup.weekday.' ~ d)|trans }}</option>{% endfor %}
+            </select></div>
+        <div class="form-group bk-sched" data-every="month"><label class="control-label" for="bk-monthday">{{ 'poste_backup.job.monthday'|trans }}</label>
+            <select class="form-control" id="bk-monthday" name="monthday">
+                {% for d in 1..28 %}<option value="{{ d }}"{% if values.schedule.monthday == d %} selected{% endif %}>{{ d }}</option>{% endfor %}
+            </select></div>
+        <div class="form-group bk-sched" data-every="day week month"><label class="control-label" for="bk-hour">{{ 'poste_backup.job.hour'|trans }}</label>
+            <select class="form-control" id="bk-hour" name="hour">
+                {% for h in 0..23 %}<option value="{{ h }}"{% if values.schedule.hour == h %} selected{% endif %}>{{ '%02d'|format(h) }}</option>{% endfor %}
+            </select></div>
+        <div class="form-group"><label class="control-label" for="bk-minute">{{ 'poste_backup.job.minute'|trans }}</label>
+            <select class="form-control" id="bk-minute" name="minute">
+                {% for m in 0..59 %}<option value="{{ m }}"{% if values.schedule.minute == m %} selected{% endif %}>{{ '%02d'|format(m) }}</option>{% endfor %}
+            </select></div>
+    </div>
+
+    <div class="form-group"><label class="control-label">{{ 'poste_backup.job.destinations'|trans }} <span class="bk-muted">{{ 'poste_backup.job.destinations_help'|trans }}</span></label>
+        {% for did, d in destinations %}
+            <div class="checkbox"><label><input type="checkbox" name="destinations[]" value="{{ did }}"{% if did in values.destinations %} checked{% endif %}>
+                {{ d.name }} <span class="bk-muted">{{ ('poste_backup.type.' ~ d.type)|trans }}</span></label></div>
+        {% else %}
+            <p class="text-danger">{{ 'poste_backup.jobs.no_destination'|trans }}</p>
+        {% endfor %}
+    </div>
+
+    <div class="form-group"><label class="control-label">{{ 'poste_backup.job.keep'|trans }}</label>
+        {% for k in ['hourly', 'daily', 'weekly', 'monthly'] %}
+            <input class="form-control bk-small" name="keep_{{ k }}" type="number" min="0" max="1000" value="{{ values.keep[k] }}"> {{ ('poste_backup.job.keep_' ~ k)|trans }} &nbsp;
+        {% endfor %}
+        <p class="help-block">{{ 'poste_backup.job.keep_help'|trans }}</p></div>
+
+    <div class="checkbox"><label><input type="checkbox" name="enabled" value="1"{% if values.enabled %} checked{% endif %}> {{ 'poste_backup.job.enabled'|trans }}</label></div>
+
+    <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
+    <button type="submit" name="run_now" value="1" class="btn btn-default"><i class="fa fa-play"></i> {{ 'poste_backup.job.save_run'|trans }}</button>
+</form>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    $('#bk-boxes').chosen({width: '100%', max_width: '600px'});
+    function bkSched() {
+        var every = $('#bk-every').val();
+        $('.bk-sched').each(function () {
+            $(this).toggle(($(this).data('every') + '').split(' ').indexOf(every) >= 0);
+        });
+        $('#bk-boxes').prop('disabled', $('input[name=mail]:checked').val() !== 'selected').trigger('chosen:updated');
+    }
+    $('#bk-every, input[name=mail]').on('change', bkSched);
+    bkSched();
+</script>
+{% endblock %}

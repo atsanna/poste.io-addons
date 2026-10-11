@@ -1,9 +1,9 @@
 # Poste.io open source image with the add-ons of this repository: External
 # Mailboxes, admin dark theme, calendars and contacts over ActiveSync,
-# ActiveSync logs in the admin, and two upstream fixes. Each add-on is one
-# section below, between the "ADD-ON" markers: delete a section to leave
-# that add-on out, or run select-addons.sh (see docs/choosing-addons.md).
-# See README.md and docs/installation.md.
+# ActiveSync logs in the admin, backup and restore, and two upstream fixes.
+# Each add-on is one section below, between the "ADD-ON" markers: delete a
+# section to leave that add-on out, or run select-addons.sh (see
+# docs/choosing-addons.md). See README.md and docs/installation.md.
 #
 #   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 #
@@ -148,6 +148,29 @@ RUN sh /tmp/activesync-dav/activesync-dav-install.sh /opt/z-push /tmp/activesync
 COPY activesync-logs /tmp/activesync-logs
 RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt/admin && \
     rm -rf /tmp/activesync-logs
+
+#######################################################################
+#  ADD-ON: Backup and restore  [backup]
+#  docs/backup.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
+#======================================================================#
+#  restic, rclone, ssh client (Debian packages)
+#======================================================================#
+# restic makes the encrypted, deduplicated backups; rclone reaches SMB, SFTP
+# and S3; ssh-keyscan/ssh-keygen confirm the SSH key of an SFTP server.
+RUN apt-get update && \
+    apt-get -y install --no-install-recommends restic rclone openssh-client && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+#======================================================================#
+#  Engine, admin pages, menu entry, translations, cron, start script
+#======================================================================#
+# backup-install.sh FAILS the build if Poste.io changes the end of the
+# administrators' menu or if a tool is missing.
+COPY backup /tmp/backup
+RUN sh /tmp/backup/backup-install.sh /tmp/backup /opt/admin && \
+    rm -rf /tmp/backup
 
 #######################################################################
 #  ADD-ON: Upstream fixes for spam learning  [upstream-fixes]

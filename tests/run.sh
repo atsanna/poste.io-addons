@@ -5,22 +5,32 @@
 #
 # Starts a throw-away container (no published ports, its own volume), creates
 # a test domain and three mailboxes with random passwords, then runs
-# tests/test_addons.py and tests/test_activesync.py inside the container
-# (add-ons missing from the image are skipped). Exit code 0 = every check
-# passed. The container and the volume are removed at the end.
+# tests/test_addons.py, tests/test_activesync.py and tests/test_backup.py
+# inside the container (add-ons missing from the image are skipped). With the
+# backup add-on, two more throw-away containers are test destinations on the
+# same private network: Samba + SFTP (tests/backup-dest) and S3 (rclone's own
+# S3 server); a tmpfs at /backup/local plays a volume mounted by the host.
+# Exit code 0 = every check passed. Containers, volume and network are
+# removed at the end.
 set -eu
 
 IMAGE=${1:?usage: sh tests/run.sh <image>}
 NAME=poste-addons-test-$$
 DIR=$(cd "$(dirname "$0")" && pwd)
 
+# S3 test server: rclone's official image, pinned (1.68.2)
+S3_IMAGE=rclone/rclone:1.68.2@sha256:74c51b8817e5431bd6d7ed27cb2a50d8ee78d77f6807b72a41ef6f898845942b
+
 cleanup() {
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$NAME-dest" "$NAME-s3" >/dev/null 2>&1 || true
     docker volume rm "$NAME-data" >/dev/null 2>&1 || true
+    docker network rm "$NAME-net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-docker run -d --name "$NAME" --hostname mail.example.test -v "$NAME-data:/data" "$IMAGE" >/dev/null
+docker network create "$NAME-net" >/dev/null
+docker run -d --name "$NAME" --network "$NAME-net" --hostname mail.example.test -v "$NAME-data:/data" \
+    --tmpfs /backup/local:uid=8,gid=8,mode=0750 "$IMAGE" >/dev/null
 
 echo "== waiting for the admin and ActiveSync"
 i=0
@@ -48,9 +58,19 @@ until docker exec "$NAME" python3 -c 'import socket; socket.create_connection(("
 done
 
 docker exec "$NAME" mkdir -p /tests
-for f in panel.py eas.py test_addons.py test_activesync.py; do
+for f in panel.py eas.py test_addons.py test_activesync.py test_backup.py backup_unit.php; do
     docker cp "$DIR/$f" "$NAME:/tests/$f"
 done
+
+if docker exec "$NAME" test -x /usr/local/bin/poste-backup; then
+    echo "== backup add-on: test destinations"
+    DP=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
+    docker build -q -t poste-addons-test-dest "$DIR/backup-dest" >/dev/null
+    docker run -d --name "$NAME-dest" --network "$NAME-net" -e DEST_PASSWORD="$DP" poste-addons-test-dest >/dev/null
+    docker run -d --name "$NAME-s3" --network "$NAME-net" "$S3_IMAGE" serve s3 /data --addr :8080 --auth-key "testkey,$DP" >/dev/null
+    docker exec "$NAME" sh -c 'umask 077; printf "DEST_HOST=%s\nS3_HOST=%s\nDEST_PASSWORD=%s\n" "$1" "$2" "$3" > /tests/backup.env' \
+        sh "$NAME-dest" "$NAME-s3" "$DP"
+fi
 
 # test accounts: random passwords, kept in the container only
 docker exec "$NAME" python3 -c '
@@ -76,6 +96,8 @@ echo "== External Mailboxes, ActiveSync Logs, dark theme, upstream fixes"
 docker exec "$NAME" python3 /tests/test_addons.py || status=$((status + $?))
 echo "== calendars and contacts over ActiveSync"
 docker exec "$NAME" python3 /tests/test_activesync.py || status=$((status + $?))
+echo "== backup"
+docker exec "$NAME" python3 /tests/test_backup.py || status=$((status + $?))
 echo "== failed checks: $status"
 if [ "$status" -ne 0 ]; then
     echo "== last log lines (getmail, mail, Z-Push)"

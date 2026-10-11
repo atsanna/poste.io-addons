@@ -1,0 +1,61 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.jobs.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
+{% if not destinations %}
+    <div class="alert alert-info">{{ 'poste_backup.jobs.no_destination'|trans }} <a href="{{ path('poste_backup_destination_new') }}">{{ 'poste_backup.destinations.add'|trans }}</a></div>
+{% else %}
+    <p><a class="btn btn-primary" href="{{ path('poste_backup_job_new') }}"><i class="fa fa-plus"></i> {{ 'poste_backup.jobs.add'|trans }}</a></p>
+{% endif %}
+<table class="table table-striped table-hover bk">
+    <thead><tr><th></th><th>{{ 'poste_backup.field.name'|trans }}</th><th>{{ 'poste_backup.jobs.what'|trans }}</th>
+        <th>{{ 'poste_backup.jobs.when'|trans }}</th><th>{{ 'poste_backup.jobs.destinations'|trans }}</th>
+        <th>{{ 'poste_backup.jobs.keep'|trans }}</th><th>{{ 'poste_backup.jobs.last_run'|trans }}</th><th></th></tr></thead>
+    <tbody>
+    {% for id, job in jobs %}
+        {% set s = state.jobs[id] ?? null %}
+        <tr>
+            <td>{% if not job.enabled %}<span class="glyphicon glyphicon-pause bk-muted" title="{{ 'poste_backup.jobs.disabled'|trans }}"></span>
+                {% elseif s is null %}<span class="glyphicon glyphicon-time bk-muted"></span>
+                {% elseif s.status == 'ok' %}<span class="label-ok glyphicon glyphicon-ok"></span>
+                {% elseif s.status == 'warning' %}<span class="glyphicon glyphicon-warning-sign text-warning"></span>
+                {% else %}<span class="glyphicon glyphicon-remove text-danger"></span>{% endif %}</td>
+            <th>{{ job.name }}</th>
+            <td>{% if job.config %}{{ 'poste_backup.jobs.what_config'|trans }}{% endif %}{% if job.config and job.mail != 'none' %} + {% endif %}{% if job.mail == 'all' %}{{ 'poste_backup.jobs.what_all'|trans }}{% elseif job.mail == 'selected' %}{{ 'poste_backup.jobs.what_selected'|trans({'{count}': job.mailboxes|length}) }}{% endif %}</td>
+            <td>{% include 'Base/PosteBackup/_when.html.twig' with {s: job.schedule} %}
+                {% if job.next %}<br><span class="bk-muted">{{ 'poste_backup.dashboard.next'|trans({'{time}': job.next|date('Y-m-d H:i')}) }}</span>{% endif %}</td>
+            <td>{% for did in job.destinations %}{{ destinations[did].name }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+            <td>{% for k, n in job.keep %}{% if n > 0 %}{{ ('poste_backup.keep.' ~ k)|trans({'{count}': n}) }}<br>{% endif %}{% endfor %}</td>
+            <td>{% if busy and state.running and state.running.job == id %}<span class="text-info"><i class="fa fa-spinner fa-spin"></i> {{ 'poste_backup.jobs.running'|trans }}</span>
+                {% elseif pending[id] is defined %}<span class="text-info"><i class="fa fa-hourglass-half"></i> {{ 'poste_backup.jobs.queued'|trans }}</span>
+                {% elseif s is null %}<span class="bk-muted">{{ 'poste_backup.status.never'|trans }}</span>
+                {% else %}
+                    {{ s.last_end|date('Y-m-d H:i') }}
+                    {% for did, r in s.destinations %}
+                        <br><span class="{{ r.status == 'ok' ? 'text-success' : (r.status == 'warning' ? 'text-warning' : 'text-danger') }}" style="font-size:12px">
+                        {{ destinations[did].name ?? did }}: {% if r.status == 'ok' %}{{ 'poste_backup.jobs.added'|trans({'{size}': (r.added / 1048576)|round(1), '{seconds}': r.duration}) }}{% else %}{{ r.error }}{% endif %}</span>
+                    {% endfor %}
+                {% endif %}</td>
+            <td class="text-right" style="white-space:nowrap">
+                <form method="post" action="{{ path('poste_backup_job_run', {id: id}) }}" style="display:inline">
+                    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_job_run') }}">
+                    <button type="submit" class="btn btn-default btn-xs"><i class="fa fa-play"></i> {{ 'poste_backup.action.run_now'|trans }}</button>
+                </form>
+                <a class="btn btn-default btn-xs" href="{{ path('poste_backup_job_edit', {id: id}) }}">{{ 'poste_backup.action.edit'|trans }}</a>
+                <form method="post" action="{{ path('poste_backup_job_delete', {id: id}) }}" style="display:inline"
+                      onsubmit="return confirm('{{ 'poste_backup.jobs.delete_confirm'|trans|e('js') }}')">
+                    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_job_delete') }}">
+                    <button type="submit" class="btn btn-default btn-xs"><i class="fa fa-trash"></i></button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="8" class="text-center"><em>{{ 'poste_backup.jobs.none'|trans }}</em></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+<p class="help-block">{{ 'poste_backup.jobs.help'|trans }}</p>
+{% endblock %}

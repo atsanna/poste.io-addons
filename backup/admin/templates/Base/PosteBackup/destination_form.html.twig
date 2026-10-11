@@ -1,0 +1,145 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ (id ? 'poste_backup.destination.edit' : 'poste_backup.destination.new')|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup_destinations') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.destinations.title'|trans }}</a></p>
+{% if errors %}<div class="alert alert-danger"><ul style="margin:0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+<form method="post" class="bk-form" id="bk-dest-form">
+    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_destination') }}">
+    <div class="bk-row">
+        <div class="form-group"><label class="control-label" for="bk-name">{{ 'poste_backup.field.name'|trans }}</label>
+            <input class="form-control" id="bk-name" name="name" style="width:260px" maxlength="60" value="{{ values.name ?? '' }}" required></div>
+        <div class="form-group"><label class="control-label" for="bk-type">{{ 'poste_backup.field.type'|trans }}</label>
+            <select class="form-control" id="bk-type" name="type">
+                {% for t in ['smb', 'sftp', 's3', 'local'] %}<option value="{{ t }}"{% if values.type == t %} selected{% endif %}>{{ ('poste_backup.type.' ~ t)|trans }}</option>{% endfor %}
+            </select></div>
+    </div>
+
+    <div class="bk-type" data-type="local">
+        <div class="form-group"><label class="control-label" for="bk-path">{{ 'poste_backup.field.path'|trans }}</label>
+            <input class="form-control" id="bk-path" name="path" style="width:360px" value="{{ values.path ?? '' }}" placeholder="/backup/nfs">
+            <p class="help-block">{{ 'poste_backup.destination.local_help'|trans({'{roots}': '/' ~ localRoots|join(', /')}) }}</p></div>
+    </div>
+
+    <div class="bk-type" data-type="sftp smb">
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-host">{{ 'poste_backup.field.host'|trans }}</label>
+                <input class="form-control" id="bk-host" name="host" style="width:260px" value="{{ values.host ?? '' }}"></div>
+            <div class="form-group bk-type" data-type="sftp"><label class="control-label" for="bk-port">{{ 'poste_backup.field.port'|trans }}</label>
+                <input class="form-control bk-small" id="bk-port" name="port" value="{{ values.port ?? 22 }}"></div>
+            <div class="form-group bk-type" data-type="smb"><label class="control-label" for="bk-share">{{ 'poste_backup.field.share'|trans }}</label>
+                <input class="form-control" id="bk-share" name="share" style="width:160px" value="{{ values.share ?? '' }}"></div>
+        </div>
+    </div>
+
+    <div class="bk-type" data-type="s3">
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-endpoint">{{ 'poste_backup.field.endpoint'|trans }}</label>
+                <input class="form-control" id="bk-endpoint" name="endpoint" style="width:300px" value="{{ values.endpoint ?? '' }}" placeholder="https://s3.example.com"></div>
+            <div class="form-group"><label class="control-label" for="bk-region">{{ 'poste_backup.field.region'|trans }} <span class="bk-muted">{{ 'poste_backup.field.optional'|trans }}</span></label>
+                <input class="form-control" id="bk-region" name="region" style="width:160px" value="{{ values.region ?? '' }}"></div>
+            <div class="form-group"><label class="control-label" for="bk-bucket">{{ 'poste_backup.field.bucket'|trans }}</label>
+                <input class="form-control" id="bk-bucket" name="bucket" style="width:200px" value="{{ values.bucket ?? '' }}"></div>
+        </div>
+    </div>
+
+    <div class="bk-type" data-type="sftp smb s3">
+        <div class="form-group"><label class="control-label" for="bk-folder">{{ 'poste_backup.field.folder'|trans }}</label>
+            <input class="form-control" id="bk-folder" name="folder" style="width:300px" value="{{ values.folder ?? '' }}" placeholder="poste-backup">
+            <p class="help-block">{{ 'poste_backup.destination.folder_help'|trans }}</p></div>
+    </div>
+
+    <div class="bk-type" data-type="sftp smb">
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-user">{{ 'poste_backup.field.user'|trans }}</label>
+                <input class="form-control" id="bk-user" name="user" style="width:200px" value="{{ values.user ?? '' }}" autocomplete="off"></div>
+            <div class="form-group bk-type" data-type="sftp"><label class="control-label" for="bk-auth">{{ 'poste_backup.field.auth'|trans }}</label>
+                <select class="form-control" id="bk-auth" name="auth">
+                    <option value="password"{% if (values.auth ?? 'password') == 'password' %} selected{% endif %}>{{ 'poste_backup.auth.password'|trans }}</option>
+                    <option value="key"{% if (values.auth ?? '') == 'key' %} selected{% endif %}>{{ 'poste_backup.auth.key'|trans }}</option>
+                </select></div>
+            <div class="form-group bk-password"><label class="control-label" for="bk-password">{{ 'poste_backup.field.password'|trans }}</label>
+                <input class="form-control" id="bk-password" name="password" type="password" style="width:200px" autocomplete="new-password"
+                       placeholder="{{ hasSecret ? 'poste_backup.field.unchanged'|trans : '' }}"></div>
+            <div class="form-group bk-type" data-type="smb"><label class="control-label" for="bk-domain">{{ 'poste_backup.field.domain'|trans }} <span class="bk-muted">{{ 'poste_backup.field.optional'|trans }}</span></label>
+                <input class="form-control" id="bk-domain" name="domain" style="width:160px" value="{{ values.domain ?? '' }}"></div>
+        </div>
+    </div>
+
+    <div class="bk-type" data-type="s3">
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-access">{{ 'poste_backup.field.access_key'|trans }}</label>
+                <input class="form-control" id="bk-access" name="access_key" style="width:240px" value="{{ values.access_key ?? '' }}" autocomplete="off"></div>
+            <div class="form-group"><label class="control-label" for="bk-secret">{{ 'poste_backup.field.secret_key'|trans }}</label>
+                <input class="form-control" id="bk-secret" name="secret_key" type="password" style="width:240px" autocomplete="new-password"
+                       placeholder="{{ hasSecret ? 'poste_backup.field.unchanged'|trans : '' }}"></div>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
+</form>
+
+{% if id %}
+<div class="bk-box"><h4><i class="fa fa-plug"></i> {{ 'poste_backup.destination.test_title'|trans }}</h4>
+    {% if values.type == 'sftp' and not values.hostkeys and not scan %}
+        <p>{{ 'poste_backup.destination.sftp_first'|trans }}</p>
+    {% endif %}
+    {% if scan %}
+        <p><strong>{{ 'poste_backup.destination.keys_found'|trans({'{host}': values.host}) }}</strong></p>
+        <ul>{% for k in scan %}<li><code>{{ k[1] }}</code></li>{% endfor %}</ul>
+        <p class="help-block">{{ 'poste_backup.destination.keys_help'|trans }}</p>
+        <form method="post" action="{{ path('poste_backup_destination_trust', {id: id}) }}" style="display:inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_destination_trust') }}">
+            <button type="submit" class="btn btn-warning btn-sm"><i class="fa fa-check"></i> {{ 'poste_backup.destination.trust'|trans }}</button>
+        </form>
+    {% else %}
+        <form method="post" action="{{ path('poste_backup_destination_test', {id: id}) }}" style="display:inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_destination_test') }}">
+            <button type="submit" class="btn btn-default btn-sm"><i class="fa fa-plug"></i> {{ 'poste_backup.action.test'|trans }}</button>
+        </form>
+    {% endif %}
+    {% if test %}
+        <ul style="margin-top:10px" class="{{ test.status == 'error' ? 'text-danger' : (test.status == 'warning' ? 'text-warning' : 'text-success') }}">
+            {% for l in test.lines %}<li>{{ l }}</li>{% endfor %}</ul>
+        <p class="bk-muted">{{ 'poste_backup.destination.tested_at'|trans({'{time}': test.t|date('Y-m-d H:i:s')}) }}</p>
+    {% endif %}
+    {% if values.type == 'sftp' and values.hostkeys %}
+        <p class="bk-muted">{{ 'poste_backup.destination.keys_trusted'|trans({'{count}': values.hostkeys|length}) }}</p>
+    {% endif %}
+</div>
+
+{% if values.type == 'sftp' and values.auth == 'key' %}
+<div class="bk-box"><h4><i class="fa fa-key"></i> {{ 'poste_backup.destination.pubkey_title'|trans }}</h4>
+    {% if publicKey %}
+        <p>{{ 'poste_backup.destination.pubkey_help'|trans({'{user}': values.user, '{host}': values.host}) }}</p>
+        <code class="bk-key">{{ publicKey }}</code>
+    {% endif %}
+    <form method="post" action="{{ path('poste_backup_destination_keypair', {id: id}) }}" style="margin-top:8px"
+          onsubmit="return confirm('{{ 'poste_backup.destination.keypair_confirm'|trans|e('js') }}')">
+        <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_destination_keypair') }}">
+        <button type="submit" class="btn btn-default btn-xs"><i class="fa fa-refresh"></i> {{ 'poste_backup.destination.keypair_new'|trans }}</button>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    // only the fields of the chosen type (and the password only for a password login)
+    function bkFields() {
+        var type = $('#bk-type').val();
+        $('.bk-type').each(function () {
+            var on = ($(this).data('type') + '').split(' ').indexOf(type) >= 0;
+            $(this).toggle(on).find('input, select').prop('disabled', !on);
+        });
+        var pw = type === 'smb' || (type === 'sftp' && $('#bk-auth').val() === 'password');
+        $('.bk-password').toggle(pw).find('input').prop('disabled', !pw);
+    }
+    $('#bk-type, #bk-auth').on('change', bkFields);
+    bkFields();
+</script>
+{% endblock %}

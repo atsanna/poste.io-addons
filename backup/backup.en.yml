@@ -1,0 +1,177 @@
+
+# own top-level key only: other add-ons append "menu:", and a YAML file cannot
+# have the same key twice
+poste_backup:
+  menu: Backup
+  title: Backup
+  error:
+    csrf: Invalid CSRF token, reload the page
+  action:
+    save: Save
+    edit: Edit
+    delete: Delete
+    test: Test
+    run_now: Run now
+  status:
+    never: never run
+    failed: failed
+  dashboard:
+    problems: "{count, plural, one {1 problem} other {# problems}}"
+    running: "Running now: {job} (since {since})"
+    disk: Server disk (/data)
+    disk_free: "{free} free of {total}"
+    last_backups: Last backups
+    no_jobs: No backup job yet
+    destinations_summary: "{count} destination(s), {problems} with problems at the last test"
+    jobs_summary: "{count} job(s)"
+    next: "next: {time}"
+  problem:
+    start: "At the last start of the container the backup folder could not be prepared: {error}"
+    config: "A setting is not valid and is ignored: {error}"
+    engine: "The backup engine has not run since {time}: is cron running in the container?"
+    engine_never: The backup engine has not run yet (it runs every minute, from cron)
+    job: "{job} on {destination}: {error}"
+    key: "The encryption key was never downloaded: without it no backup can be read if this server is lost"
+  type:
+    local: Folder (volume mounted by the host, e.g. NFS)
+    sftp: SFTP
+    smb: SMB / Samba
+    s3: S3
+  auth:
+    password: Password
+    key: SSH key
+  field:
+    name: Name
+    type: Type
+    location: Location
+    path: Folder in the container
+    host: Server
+    port: Port
+    share: Share
+    folder: Folder
+    user: User
+    password: Password
+    domain: Domain
+    endpoint: Endpoint
+    region: Region
+    bucket: Bucket
+    access_key: Access key
+    secret_key: Secret key
+    auth: Login with
+    optional: optional
+    unchanged: unchanged
+  destinations:
+    title: Destinations
+    add: Add a destination
+    none: No destination yet
+    last_test: Last test
+    not_tested: not tested
+    used_by: Used by
+    delete_confirm: Delete this destination? The backups already there are not deleted.
+    help: "Every job writes a full, encrypted copy to each of its destinations. A destination is a folder on an SMB share, an SFTP server or an S3 bucket, or a volume mounted into the container by the host (NFS, a second disk)."
+  destination:
+    new: New destination
+    edit: Edit destination
+    saved: "Destination saved. Test it before the first backup."
+    deleted: Destination deleted
+    in_use: "This destination is used by the job \"{job}\": remove it from the job first"
+    local_help: "A folder under {roots} where the host mounts a volume (NFS, a second disk). It must be a mount point, not on the disk of /data: otherwise the backup would stay inside the container or on the same disk."
+    folder_help: "The backups go into this folder (it is created if missing). Use an empty folder, one per mail server."
+    test_title: Connection test
+    tested:
+      ok: "Test passed"
+      warning: "Test passed with a warning"
+      error: "Test failed"
+    tested_at: "Tested at {time}"
+    sftp_first: "First contact with this server: the test shows the server's SSH keys, to be confirmed before anything is sent."
+    keys_found: "SSH keys offered by {host}:"
+    keys_help: "Compare these fingerprints with the ones of the server (for example with ssh-keygen -lf on the server). Only confirm keys you have checked: they are how the backup knows it talks to the right server."
+    trust: These are the server's keys, trust them
+    trusted: "Keys trusted. Now test the destination."
+    keys_changed: "The server's keys changed between the scan and the confirmation: nothing trusted, test again"
+    keys_trusted: "{count} SSH key(s) of the server trusted. A changed key stops the backups (it could be another server)."
+    pubkey_title: Public key for the server
+    pubkey_help: "Add this line to ~/.ssh/authorized_keys of the user {user} on {host}, then test the destination."
+    keypair_new: Make a new key pair
+    keypair_confirm: The old key will stop working on the server. Continue?
+    keypair_made: New key pair made. Add the new public key on the server.
+  jobs:
+    title: Backup jobs
+    add: Add a backup job
+    none: No backup job yet
+    no_destination: "Add a destination first."
+    what: What
+    when: When
+    destinations: Destinations
+    keep: Keep
+    last_run: Last run
+    disabled: disabled
+    running: running now
+    queued: "queued: starts within a minute"
+    added: "+{size} MB in {seconds} s"
+    what_config: configuration
+    what_all: all mail
+    what_selected: "{count} mailbox(es)"
+    delete_confirm: Delete this job? Its backups already made are not deleted.
+    help: "Jobs are run by the backup engine every minute when they are due; Run now starts one within a minute. A run missed while the server was off runs once, as soon as it is back."
+  job:
+    new: New backup job
+    edit: Edit backup job
+    saved: Backup job saved
+    deleted: Backup job deleted
+    queued: "Run requested: it starts within a minute"
+    queue_error: Cannot queue the run
+    what: What to back up
+    config: Server configuration
+    config_help: "(accounts and domains, settings, certificates, DKIM keys, webmail settings, spam filter training, settings of the add-ons)"
+    mail_none: No mail
+    mail_all: All mail
+    mail_selected: Only these mailboxes
+    mailboxes_placeholder: Choose mailboxes
+    when: Every
+    weekday: Day
+    monthday: Day of the month
+    hour: Hour
+    minute: Minute
+    destinations: Destinations
+    destinations_help: (each one gets a full copy)
+    keep: Keep
+    keep_hourly: hourly
+    keep_daily: daily
+    keep_weekly: weekly
+    keep_monthly: monthly
+    keep_help: "After each run the older snapshots of this job are removed, keeping the last one of each hour, day, week and month up to these numbers. Only the data that changed is stored again."
+    enabled: Enabled
+    save_run: Save and run now
+  every:
+    hour: hour
+    day: day
+    week: week
+    month: month
+  when:
+    hour: "every hour at :{minute}"
+    day: "every day at {time}"
+    week: "every {day} at {time}"
+    month: "every month on day {day} at {time}"
+  weekday:
+    1: Monday
+    2: Tuesday
+    3: Wednesday
+    4: Thursday
+    5: Friday
+    6: Saturday
+    7: Sunday
+  keep:
+    hourly: "{count} hourly"
+    daily: "{count} daily"
+    weekly: "{count} weekly"
+    monthly: "{count} monthly"
+  key:
+    title: Encryption key
+    help: "Every backup is encrypted with this key. Without it no backup can be read, not even by you."
+    help2: "Download it and keep it outside this server, where you keep your other passwords: if this server is lost, the key is what lets you restore on a new one. It is never part of the backups."
+    download: Download the key
+    downloaded: "downloaded {time}"
+    never: never downloaded
+    created: "created {time}"
+    missing: "The key is missing: restart the container (it is created at start) or put the old key back if you have one."

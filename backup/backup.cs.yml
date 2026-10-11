@@ -1,0 +1,177 @@
+
+# own top-level key only: other add-ons append "menu:", and a YAML file cannot
+# have the same key twice
+poste_backup:
+  menu: Zálohy
+  title: Zálohy
+  error:
+    csrf: Neplatný token CSRF, načtěte stránku znovu
+  action:
+    save: Uložit
+    edit: Upravit
+    delete: Smazat
+    test: Otestovat
+    run_now: Spustit nyní
+  status:
+    never: zatím nespuštěno
+    failed: selhalo
+  dashboard:
+    problems: "{count, plural, one {1 problém} few {# problémy} other {# problémů}}"
+    running: "Právě běží: {job} (od {since})"
+    disk: Disk serveru (/data)
+    disk_free: "volno {free} z {total}"
+    last_backups: Poslední zálohy
+    no_jobs: Zatím žádná úloha zálohování
+    destinations_summary: "cílů: {count}, s problémem při posledním testu: {problems}"
+    jobs_summary: "úloh: {count}"
+    next: "další: {time}"
+  problem:
+    start: "Při posledním startu kontejneru nebylo možné připravit složku záloh: {error}"
+    config: "Nastavení není platné a je ignorováno: {error}"
+    engine: "Zálohovací modul neběžel od {time}: běží v kontejneru cron?"
+    engine_never: Zálohovací modul zatím neběžel (spouští ho cron každou minutu)
+    job: "{job} na {destination}: {error}"
+    key: "Šifrovací klíč nebyl nikdy stažen: bez něj nelze při ztrátě tohoto serveru žádnou zálohu přečíst"
+  type:
+    local: Složka (svazek připojený hostitelem, např. NFS)
+    sftp: SFTP
+    smb: SMB / Samba
+    s3: S3
+  auth:
+    password: Heslo
+    key: Klíč SSH
+  field:
+    name: Název
+    type: Typ
+    location: Umístění
+    path: Složka v kontejneru
+    host: Server
+    port: Port
+    share: Sdílená složka
+    folder: Složka
+    user: Uživatel
+    password: Heslo
+    domain: Doména
+    endpoint: Koncový bod
+    region: Region
+    bucket: Bucket
+    access_key: Přístupový klíč
+    secret_key: Tajný klíč
+    auth: Přihlášení
+    optional: volitelné
+    unchanged: beze změny
+  destinations:
+    title: Cíle záloh
+    add: Přidat cíl
+    none: Zatím žádný cíl
+    last_test: Poslední test
+    not_tested: neotestováno
+    used_by: Používá
+    delete_confirm: Smazat tento cíl? Zálohy, které už v něm jsou, se nesmažou.
+    help: "Každá úloha zapisuje do každého svého cíle úplnou šifrovanou kopii. Cílem je složka na sdílení SMB, server SFTP, bucket S3 nebo svazek, který do kontejneru připojí hostitel (NFS, druhý disk)."
+  destination:
+    new: Nový cíl
+    edit: Upravit cíl
+    saved: "Cíl uložen. Před první zálohou ho otestujte."
+    deleted: Cíl smazán
+    in_use: "Tento cíl používá úloha „{job}“: nejprve ho z úlohy odeberte"
+    local_help: "Složka pod {roots}, kam hostitel připojí svazek (NFS, druhý disk). Musí to být přípojný bod, ne na disku /data: jinak by záloha zůstala uvnitř kontejneru nebo na stejném disku."
+    folder_help: "Zálohy jdou do této složky (pokud chybí, vytvoří se). Použijte prázdnou složku, jednu pro každý poštovní server."
+    test_title: Test připojení
+    tested:
+      ok: "Test prošel"
+      warning: "Test prošel s varováním"
+      error: "Test selhal"
+    tested_at: "Otestováno {time}"
+    sftp_first: "První spojení s tímto serverem: test ukáže klíče SSH serveru, které je třeba potvrdit dřív, než se cokoli odešle."
+    keys_found: "Klíče SSH nabízené serverem {host}:"
+    keys_help: "Porovnejte tyto otisky s otisky serveru (například pomocí ssh-keygen -lf na serveru). Potvrďte jen klíče, které jste ověřili: podle nich záloha pozná, že mluví se správným serverem."
+    trust: Jsou to klíče serveru, důvěřovat jim
+    trusted: "Klíče jsou důvěryhodné. Nyní cíl otestujte."
+    keys_changed: "Klíče serveru se mezi načtením a potvrzením změnily: nic nebylo potvrzeno, otestujte znovu"
+    keys_trusted: "Důvěryhodné klíče SSH serveru: {count}. Změněný klíč zálohy zastaví (mohl by to být jiný server)."
+    pubkey_title: Veřejný klíč pro server
+    pubkey_help: "Přidejte tento řádek do ~/.ssh/authorized_keys uživatele {user} na serveru {host} a pak cíl otestujte."
+    keypair_new: Vytvořit nový pár klíčů
+    keypair_confirm: Starý klíč na serveru přestane fungovat. Pokračovat?
+    keypair_made: Nový pár klíčů vytvořen. Přidejte nový veřejný klíč na server.
+  jobs:
+    title: Úlohy zálohování
+    add: Přidat úlohu zálohování
+    none: Zatím žádná úloha zálohování
+    no_destination: "Nejprve přidejte cíl."
+    what: Co
+    when: Kdy
+    destinations: Cíle
+    keep: Uchovávat
+    last_run: Poslední běh
+    disabled: vypnuto
+    running: právě běží
+    queued: "ve frontě: spustí se do minuty"
+    added: "+{size} MB za {seconds} s"
+    what_config: konfigurace
+    what_all: veškerá pošta
+    what_selected: "schránek: {count}"
+    delete_confirm: Smazat tuto úlohu? Zálohy, které už vytvořila, se nesmažou.
+    help: "Úlohy spouští zálohovací modul každou minutu, když přijde jejich čas; Spustit nyní spustí úlohu do minuty. Běh zmeškaný při vypnutém serveru proběhne jednou, jakmile server znovu běží."
+  job:
+    new: Nová úloha zálohování
+    edit: Upravit úlohu zálohování
+    saved: Úloha zálohování uložena
+    deleted: Úloha zálohování smazána
+    queued: "Spuštění vyžádáno: začne do minuty"
+    queue_error: Spuštění nelze zařadit do fronty
+    what: Co zálohovat
+    config: Konfigurace serveru
+    config_help: "(účty a domény, nastavení, certifikáty, klíče DKIM, nastavení webmailu, učení spamového filtru, nastavení doplňků)"
+    mail_none: Žádná pošta
+    mail_all: Veškerá pošta
+    mail_selected: Jen tyto schránky
+    mailboxes_placeholder: Vyberte schránky
+    when: Každý
+    weekday: Den
+    monthday: Den v měsíci
+    hour: Hodina
+    minute: Minuta
+    destinations: Cíle
+    destinations_help: (každý dostane úplnou kopii)
+    keep: Uchovávat
+    keep_hourly: hodinových
+    keep_daily: denních
+    keep_weekly: týdenních
+    keep_monthly: měsíčních
+    keep_help: "Po každém běhu se starší snímky této úlohy odstraní; ponechá se poslední snímek každé hodiny, dne, týdne a měsíce až do těchto počtů. Znovu se ukládají jen změněná data."
+    enabled: Zapnuto
+    save_run: Uložit a spustit nyní
+  every:
+    hour: hodina
+    day: den
+    week: týden
+    month: měsíc
+  when:
+    hour: "každou hodinu v :{minute}"
+    day: "každý den v {time}"
+    week: "každý {day} v {time}"
+    month: "každý měsíc {day}. den v {time}"
+  weekday:
+    1: pondělí
+    2: úterý
+    3: středa
+    4: čtvrtek
+    5: pátek
+    6: sobota
+    7: neděle
+  keep:
+    hourly: "hodinových: {count}"
+    daily: "denních: {count}"
+    weekly: "týdenních: {count}"
+    monthly: "měsíčních: {count}"
+  key:
+    title: Šifrovací klíč
+    help: "Každá záloha je zašifrována tímto klíčem. Bez něj nelze žádnou zálohu přečíst, ani vámi."
+    help2: "Stáhněte si ho a uložte mimo tento server, tam, kde máte ostatní hesla: pokud tento server ztratíte, právě klíč umožní obnovu na novém. Nikdy není součástí záloh."
+    download: Stáhnout klíč
+    downloaded: "staženo {time}"
+    never: nikdy nestaženo
+    created: "vytvořeno {time}"
+    missing: "Klíč chybí: restartujte kontejner (vytváří se při startu) nebo vraťte starý klíč, pokud ho máte."

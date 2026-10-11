@@ -1,0 +1,22 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.key.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
+<div class="bk-box" style="border-color:#f0ad4e; background:#fcf8e3; max-width:900px">
+    <p><i class="fa fa-key"></i> <strong>{{ 'poste_backup.key.title'|trans }}.</strong> {{ 'poste_backup.key.help'|trans }}</p>
+    <p>{{ 'poste_backup.key.help2'|trans }}</p>
+    {% if present %}
+        <form method="post" action="{{ path('poste_backup_key_download') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_key') }}">
+            <button type="submit" class="btn btn-warning"><i class="fa fa-download"></i> {{ 'poste_backup.key.download'|trans }}</button>
+            <span class="bk-muted">&nbsp; {% if downloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': downloaded|date('Y-m-d H:i')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}
+            {% if created %} &middot; {{ 'poste_backup.key.created'|trans({'{time}': created|date('Y-m-d H:i')}) }}{% endif %}</span>
+        </form>
+    {% else %}
+        <p class="text-danger">{{ 'poste_backup.key.missing'|trans }}</p>
+    {% endif %}
+</div>
+{% endblock %}

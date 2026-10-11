@@ -1,0 +1,49 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+
+{% if problems %}
+<div class="bk-alert"><i class="fa fa-exclamation-triangle"></i>
+    <strong>{{ 'poste_backup.dashboard.problems'|trans({'{count}': problems|length}) }}</strong>
+    <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if running %}
+<p class="text-info" style="margin-top:14px"><i class="fa fa-spinner fa-spin"></i>
+    {{ 'poste_backup.dashboard.running'|trans({'{job}': jobs[running.job].name ?? running.job, '{since}': running.since|date('H:i')}) }}</p>
+{% endif %}
+
+<div class="bk-status">
+    <div class="bk-card"><h4><i class="fa fa-hdd-o"></i> {{ 'poste_backup.dashboard.disk'|trans }}</h4>
+        <div class="bk-bar"><span style="width: {{ disk.usedPercent }}%"></span></div>
+        {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': disk.freeText, '{total}': disk.totalText}) }}</div>
+    <div class="bk-card"><h4><i class="fa fa-clock-o"></i> {{ 'poste_backup.dashboard.last_backups'|trans }}</h4>
+        {% for job in jobs %}
+            {% set s = job.state %}
+            {% if s is null %}
+                <span class="bk-muted">{{ job.name }}: {{ 'poste_backup.status.never'|trans }}</span><br>
+            {% elseif s.status == 'ok' %}
+                <span class="text-success"><i class="fa fa-check"></i> {{ job.name }}: {{ s.last_end|date('Y-m-d H:i') }}</span><br>
+            {% elseif s.status == 'warning' %}
+                <span class="text-warning"><i class="fa fa-exclamation-triangle"></i> {{ job.name }}: {{ s.last_end|date('Y-m-d H:i') }}</span><br>
+            {% else %}
+                <span class="text-danger"><i class="fa fa-times-circle"></i> {{ job.name }}: {{ 'poste_backup.status.failed'|trans }} {{ s.last_end|date('Y-m-d H:i') }}</span><br>
+            {% endif %}
+        {% else %}
+            <span class="bk-muted">{{ 'poste_backup.dashboard.no_jobs'|trans }}</span>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="bk-nav">
+    <a href="{{ path('poste_backup_destinations') }}"><i class="fa fa-folder-open-o"></i><strong>{{ 'poste_backup.destinations.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.destinations_summary'|trans({'{count}': destinations|length, '{problems}': destProblems}) }}</span></a>
+    <a href="{{ path('poste_backup_jobs') }}"><i class="fa fa-clock-o"></i><strong>{{ 'poste_backup.jobs.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.jobs_summary'|trans({'{count}': jobs|length}) }}{% if next %} &middot; {{ 'poste_backup.dashboard.next'|trans({'{time}': next|date('Y-m-d H:i')}) }}{% endif %}</span></a>
+    <a href="{{ path('poste_backup_key') }}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>
+        <span class="bk-muted">{% if keyDownloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': keyDownloaded|date('Y-m-d')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}</span></a>
+</div>
+{% endblock %}

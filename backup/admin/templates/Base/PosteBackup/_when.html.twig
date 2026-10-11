@@ -1,0 +1,6 @@
+{# a schedule in words: s = {every, minute, hour, weekday, monthday} #}
+{%- set hm = '%02d:%02d'|format(s.hour, s.minute) -%}
+{%- if s.every == 'hour' -%}{{ 'poste_backup.when.hour'|trans({'{minute}': '%02d'|format(s.minute)}) }}
+{%- elseif s.every == 'day' -%}{{ 'poste_backup.when.day'|trans({'{time}': hm}) }}
+{%- elseif s.every == 'week' -%}{{ 'poste_backup.when.week'|trans({'{day}': ('poste_backup.weekday.' ~ s.weekday)|trans, '{time}': hm}) }}
+{%- else -%}{{ 'poste_backup.when.month'|trans({'{day}': s.monthday, '{time}': hm}) }}{%- endif -%}
