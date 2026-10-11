@@ -143,7 +143,10 @@ that folder only (see [Good practice](#good-practice)).
 
 Server, share, folder inside the share, user, password, and the domain if the
 server needs one. Works with Samba, Windows shares and NAS shares (SMB 2 or
-newer). The free space is shown.
+newer). The free and total space of the share are read with `smbclient`: the
+SMB client inside rclone 1.60 reports them divided by a factor that depends
+on the server (half, on Samba and on a QNAP NAS), so its numbers are not
+used.
 
 ### SFTP
 
@@ -263,7 +266,10 @@ the admin with the next stage; for now it is done by hand: list them with
   a job starts or ends.
 - **Logs**: one line per run and destination, the most recent first, with a
   link to the log of the run (what the engine did, in English, with the
-  output of restic). The last 200 logs are kept.
+  output of restic). Under the list, how long they are kept: the logs of the
+  runs for 90 days and the history (one line per run, for the statistics)
+  for 400 days by default, from 1 to 3650 days. Older ones are removed after
+  each run and once a day; the backups themselves are not touched.
 - The pages of the admin are in **English and Czech** (Poste.io's two
   languages, chosen by the browser), including the messages of the tests,
   of the validation and of the runs. The logs themselves stay in English.
@@ -348,9 +354,10 @@ needs its owner set back by root after copying it into place
 - **Space**: the first backup stores everything; later ones store only what
   changed (restic deduplicates: data already stored is never stored again).
   Plan the destination for the mail plus the history kept, and watch the
-  space shown on the dashboard. As an order of magnitude, a first backup of
-  9.7 GB of mail took 8 and a half minutes over SMB to a NAS on the same
-  network.
+  space shown on the dashboard. As an order of magnitude, measured on a real
+  server: a first backup of 9.7 GB of mail took 8 and a half minutes over SMB
+  to a NAS on the same network, the next one 18 seconds (1.8 MB new), and the
+  repository took 3.5 GB on the NAS (restic compresses the data).
 
 ## A backup of a server that is running
 
@@ -444,7 +451,7 @@ add-on.
   engine/                                 (the engine)
     state.json                            last run of each job
     history.jsonl                         one line per run and destination
-    logs/                                 log of each run (the last 200)
+    logs/                                 log of each run (kept for the days set in the admin)
     staging/                              consistent copies of the databases, during a run
 /var/cache/poste-backup                   restic's cache (rebuilt when needed)
 /run/poste-backup.lock                    one run at a time

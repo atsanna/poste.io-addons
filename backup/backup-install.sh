@@ -1,7 +1,7 @@
 #!/bin/sh
 # Backup add-on for Poste.io: installs the engine, the admin pages, their menu
 # entry and translations, the cron entry and the start script. Used by the
-# Dockerfile (after restic, rclone and openssh-client are installed there) and
+# Dockerfile (after restic, rclone, openssh-client and smbclient are installed there) and
 # for a manual install, so what is tested is what runs in the build.
 #
 #   sh backup-install.sh <add-on dir> [admin dir]
@@ -15,7 +15,7 @@ MENU="$ADMIN/templates/_menu.html.twig"
 LIB=/usr/local/lib/poste-backup
 ENTRY="route starts with 'poste_backup'"
 
-for tool in restic rclone ssh-keyscan ssh-keygen sqlite3 php runuser setsid; do
+for tool in restic rclone ssh-keyscan ssh-keygen smbclient sqlite3 php runuser setsid; do
     command -v "$tool" >/dev/null || { echo "backup: STOP, $tool is not installed"; exit 1; }
 done
 for ext in pcntl posix sqlite3 mbstring; do

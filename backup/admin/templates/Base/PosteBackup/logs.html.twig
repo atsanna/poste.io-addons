@@ -36,6 +36,21 @@
     </tbody>
 </table>
 <p class="help-block">{{ 'poste_backup.logs.help'|trans }}</p>
+
+<div class="bk-box" style="max-width:900px">
+    <form method="post" action="{{ path('poste_backup_logs_settings') }}">
+        <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_logs_settings') }}">
+        <h4><i class="fa fa-trash-o"></i> {{ 'poste_backup.logs.keep_title'|trans }}</h4>
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-log-days">{{ 'poste_backup.logs.keep_logs'|trans }}</label>
+                <input class="form-control bk-small" id="bk-log-days" name="log_days" type="number" min="1" max="{{ maxDays }}" value="{{ settings.log_days }}"> {{ 'poste_backup.logs.days'|trans }}</div>
+            <div class="form-group"><label class="control-label" for="bk-history-days">{{ 'poste_backup.logs.keep_history'|trans }}</label>
+                <input class="form-control bk-small" id="bk-history-days" name="history_days" type="number" min="1" max="{{ maxDays }}" value="{{ settings.history_days }}"> {{ 'poste_backup.logs.days'|trans }}</div>
+            <div class="form-group"><button type="submit" class="btn btn-default btn-sm"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button></div>
+        </div>
+        <p class="help-block">{{ 'poste_backup.logs.keep_help'|trans }}</p>
+    </form>
+</div>
 {% endblock %}
 
 {% block javascripts %}

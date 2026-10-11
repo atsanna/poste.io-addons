@@ -122,7 +122,8 @@ class PosteBackupController extends AbstractController
         foreach ($state['jobs'] as $id => $j) {
             $sig[$id] = [$j['last_end'] ?? 0, $j['status'] ?? ''];
         }
-        $live = ['signature' => md5(json_encode([$sig, $run['job'] ?? null, array_keys(Panel::pendingRuns())])), 'running' => null];
+        $live = ['signature' => md5(json_encode([$sig, $run['job'] ?? null, array_keys(Panel::pendingRuns()), Panel::keyDownloaded() !== null])),
+                 'running' => null];
         if ($run) {
             $dest = $run['dest'] ?? null;
             $destName = $dest !== null ? ($cfg['destinations'][$dest]['name'] ?? $dest) : '';
@@ -292,6 +293,8 @@ class PosteBackupController extends AbstractController
         $state = Panel::state();
         return $this->render('Base/PosteBackup/logs.html.twig', [
             'runs' => $runs,
+            'settings' => $cfg['settings'],
+            'maxDays' => Config::MAX_DAYS,
             'jobs' => $cfg['jobs'],
             'destinations' => $cfg['destinations'],
             'live' => $this->live($cfg, $state),
@@ -732,6 +735,29 @@ class PosteBackupController extends AbstractController
             'weekdays' => [1, 2, 3, 4, 5, 6, 7],
             'zone' => $this->zone()->getName(),
         ]);
+    }
+
+    /**
+     * How long the logs of the runs and the history are kept (days).
+     *
+     * @Route("/settings/logs", name="poste_backup_logs_settings", methods={"POST"})
+     */
+    public function logsSettingsAction(Request $request)
+    {
+        if ($this->csrf($request, 'poste_backup_logs_settings')) {
+            $p = $request->request;
+            $days = function (string $k) use ($p) {
+                $v = trim((string) $p->get($k, ''));
+                return ctype_digit($v) ? (int) $v : -1;
+            };
+            $err = Panel::update(function (array $c) use ($days) {
+                $c['settings']['log_days'] = $days('log_days');
+                $c['settings']['history_days'] = $days('history_days');
+                return $c;
+            });
+            $this->addFlash($err ? 'error' : 'notice', $err ? $this->msg($err) : $this->t('poste_backup.logs.keep_saved'));
+        }
+        return $this->redirectToRoute('poste_backup_logs');
     }
 
     /**

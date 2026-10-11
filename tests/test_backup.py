@@ -182,6 +182,20 @@ check("SMB: test ok (reachable, free space reported, write test)", "write test: 
       re.findall(r"<li>([^<]*)</li>", html)[:4])
 check("the password is never sent back to the browser", B["DEST_PASSWORD"] not in html, "edit page")
 
+
+def human(b):
+    """Panel::size in Python (1024 units, one decimal, "3" not "3.0")."""
+    for u, n in (("TB", 1 << 40), ("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
+        if b >= n:
+            v = str(round(b / n, 1))
+            return (v[:-2] if v.endswith(".0") else v) + " " + u
+    return "%d B" % b
+
+
+SMB_SIZE, SMB_AVAIL = int(B["DEST_SMB_SIZE"]), int(B["DEST_SMB_AVAIL"])
+check("SMB: the size of the share is the real one (df on the server; rclone 1.60 would say half)",
+      ("of %s</li>" % human(SMB_SIZE)) in html, (human(SMB_SIZE), re.findall(r"free space: [^<]*", html)))
+
 SMBBAD, html = new_destination({"name": "Samba, wrong password", "type": "smb", "host": B["DEST_HOST"], "share": "backup",
                                 "folder": "other", "user": "bkuser", "password": "wrong-" + B["DEST_PASSWORD"], "domain": ""})
 check("SMB with a wrong password: saved (only the password is wrong)", SMBBAD is not None,
@@ -509,6 +523,9 @@ sp = state().get("destinations", {})
 check("space measured after the backups, on every destination",
       all(isinstance(sp.get(d, {}).get("used"), int) and sp[d]["used"] > 0 for d in (LOCAL, SMB, S3, SFTP, SFTPKEY)),
       {k: v.get("used") for k, v in sp.items()})
+check("SMB: total and free space after a backup are the share's real ones (df on the server)",
+      sp.get(SMB, {}).get("total") == SMB_SIZE and abs((sp.get(SMB, {}).get("free") or 0) - SMB_AVAIL) < SMB_SIZE * 0.02,
+      (sp.get(SMB), SMB_SIZE, SMB_AVAIL))
 check("free space where the server reports it, not on S3",
       all(isinstance(sp.get(d, {}).get("free"), int) for d in (LOCAL, SMB, SFTP)) and sp.get(S3, {}).get("free") is None,
       {k: v.get("free") for k, v in sp.items()})
@@ -612,6 +629,32 @@ else:
     open(TZF, "w").write(old_tz)
 check("the times of the jobs are shown in the container's time zone (the hour set, 03:17)",
       "Pacific/Kiritimati" in html and nexts and all(n.endswith("03:17") for n in nexts), nexts)
+
+# keeping the logs: the days set in the admin, after each run
+before = json.dumps(config())
+post_form(BASE + "/logs", {"log_days": "30", "history_days": "100"}, suffix="/settings/logs", drop=("_token",))
+check("log settings without the CSRF token: refused (nothing saved)", json.dumps(config()) == before, "config unchanged")
+url, html = post_form(BASE + "/logs", {"log_days": "0", "history_days": "100"}, suffix="/settings/logs")
+check("log days out of range: refused with a message, nothing saved",
+      json.dumps(config()) == before and "log days: a whole number from 1 to 3650" in html, config().get("settings"))
+url, html = post_form(BASE + "/logs", {"log_days": "30", "history_days": "100"}, suffix="/settings/logs")
+check("log settings saved", config()["settings"]["log_days"] == 30 and config()["settings"]["history_days"] == 100, config().get("settings"))
+LOGS = "/data/var/backup/engine/logs"
+old_log = LOGS + "/20200101-000000-0a1b2c3d4e5f.log"
+sh(["sh", "-c", 'echo old > "$1" && touch -d "40 days ago" "$1"', "sh", old_log], user="mail")
+recent_logs = sorted(f for f in os.listdir(LOGS) if re.match(r"^\d{8}-\d{6}-[a-f0-9]{12}\.log$", f) and f != os.path.basename(old_log))
+HIST = "/data/var/backup/engine/history.jsonl"
+old_line = json.dumps({"t": int(time.time()) - 200 * 86400, "start": 0, "job": "0a1b2c3d4e5f", "dest": "0a1b2c3d4e5f", "reason": "schedule", "status": "ok"})
+sh(["sh", "-c", 'H="$1"; { echo "$2"; cat "$H"; } > "$H.new" && mv "$H.new" "$H" && chmod 640 "$H"', "sh", HIST, old_line], user="mail")
+lines_before = len(open(HIST).read().splitlines())
+run_job(BOB)
+left = os.listdir(LOGS)
+hist = [json.loads(l) for l in open(HIST).read().splitlines()]
+check("after a run: a log older than the days set is removed, the recent ones stay",
+      os.path.basename(old_log) not in left and all(f in left for f in recent_logs[-5:]), (len(recent_logs), len(left)))
+check("after a run: the history keeps only its days (the old line is gone, the recent ones and the new run stay)",
+      all(h["t"] >= time.time() - 100 * 86400 for h in hist) and len(hist) == lines_before - 1 + 1, (lines_before, len(hist)))
+post_form(BASE + "/logs", {"log_days": "90", "history_days": "400"}, suffix="/settings/logs")
 
 # the time zone chosen in the admin wins, and is refused when it does not exist
 before = json.dumps(config())

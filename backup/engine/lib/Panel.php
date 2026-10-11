@@ -283,6 +283,9 @@ final class Panel
 
             if ($d['type'] === 's3') {
                 $lines[] = 'free space: not reported by S3';
+            } elseif ($d['type'] === 'smb') {
+                $sp = Destination::smbSpace($d, $tmp);
+                $lines[] = $sp ? 'free space: ' . self::size($sp['free']) . ' of ' . self::size($sp['total']) : 'free space: not reported by the server';
             } else {
                 $about = Proc::run(['rclone', 'about', '--json', $path], $env, null, 60);
                 if ($about['exit'] !== 0) {

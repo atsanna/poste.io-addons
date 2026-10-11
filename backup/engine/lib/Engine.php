@@ -46,6 +46,12 @@ final class Engine
         try {
             $this->load();
             $this->state['tick'] = $now;
+            // logs and history are trimmed after each run, and once a day for a
+            // server where nothing runs for a while
+            if ($now - (int) ($this->state['housekeeping'] ?? 0) >= 86400) {
+                $this->housekeeping($now);
+                $this->state['housekeeping'] = $now;
+            }
             $this->saveState();
 
             $runs = [];
@@ -201,7 +207,7 @@ final class Engine
         if ($log) {
             fclose($log);
         }
-        $this->pruneLogs();
+        $this->housekeeping(time());
         return $worst;
     }
 
@@ -520,7 +526,7 @@ final class Engine
                 $res['error'] = 'backup done, but the old snapshots were not removed: ' . self::lastLine($f['err']);
             }
             $this->phase('space', $did);
-            $res['space'] = $this->space($did, $d, $env, $log);
+            $res['space'] = $this->space($did, $d, $env, $tmp, $log);
             return $res;
         } finally {
             $this->removeTmp($tmp);
@@ -567,7 +573,7 @@ final class Engine
      * Space on a destination after a backup: bytes used by the repository and,
      * where the server reports it, free and total. Nothing is an error here.
      */
-    private function space(string $did, array $d, array $env, $log): array
+    private function space(string $did, array $d, array $env, string $tmp, $log): array
     {
         $path = $d['type'] === 'local' ? $d['path'] : Destination::rclonePath($did, $d);
         $out = ['used' => null, 'free' => null, 'total' => null];
@@ -576,7 +582,12 @@ final class Engine
         if ($s['exit'] === 0 && is_array($j) && isset($j['bytes'])) {
             $out['used'] = (int) $j['bytes'];
         }
-        if ($d['type'] !== 's3') {
+        if ($d['type'] === 'smb') {
+            // not rclone's numbers for SMB: see Destination::smbSpace
+            $sp = Destination::smbSpace($d, $tmp);
+            $out['free'] = $sp['free'] ?? null;
+            $out['total'] = $sp['total'] ?? null;
+        } elseif ($d['type'] !== 's3') {
             $a = Proc::run(['rclone', 'about', '--json', $path], $env, null, 120, null, $log);
             $j = json_decode($a['out'], true);
             if ($a['exit'] === 0 && is_array($j)) {
@@ -728,12 +739,54 @@ final class Engine
         }
     }
 
-    private function pruneLogs(): void
+    /**
+     * Removes the logs of the runs older than the days set in the admin (and
+     * beyond a safety number of files), and the lines of the history older than
+     * its own days; keeps the engine's own error log short. Run under the lock.
+     */
+    private function housekeeping(int $now): void
     {
-        $logs = glob(Store::LOGS . '/*.log') ?: [];
-        sort($logs);
-        foreach (array_slice($logs, 0, max(0, count($logs) - Store::MAX_LOGS)) as $old) {
-            @unlink($old);
+        $limit = $now - 86400 * (int) $this->cfg['settings']['log_days'];
+        $runLogs = [];
+        foreach (glob(Store::LOGS . '/*.log') ?: [] as $f) {
+            if (preg_match('/^\d{8}-\d{6}-[a-f0-9]{12}\.log$/', basename($f)) === 1 && is_file($f) && !is_link($f)) {
+                $runLogs[] = $f;
+            }
+        }
+        sort($runLogs);
+        foreach ($runLogs as $i => $f) {
+            if ((int) @filemtime($f) < $limit) {
+                @unlink($f);
+                unset($runLogs[$i]);
+            }
+        }
+        foreach (array_slice(array_values($runLogs), 0, max(0, count($runLogs) - Store::MAX_LOGS)) as $f) {
+            @unlink($f);
+        }
+
+        // the history: rewritten only when its first line is too old
+        $hlimit = $now - 86400 * (int) $this->cfg['settings']['history_days'];
+        $h = @fopen(Store::HISTORY, 'r');
+        if ($h) {
+            $first = json_decode((string) fgets($h), true);
+            fclose($h);
+            if (is_array($first) && (int) ($first['t'] ?? 0) < $hlimit) {
+                $keep = '';
+                foreach (file(Store::HISTORY) ?: [] as $line) {
+                    $d = json_decode($line, true);
+                    if (is_array($d) && (int) ($d['t'] ?? 0) >= $hlimit) {
+                        $keep .= rtrim($line, "\n") . "\n";
+                    }
+                }
+                Store::writeAtomic(Store::HISTORY, $keep, 0640);
+            }
+        }
+
+        // the engine's own error log: its last 200 lines
+        $err = Store::LOGS . '/engine-errors.log';
+        if (is_file($err) && !is_link($err) && filesize($err) > 65536) {
+            $lines = file($err) ?: [];
+            Store::writeAtomic($err, implode('', array_slice($lines, -200)), 0640);
         }
     }
 }

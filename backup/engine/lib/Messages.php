@@ -24,7 +24,8 @@ final class Messages
         'enabled' => 'enabled', 'configuration' => 'configuration', 'minute' => 'minute', 'hour' => 'hour',
         'weekday' => 'weekday', 'day of the month' => 'monthday', 'keep hourly' => 'keep_hourly',
         'keep daily' => 'keep_daily', 'keep weekly' => 'keep_weekly', 'keep monthly' => 'keep_monthly',
-        'notify on success' => 'notify_success', 'created' => 'created',
+        'notify on success' => 'notify_success', 'created' => 'created', 'log days' => 'log_days',
+        'history days' => 'history_days',
     ];
 
     /**

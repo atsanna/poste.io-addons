@@ -20,3 +20,13 @@
     {% endif %}
 </div>
 {% endblock %}
+
+{% block javascripts %}
+<script>
+    // the key comes back as a file: the page itself does not change, so it is
+    // reloaded once the download has started (it then says when it was downloaded)
+    $('form[action$="/key/download"]').on('submit', function () {
+        setTimeout(function () { window.location.reload(); }, 1500);
+    });
+</script>
+{% endblock %}

@@ -68,8 +68,11 @@ if docker exec "$NAME" test -x /usr/local/bin/poste-backup; then
     docker build -q -t poste-addons-test-dest "$DIR/backup-dest" >/dev/null
     docker run -d --name "$NAME-dest" --network "$NAME-net" -e DEST_PASSWORD="$DP" poste-addons-test-dest >/dev/null
     docker run -d --name "$NAME-s3" --network "$NAME-net" "$S3_IMAGE" serve s3 /data --addr :8080 --auth-key "testkey,$DP" >/dev/null
-    docker exec "$NAME" sh -c 'umask 077; printf "DEST_HOST=%s\nS3_HOST=%s\nDEST_PASSWORD=%s\n" "$1" "$2" "$3" > /tests/backup.env' \
-        sh "$NAME-dest" "$NAME-s3" "$DP"
+    # the real size and free space of the Samba share, read on its server: what
+    # the admin must show (rclone 1.60 reports SMB space wrong)
+    SMB_DF=$(docker exec "$NAME-dest" df -B1 --output=size,avail /srv/smb | tail -1)
+    docker exec "$NAME" sh -c 'umask 077; printf "DEST_HOST=%s\nS3_HOST=%s\nDEST_PASSWORD=%s\nDEST_SMB_SIZE=%s\nDEST_SMB_AVAIL=%s\n" "$1" "$2" "$3" "$4" "$5" > /tests/backup.env' \
+        sh "$NAME-dest" "$NAME-s3" "$DP" $SMB_DF
 fi
 
 # test accounts: random passwords, kept in the container only

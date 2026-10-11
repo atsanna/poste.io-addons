@@ -47,7 +47,7 @@ final class Store
     public const RCLONE_CONF = '/usr/local/lib/poste-backup/rclone.conf';
 
     public const MAX_JSON = 2 * 1024 * 1024;
-    public const MAX_LOGS = 200;
+    public const MAX_LOGS = 5000;                     // a safety limit; the days to keep are a setting
 
     /** Reads a JSON file; null if missing, too big or not valid JSON. */
     public static function readJson(string $path): ?array

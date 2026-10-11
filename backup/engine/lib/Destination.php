@@ -108,6 +108,36 @@ final class Destination
         return [$env, null];
     }
 
+    /**
+     * Free and total space of an SMB share: ['free' => bytes, 'total' => bytes]
+     * or null. Not from rclone: rclone 1.60 (go-smb2 1.1.0) multiplies the
+     * allocation units by the bytes per sector only, without the sectors per
+     * unit, so its numbers are divided by a factor that depends on the server
+     * (2 on Samba). smbclient computes them whole. The password goes in a file
+     * (0600, in a private folder), never on a command line.
+     */
+    public static function smbSpace(array $d, string $tmp): ?array
+    {
+        $auth = $tmp . '/smb-auth';
+        $f = @fopen($auth, 'x');
+        if (!$f) {
+            return null;
+        }
+        @chmod($auth, 0600);
+        fwrite($f, "username = {$d['user']}\npassword = {$d['password']}\n" . ($d['domain'] !== '' ? "domain = {$d['domain']}\n" : ''));
+        fclose($f);
+        try {
+            $r = Proc::run(['smbclient', '//' . $d['host'] . '/' . $d['share'], '-s', '/dev/null', '-A', $auth, '-c', 'du'],
+                ['HOME' => $tmp], null, 60);
+        } finally {
+            @unlink($auth);
+        }
+        if ($r['exit'] === 0 && preg_match('/(\d+) blocks of size (\d+)\. (\d+) blocks available/', $r['out'], $m) === 1) {
+            return ['total' => (int) $m[1] * (int) $m[2], 'free' => (int) $m[3] * (int) $m[2]];
+        }
+        return null;
+    }
+
     /** The rclone path of the repository (remote:path), for remote destinations. */
     public static function rclonePath(string $id, array $d): string
     {

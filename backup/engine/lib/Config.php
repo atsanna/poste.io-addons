@@ -27,11 +27,16 @@ final class Config
     public const MAX_JOBS = 50;
     public const MAX_MAILBOXES = 1000;
     public const MAX_KEEP = 1000;
+    /** How long the logs of the runs and the history (statistics) are kept, in days. */
+    public const LOG_DAYS = 90;
+    public const HISTORY_DAYS = 400;
+    public const MAX_DAYS = 3650;
 
     /** An empty configuration. */
     public static function empty(): array
     {
-        return ['version' => 1, 'settings' => ['timezone' => ''], 'destinations' => [], 'jobs' => []];
+        return ['version' => 1, 'settings' => ['timezone' => '', 'log_days' => self::LOG_DAYS, 'history_days' => self::HISTORY_DAYS],
+                'destinations' => [], 'jobs' => []];
     }
 
     public static function isId($id): bool
@@ -64,6 +69,19 @@ final class Config
             $tz = '';
         }
         $out['settings']['timezone'] = $tz;
+        // how long the logs and the history are kept (a missing value is the default)
+        foreach (['log_days' => ['log days', self::LOG_DAYS], 'history_days' => ['history days', self::HISTORY_DAYS]] as $k => [$what, $default]) {
+            if (!array_key_exists($k, (array) ($raw['settings'] ?? []))) {
+                continue;
+            }
+            $e = [];
+            $v = self::int($raw['settings'][$k], 1, self::MAX_DAYS, $what, $e);
+            if ($e) {
+                $errors = array_merge($errors, $e);
+                continue;
+            }
+            $out['settings'][$k] = $v;
+        }
 
         $dests = is_array($raw['destinations'] ?? null) ? $raw['destinations'] : [];
         foreach ($dests as $id => $d) {

@@ -228,7 +228,13 @@ def log_rotation():
     check("forced rotation: no error, getmail.log.1 kept, getmail.log recreated 0640 owned by mail",
           out.returncode == 0 and not out.stderr.strip() and os.path.exists(old) and os.path.exists(log) and mode(log) == "640 mail",
           (out.returncode, out.stderr.strip()[:120], os.path.exists(old), mode(log) if os.path.exists(log) else "missing"))
-    sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 5min")
+    # cron.sh skips an account whose lock is held (flock -n): if cron's own run
+    # of the same minute holds it, this one does nothing; try again a few times
+    for _ in range(6):
+        sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 5min")
+        if os.path.getsize(log) > 0:
+            break
+        time.sleep(5)
     check("getmail writes to the new getmail.log", os.path.getsize(log) > 0, os.path.getsize(log))
     url, html = ADMIN.get("/admin/external-mailbox-logs/")
     check("the page shows the old copies", re.search(r"[1-9][0-9]* old copies", html) is not None,

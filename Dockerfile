@@ -158,9 +158,10 @@ RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt
 #  restic, rclone, ssh client (Debian packages)
 #======================================================================#
 # restic makes the encrypted, deduplicated backups; rclone reaches SMB, SFTP
-# and S3; ssh-keyscan/ssh-keygen confirm the SSH key of an SFTP server.
+# and S3; ssh-keyscan/ssh-keygen confirm the SSH key of an SFTP server;
+# smbclient reads the free space of an SMB share (rclone 1.60 gets it wrong).
 RUN apt-get update && \
-    apt-get -y install --no-install-recommends restic rclone openssh-client && \
+    apt-get -y install --no-install-recommends restic rclone openssh-client smbclient && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 #======================================================================#

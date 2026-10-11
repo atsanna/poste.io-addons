@@ -8,6 +8,11 @@
             $.ajax({url: url, dataType: 'json', cache: false})
                 .done(function (r) {
                     if (r.signature !== sig) {
+                        // not while a field is being edited: its value would be lost
+                        if ($(document.activeElement).is('input, select, textarea')) {
+                            setTimeout(tick, 3000);
+                            return;
+                        }
                         window.location.reload();
                         return;
                     }

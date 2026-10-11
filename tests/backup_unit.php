@@ -171,6 +171,11 @@ check('settings: a valid time zone is kept', $c['settings']['timezone'] === 'Eur
 check('settings: an invalid time zone is refused (the container\'s is used)', $c['settings']['timezone'] === '' && $e === ['time zone: not valid'], [$c['settings'], $e]);
 [$c, $e] = Config::validate(['destinations' => [], 'jobs' => []]);
 check('settings: none saved yet = the container\'s time zone', $c['settings']['timezone'] === '' && !$e, $c['settings']);
+check('settings: none saved yet = logs 90 days, history 400 days', $c['settings']['log_days'] === 90 && $c['settings']['history_days'] === 400, $c['settings']);
+[$c, $e] = Config::validate(['settings' => ['log_days' => 0, 'history_days' => '30'], 'destinations' => [], 'jobs' => []]);
+check('settings: days out of range or not a number are refused (the defaults stay)',
+      $c['settings']['log_days'] === 90 && $c['settings']['history_days'] === 400
+      && $e === ['log days: a whole number from 1 to 3650', 'history days: a whole number from 1 to 3650'], [$c['settings'], $e]);
 
 // --- restic's file errors and the result of a backup
 // the line restic wrote on a mail server in use (a message moved to another
@@ -233,7 +238,7 @@ $samples = [
     'folder: no "." or ".." parts', 'folder: an absolute path under /' . implode(', /', Config::LOCAL_ROOTS), 'endpoint: https://host[:port]',
     'host keys: not valid', 'enabled: not true/false', 'day of the month: a whole number from 1 to 28', 'keep daily: a whole number from 0 to 1000',
     'access key: not valid', 'secret key: 1 to 256 characters, no control characters', 'password: 1 to 256 characters, no control characters',
-    'time zone: not valid',
+    'time zone: not valid', 'log days: a whole number from 1 to 3650', 'history days: a whole number from 1 to 3650',
     // destinations and the test
     'the SSH key of this destination is missing (create it again in the admin)',
     "the server's SSH key has not been confirmed yet (Test the destination in the admin)", 'cannot write a temporary file',
