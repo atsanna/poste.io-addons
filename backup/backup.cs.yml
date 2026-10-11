@@ -95,6 +95,12 @@ poste_backup:
     keypair_new: Vytvořit nový pár klíčů
     keypair_confirm: Starý klíč na serveru přestane fungovat. Pokračovat?
     keypair_made: Nový pár klíčů vytvořen. Přidejte nový veřejný klíč na server.
+    check_help: Test vyzkouší výše zadané hodnoty, aniž by je uložil.
+    check_running: "Probíhá test..."
+    check_not_saved: "Zatím neuloženo: cíl uložíte tlačítkem Uložit."
+    check_save_first: "Při přihlášení klíčem se pár klíčů vytvoří při uložení cíle: uložte ho, přidejte veřejný klíč na server a pak cíl otestujte."
+    check_trust: "Jsou to klíče serveru, důvěřovat jim a otestovat"
+    check_failed: "Test nelze spustit: načtěte stránku znovu a zkuste to znovu."
   jobs:
     title: Úlohy zálohování
     add: Přidat úlohu zálohování
@@ -134,7 +140,8 @@ poste_backup:
     hour: Hodina
     minute: Minuta
     destinations: Cíle
-    destinations_help: (každý dostane úplnou kopii)
+    destinations_pick: "Zaškrtněte jeden nebo více cílů: každý dostane úplnou kopii."
+    manage_destinations: Spravovat cíle
     keep: Uchovávat
     keep_hourly: hodinových
     keep_daily: denních

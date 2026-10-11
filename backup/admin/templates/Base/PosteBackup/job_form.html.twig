@@ -48,10 +48,14 @@
             </select></div>
     </div>
 
-    <div class="form-group"><label class="control-label">{{ 'poste_backup.job.destinations'|trans }} <span class="bk-muted">{{ 'poste_backup.job.destinations_help'|trans }}</span></label>
+    <div class="form-group bk-box"><h4><i class="fa fa-hdd-o"></i> {{ 'poste_backup.job.destinations'|trans }}</h4>
+        <p class="help-block" style="margin-top:0">{{ 'poste_backup.job.destinations_pick'|trans }}
+            <a href="{{ path('poste_backup_destinations') }}">{{ 'poste_backup.job.manage_destinations'|trans }}</a></p>
+        {# a new job with a single destination has it ticked already #}
+        {% set only = not id and destinations|length == 1 %}
         {% for did, d in destinations %}
-            <div class="checkbox"><label><input type="checkbox" name="destinations[]" value="{{ did }}"{% if did in values.destinations %} checked{% endif %}>
-                {{ d.name }} <span class="bk-muted">{{ ('poste_backup.type.' ~ d.type)|trans }}</span></label></div>
+            <div class="checkbox"><label><input type="checkbox" name="destinations[]" value="{{ did }}"{% if did in values.destinations or only %} checked{% endif %}>
+                <strong>{{ d.name }}</strong> <span class="bk-muted">{{ ('poste_backup.type.' ~ d.type)|trans }}</span></label></div>
         {% else %}
             <p class="text-danger">{{ 'poste_backup.jobs.no_destination'|trans }}</p>
         {% endfor %}

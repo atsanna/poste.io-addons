@@ -95,6 +95,12 @@ poste_backup:
     keypair_new: Make a new key pair
     keypair_confirm: The old key will stop working on the server. Continue?
     keypair_made: New key pair made. Add the new public key on the server.
+    check_help: Test tries the values above, without saving them.
+    check_running: "Testing..."
+    check_not_saved: "Not saved yet: press Save to keep this destination."
+    check_save_first: "With a key login the key pair is made when the destination is saved: save it, add the public key on the server, then test."
+    check_trust: "These are the server's keys: trust them and test"
+    check_failed: "The test could not be run: reload the page and try again."
   jobs:
     title: Backup jobs
     add: Add a backup job
@@ -134,7 +140,8 @@ poste_backup:
     hour: Hour
     minute: Minute
     destinations: Destinations
-    destinations_help: (each one gets a full copy)
+    destinations_pick: "Tick one or more: each one gets a full copy."
+    manage_destinations: Manage the destinations
     keep: Keep
     keep_hourly: hourly
     keep_daily: daily

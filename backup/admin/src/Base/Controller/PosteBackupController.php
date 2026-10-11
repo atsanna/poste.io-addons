@@ -7,6 +7,7 @@ use PosteBackup\Panel;
 use PosteBackup\Schedule;
 use PosteBackup\Store;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -207,6 +208,49 @@ class PosteBackupController extends AbstractController
         ]);
     }
 
+    /**
+     * The form's Test button: the values typed, not saved, are tested the way
+     * the engine will use them (same rules as saving, a secret left empty is
+     * the saved one only for the same server and account). Nothing is saved
+     * or remembered. An SFTP server whose keys are not confirmed yet only gets
+     * its keys read: nothing is sent to it. JSON for the page.
+     *
+     * @Route("/destinations/check", name="poste_backup_destination_check", methods={"POST"})
+     * @Route("/destinations/{id}/check", name="poste_backup_destination_check_saved", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
+     */
+    public function destinationCheckAction(Request $request, ?string $id = null): JsonResponse
+    {
+        $old = null;
+        if ($id !== null) {
+            $old = Panel::config()['destinations'][$id] ?? null;
+            if ($old === null) {
+                throw $this->createNotFoundException();
+            }
+        }
+        if (!$this->isCsrfTokenValid('poste_backup_destination', $request->request->get('_token'))) {
+            return new JsonResponse(['status' => 'error', 'lines' => [$this->t('poste_backup.error.csrf')]], 403);
+        }
+        [$d, $errors] = Config::destination($this->destinationFromRequest($request, $old));
+        if ($errors) {
+            return new JsonResponse(['status' => 'error', 'lines' => array_values($errors)]);
+        }
+        if ($d['type'] === 'sftp' && $d['auth'] === 'key' && ($id === null || Panel::publicKey($id) === null)) {
+            return new JsonResponse(['status' => 'save_first', 'lines' => [$this->t('poste_backup.destination.check_save_first')]]);
+        }
+        if ($d['type'] === 'sftp' && !$d['hostkeys']) {
+            [$keys, $err] = Panel::scanHostKeys($d['host'], $d['port']);
+            if ($err) {
+                return new JsonResponse(['status' => 'error', 'lines' => [$err]]);
+            }
+            $shown = [];
+            foreach ($keys as $k) {
+                $shown[] = ['key' => $k[0], 'fingerprint' => $k[1]];
+            }
+            return new JsonResponse(['status' => 'keys', 'host' => $d['host'], 'keys' => $shown]);
+        }
+        return new JsonResponse(Panel::check($id ?? Config::newId(), $d));
+    }
+
     /** The destination from the form; secrets left empty keep the saved ones. */
     private function destinationFromRequest(Request $request, ?array $old): array
     {
@@ -252,9 +296,11 @@ class PosteBackupController extends AbstractController
                     $d['password'] = $secret('password');
                 }
                 $d['folder'] = $str('folder');
-                // the confirmed host keys stay only if the server is the same
+                // keys confirmed in the form (its Test button) win; otherwise the
+                // confirmed host keys stay only if the server is the same
+                $posted = array_values(array_filter(array_map('trim', explode("\n", (string) $p->get('hostkeys', ''))), 'strlen'));
                 $same = $old && $old['type'] === 'sftp' && $old['host'] === $d['host'] && $old['port'] === $d['port'];
-                $d['hostkeys'] = $same ? $old['hostkeys'] : [];
+                $d['hostkeys'] = $posted ?: ($same ? $old['hostkeys'] : []);
                 break;
             case 'smb':
                 foreach (['host', 'share', 'folder', 'user', 'domain'] as $k) {

@@ -79,8 +79,14 @@
         </div>
     </div>
 
+    {# SFTP keys confirmed with the Test button below, saved with the destination #}
+    <input type="hidden" name="hostkeys" id="bk-hostkeys" value="">
     <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
+    <button type="button" class="btn btn-default" id="bk-check" title="{{ 'poste_backup.destination.check_help'|trans }}"
+            data-url="{{ id ? path('poste_backup_destination_check_saved', {id: id}) : path('poste_backup_destination_check') }}"><i class="fa fa-plug"></i> {{ 'poste_backup.action.test'|trans }}</button>
+    <span class="bk-muted">&nbsp; {{ 'poste_backup.destination.check_help'|trans }}</span>
 </form>
+<div class="bk-box" id="bk-check-result" style="display:none"></div>
 
 {% if id %}
 <div class="bk-box"><h4><i class="fa fa-plug"></i> {{ 'poste_backup.destination.test_title'|trans }}</h4>
@@ -146,5 +152,53 @@
     $('#bk-auth').chosen({width: '160px', disable_search_threshold: 10});
     $('#bk-type, #bk-auth').on('change', bkFields);
     bkFields();
+
+    // Test before saving: the values typed are tested, nothing is saved; the
+    // page is not reloaded, so the password typed stays in its field
+    var bkT = {
+        running: '{{ 'poste_backup.destination.check_running'|trans|e('js') }}',
+        ok: '{{ 'poste_backup.destination.tested.ok'|trans|e('js') }}',
+        warning: '{{ 'poste_backup.destination.tested.warning'|trans|e('js') }}',
+        error: '{{ 'poste_backup.destination.tested.error'|trans|e('js') }}',
+        notSaved: '{{ 'poste_backup.destination.check_not_saved'|trans|e('js') }}',
+        keysFound: '{{ 'poste_backup.destination.keys_found'|trans({'{host}': '%host%'})|e('js') }}',
+        keysHelp: '{{ 'poste_backup.destination.keys_help'|trans|e('js') }}',
+        trust: '{{ 'poste_backup.destination.check_trust'|trans|e('js') }}',
+        failed: '{{ 'poste_backup.destination.check_failed'|trans|e('js') }}'
+    };
+    function bkShow(r) {
+        var $box = $('#bk-check-result').empty().show();
+        if (r.status === 'keys') {
+            $box.append($('<p>').append($('<strong>').text(bkT.keysFound.replace('%host%', r.host))));
+            var $ul = $('<ul>').appendTo($box);
+            $.each(r.keys, function (i, k) { $ul.append($('<li>').append($('<code>').text(k.fingerprint))); });
+            $box.append($('<p class="help-block">').text(bkT.keysHelp));
+            $('<button type="button" class="btn btn-warning btn-sm">').append('<i class="fa fa-check"></i> ').append(document.createTextNode(bkT.trust))
+                .appendTo($box).on('click', function () {
+                    $('#bk-hostkeys').val($.map(r.keys, function (k) { return k.key; }).join('\n'));
+                    $('#bk-check').trigger('click');
+                });
+            return;
+        }
+        var cls = r.status === 'ok' ? 'text-success' : (r.status === 'warning' ? 'text-warning' : 'text-danger');
+        if (bkT[r.status]) {
+            $box.append($('<p>').append($('<strong>').addClass(cls).text(bkT[r.status])));
+        }
+        var $list = $('<ul>').addClass(cls).appendTo($box);
+        $.each(r.lines || [], function (i, l) { $list.append($('<li>').text(l)); });
+        if (r.status === 'ok' || r.status === 'warning') {
+            $box.append($('<p class="bk-muted">').text(bkT.notSaved));
+        }
+    }
+    $('#bk-check').on('click', function () {
+        var $b = $(this).prop('disabled', true);
+        $('#bk-check-result').empty().show().append($('<p class="text-info">').append('<i class="fa fa-spinner fa-spin"></i> ').append(document.createTextNode(bkT.running)));
+        $.ajax({url: $b.data('url'), method: 'POST', data: $('#bk-dest-form').serialize(), dataType: 'json'})
+            .done(bkShow)
+            .fail(function (x) { bkShow(x.responseJSON && x.responseJSON.lines ? x.responseJSON : {status: 'error', lines: [bkT.failed]}); })
+            .always(function () { $b.prop('disabled', false); });
+    });
+    // keys confirmed for one server are not kept for another
+    $('#bk-host, #bk-port').on('input', function () { $('#bk-hostkeys').val(''); });
 </script>
 {% endblock %}

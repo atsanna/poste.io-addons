@@ -223,6 +223,61 @@ post_form(BASE + "/destinations/%s/edit" % SFTPKEY, suffix="/trust")            
 html = test_destination(SFTPKEY)
 check("SFTP with a key: test ok", "write test: ok" in html, re.findall(r"<li>([^<]*)</li>", html)[:4])
 
+# ---- the form's Test button: the values typed are tested, nothing is saved
+TESTS = "/data/var/backup/settings/tests.json"
+
+
+def check_form(values, did=None, drop=()):
+    """POSTs the destination form (new or edit) to its Test address; (HTTP status, JSON)."""
+    f, html = form(BASE + ("/destinations/%s/edit" % did if did else "/destinations/new"))
+    data = {n: (v or "") for n, v, t in f["fields"] if n and not t.endswith(":off") and t not in ("submit", "button")}
+    data.update(values)
+    for n in drop:
+        data.pop(n, None)
+    url, body = ADMIN.post(BASE + ("/destinations/%s/check" % did if did else "/destinations/check"), data)
+    try:
+        return ADMIN.status, json.loads(body)
+    except ValueError:
+        return ADMIN.status, {"raw": body[:200]}
+
+
+before, tests_before = json.dumps(config()), open(TESTS).read() if os.path.exists(TESTS) else ""
+smb_new = {"name": "Not saved", "type": "smb", "host": B["DEST_HOST"], "share": "backup", "folder": "poste-check",
+           "user": "bkuser", "password": B["DEST_PASSWORD"], "domain": ""}
+code, r = check_form(smb_new)
+check("Test before saving, SMB: ok, free space and write test", code == 200 and r.get("status") == "ok" and "write test: ok" in r.get("lines", [])
+      and any(re.match(r"free space: [0-9.]+ [KMGT]B", l) for l in r.get("lines", [])), r)
+check("Test before saving: nothing saved, nothing remembered", json.dumps(config()) == before
+      and (open(TESTS).read() if os.path.exists(TESTS) else "") == tests_before, "config and tests unchanged")
+code, r = check_form(dict(smb_new, password="wrong-" + B["DEST_PASSWORD"]))
+check("Test before saving, wrong password: an error", r.get("status") == "error" and any("not reachable" in l for l in r.get("lines", [])), r)
+code, r = check_form(smb_new, drop=("_token",))
+check("Test before saving without the CSRF token: refused", code == 403 and r.get("status") == "error", (code, r))
+code, r = check_form(dict(smb_new, host="h;id"))
+check("Test before saving, an invalid server: refused with the message, nothing run",
+      r.get("status") == "error" and any("host name or an IP" in l for l in r.get("lines", [])), r)
+code, r = check_form({}, did=SMB)
+check("Test of a saved destination's form, password left empty: the saved password is used", r.get("status") == "ok", r)
+code, r = check_form({"host": "other." + B["DEST_HOST"]}, did=SMB)
+check("...but not for another server (the saved password is not sent there)",
+      r.get("status") == "error" and any("password" in l for l in r.get("lines", [])), r)
+sftp_new = {"name": "SFTP not saved", "type": "sftp", "host": B["DEST_HOST"], "port": "22", "user": "bkuser",
+            "auth": "password", "password": B["DEST_PASSWORD"], "folder": "/srv/sftp/poste-check"}
+code, r = check_form(sftp_new)
+check("Test before saving, SFTP: only the server's keys are read and shown (nothing sent)",
+      r.get("status") == "keys" and sorted(k["key"] for k in r.get("keys", [])) == real and all("SHA256:" in k["fingerprint"] for k in r["keys"]),
+      [k.get("fingerprint") for k in r.get("keys", [])])
+shown = "\n".join(k["key"] for k in r.get("keys", []))
+code, r = check_form(dict(sftp_new, hostkeys=shown))
+check("Test before saving, SFTP with the keys confirmed in the form: ok", r.get("status") == "ok" and "write test: ok" in r.get("lines", []), r)
+code, r = check_form(dict(sftp_new, auth="key"))
+check("Test before saving, SFTP with a key login: save first (the key pair is made then)", r.get("status") == "save_first", r)
+check("still nothing saved", json.dumps(config()) == before, "config unchanged")
+SFTPFORM, html = new_destination(dict(sftp_new, name="SFTP confirmed in the form", folder="/srv/sftp/poste-form", hostkeys=shown))
+check("SFTP saved with the keys confirmed in the form: those keys, test ok",
+      SFTPFORM and sorted(config()["destinations"][SFTPFORM]["hostkeys"]) == real and "write test: ok" in test_destination(SFTPFORM),
+      SFTPFORM)
+
 # ===================================================================== jobs
 print("--- backup: jobs and runs")
 # something to find again: a message in alice's mailbox, a message for bob,

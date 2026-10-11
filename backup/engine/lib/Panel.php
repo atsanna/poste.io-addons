@@ -222,17 +222,34 @@ final class Panel
      */
     public static function test(string $id, array $d): array
     {
+        [$status, $lines] = self::probe($id, $d);
+        return self::remember($id, $status, $lines);
+    }
+
+    /**
+     * The same test for values not saved yet (the form's Test button): nothing
+     * is remembered. $id may be a new id that is in no settings file.
+     */
+    public static function check(string $id, array $d): array
+    {
+        [$status, $lines] = self::probe($id, $d);
+        return ['status' => $status, 'lines' => $lines];
+    }
+
+    /** @return array [status, lines] */
+    private static function probe(string $id, array $d): array
+    {
         $lines = [];
         $status = 'ok';
         $tmp = sys_get_temp_dir() . '/poste-backup-test-' . bin2hex(random_bytes(6));
         if (!@mkdir($tmp, 0700)) {
-            return self::remember($id, 'error', ['cannot create a temporary folder']);
+            return ['error', ['cannot create a temporary folder']];
         }
         try {
             if ($d['type'] === 'local') {
                 $err = Destination::checkLocal($d['path']);
                 if ($err) {
-                    return self::remember($id, 'error', [$err]);
+                    return ['error', [$err]];
                 }
                 $lines[] = 'mounted volume, not on the disk of /data';
                 $free = @disk_free_space($d['path']);
@@ -240,12 +257,12 @@ final class Panel
                     $lines[] = 'free space: ' . self::size((int) $free);
                 }
                 $lines[] = is_file($d['path'] . '/config') ? 'it already holds a backup repository' : 'no repository yet: it is created at the first run';
-                return self::remember($id, 'ok', $lines);
+                return ['ok', $lines];
             }
 
             [$env, $err] = Destination::env($id, $d, $tmp, $tmp);
             if ($err) {
-                return self::remember($id, 'error', [$err]);
+                return ['error', [$err]];
             }
             $path = Destination::rclonePath($id, $d);
             $ls = Proc::run(['rclone', 'lsf', '--max-depth', '1', $path], $env, null, 60);
@@ -254,14 +271,14 @@ final class Panel
                 if (in_array('config', $names, true)) {
                     $lines[] = 'reachable; it already holds a backup repository';
                 } elseif ($names) {
-                    return self::remember($id, 'error', ['reachable, but the folder is not empty and is not a backup repository: choose an empty folder']);
+                    return ['error', ['reachable, but the folder is not empty and is not a backup repository: choose an empty folder']];
                 } else {
                     $lines[] = 'reachable; empty folder, the repository is created at the first run';
                 }
             } elseif (stripos($ls['err'], 'directory not found') !== false) {
                 $lines[] = 'reachable; the folder does not exist yet, it is created at the first run';
             } else {
-                return self::remember($id, 'error', ['not reachable: ' . Engine::lastLine($ls['err'])]);
+                return ['error', ['not reachable: ' . Engine::lastLine($ls['err'])]];
             }
 
             if ($d['type'] === 's3') {
@@ -288,14 +305,14 @@ final class Panel
             }
             $w = Proc::run(['rclone', 'rcat', $probe], $env, "poste-backup write test\n", 60);
             if ($w['exit'] !== 0) {
-                return self::remember($id, 'error', array_merge($lines, ['cannot write: ' . Engine::lastLine($w['err'])]));
+                return ['error', array_merge($lines, ['cannot write: ' . Engine::lastLine($w['err'])])];
             }
             $rm = Proc::run(['rclone', 'deletefile', $probe], $env, null, 60);
             $lines[] = $rm['exit'] === 0 ? 'write test: ok' : 'write test: written, but the test file could not be removed';
             if ($rm['exit'] !== 0) {
                 $status = 'warning';
             }
-            return self::remember($id, $status, $lines);
+            return [$status, $lines];
         } finally {
             foreach (@scandir($tmp) ?: [] as $f) {
                 if ($f !== '.' && $f !== '..') {
