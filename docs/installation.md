@@ -81,6 +81,13 @@ docker exec mailserver sh -c 'chown mail:mail /data/var/getmail/cron.sh && chmod
 `cron.sh` stays on the volume: when a new release of this repository changes
 it, copy it again the same way.
 
+The getmail configuration files are on the volume too, written by the admin
+when a mailbox is saved. When a release changes what the admin writes in them
+(for example the rspamd check of fetched mail, which is a section of each
+file), existing mailboxes get it when they are **saved again** from the admin:
+open each external mailbox, leave the password empty (it keeps the saved one)
+and save. The CHANGELOG says when this is needed.
+
 With **calendars and contacts over ActiveSync**, the first start of the new
 image changes Z-Push's folder identifiers: ask every device for a resync,
 otherwise phones end up with duplicated mail folders. The commands are in

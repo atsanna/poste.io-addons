@@ -43,8 +43,15 @@ add-ons and with each one alone ([tests](docs/testing.md)).
   the remote Trash/Spam folders with a retention period.
 - **Test connection** from the form and from every row of the list.
 - getmail options in the form: read all/new, delete, delete after N days,
-  limits per run, delete messages over a size, port, timeout.
-- Logs page with the getmail and cron logs and a status view.
+  limits per run, delete messages over a size, port, timeout. "Read all" only
+  together with "Delete message" (otherwise everything left on the server
+  would be fetched again at every run).
+- **Spam check**: every fetched message goes through rspamd before delivery,
+  like mail received over SMTP (headers, spam into Junk, Bayes); without it
+  fetched mail is not scanned by Poste.io at all.
+- Logs page with the getmail log, the **getmail errors** (with a red line on
+  top of the getmail view when there are recent ones), the cron log and a
+  status view.
 - Hardened: getmail runs as `mail`, never root; configuration files `0600`;
   TLS certificates verified; passwords never sent back to the browser; explicit
   CSRF tokens; strict validation of every value written to getmail.
@@ -115,7 +122,7 @@ using ActiveSync must resync once.
 ## Repository layout
 
 ```
-external-mailboxes/    admin pages (admin/), translations, crontab of the mail user, cron.sh (the getmail runner)
+external-mailboxes/    admin pages (admin/), translations, crontab of the mail user, cron.sh (the getmail runner), getmail-rspamd (the spam check filter)
 dark-theme/            admin files (admin/), translations, the script that hooks the theme into base.html.twig
 activesync-dav/        Z-Push backends and the script that configures Z-Push
 tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client)

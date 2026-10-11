@@ -31,26 +31,29 @@ the Poste.io admin (super admins only): **External Mailboxes** and
 - **"Read all" only with "Delete message"**: with "Read all" getmail fetches
   every message on the server, also the ones it already fetched; if they stay
   on the server, getmail warns that "all messages will be retrieved each time
-  getmail is run". So "Read all" can
-  be set only together with "Delete message": the form switches it off when
-  "Delete message" is off, and the admin refuses the combination. For a new
+  getmail is run". So "Read all" can be set only together with "Delete
+  message": the form switches it off when "Delete message" is off, and the
+  admin refuses the combination. For a new
   mailbox it is off (only the messages not fetched before, remembered by
   getmail in its `oldmail-*` files).
 - **Test connection**: one login on the remote server, from the form (with the
   values being edited) and from every row of the list (with the saved
   configuration). Never automatic, and a single attempt per click: providers
   lock accounts after repeated failures.
-- **Logs page**: the getmail log, the getmail errors, the cron log, syslog and
-  the mail log, with search, a line limit, auto-refresh and a status view
-  (getmail version, folders, number of external mailboxes per schedule).
-  **Clear** empties the getmail log or the getmail errors.
+- **Logs page**: the getmail log, the getmail errors and the cron log, with
+  search, a line limit, auto-refresh and a status view (getmail version,
+  folders, number of external mailboxes per schedule). **Clear** empties the
+  getmail log or the getmail errors. Syslog and the mail log are offered only
+  if the admin can read them; on a standard Poste.io it cannot (`root:adm`,
+  `0640`), so they do not appear.
 - **Getmail errors**: what getmail reports (configuration errors, failed
   logins, unreachable servers, crashes, warnings about the configuration) is
   written by `cron.sh` to its own log, each line with the time and the
   mailbox file it belongs to, and shown as **Getmail Errors** in the logs
   page. When there are lines from the last 24 hours, the default getmail view
-  says so in a red line on top (how many, and the latest). A separate file because the admin cannot read
-  `/data/log/mail.log` (`root:adm`, `0640`), where they also go, and because
+  says so in a red line on top (how many, and the latest). A separate file
+  because the admin cannot read `/data/log/mail.log` (`root:adm`, `0640`),
+  where they also go, and because
   some of them (a configuration getmail cannot read, a crash) never reach
   getmail's own log.
 - **Spam check (rspamd)**: every fetched message is scanned by rspamd before
@@ -102,7 +105,9 @@ updated and removed together with their mailbox.
 The crontab of the **`mail`** user (`/etc/external-mailboxes.crontab`) runs
 `cron.sh <folder>` for each schedule; `cron.sh` runs getmail on each `.cfg`
 with `flock -n`, so a slow mailbox never overlaps with itself. getmail never
-runs as root.
+runs as root. Each fetched message goes through the `getmail-rspamd` filter
+(the `[filter1]` section of the `.cfg`) and is then delivered with Poste.io's
+`sendmail`; what getmail prints as errors goes to `errors.log`.
 
 ## Security
 

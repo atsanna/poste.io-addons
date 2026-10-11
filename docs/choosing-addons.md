@@ -6,7 +6,7 @@ and lives in its own folder of the repository.
 
 | Add-on | Name | Folder | What it changes in Poste.io |
 |---|---|---|---|
-| [External Mailboxes](external-mailboxes.md) | `external-mailboxes` | `external-mailboxes/` | adds admin pages and two menu entries, installs getmail6, adds a crontab for the `mail` user |
+| [External Mailboxes](external-mailboxes.md) | `external-mailboxes` | `external-mailboxes/` | adds admin pages and two menu entries, installs getmail6 and the `getmail-rspamd` filter (`/usr/local/bin`), adds a crontab for the `mail` user |
 | [Dark theme for the admin](dark-theme.md) | `dark-theme` | `dark-theme/` | adds a stylesheet and two templates, two `include` lines in `base.html.twig` |
 | [Calendars and contacts over ActiveSync](activesync-dav.md) | `activesync-dav` | `activesync-dav/` | 19 lines of Z-Push configuration, two Z-Push backends, installs `libawl-php` |
 | [Upstream fixes for spam learning](upstream-fixes.md) | `upstream-fixes` | — (in the Dockerfile) | permissions and recipient of the Junk learning scripts |

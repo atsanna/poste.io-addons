@@ -11,12 +11,12 @@ All notable changes to this project are documented here. The format follows
   getmail reports (errors and warnings) to `/data/log/getmail/errors.log`,
   with the time and the mailbox, shown as the new **Getmail Errors** log type
   (with its own **Clear**). The default getmail view shows a red line on top
-  when there are such lines from the last 24 hours. Until now these lines went only to
-  `/data/log/mail.log`, which the admin cannot read: a configuration getmail
-  rejected, for example, was visible nowhere in the admin.
-  **Existing installations**: `cron.sh` lives on the `/data` volume, copy the
-  new one there (see [installation](docs/installation.md#3-existing-installations-the-data-volume)).
-
+  when there are such lines from the last 24 hours. Until now these lines
+  went only to `/data/log/mail.log`, which the admin cannot read: a
+  configuration getmail rejected, for example, was visible nowhere in the
+  admin. **Existing installations**: `cron.sh` lives on the `/data` volume,
+  copy the new one there (see
+  [installation](docs/installation.md#3-existing-installations-the-data-volume)).
 - **External Mailboxes: fetched mail is checked by rspamd.** Until now it was
   not scanned at all: getmail delivers through Haraka's local submission
   socket, where the rspamd plugin skips local connections. A getmail filter
@@ -27,15 +27,16 @@ All notable changes to this project are documented here. The format follows
   and the reason goes to the Getmail Errors log. The connection-based checks do
   not apply (no SMTP client): see [docs](docs/external-mailboxes.md).
   **Existing mailboxes** get the filter when they are saved again from the
-  admin (the password field can stay empty).
+  admin (the password field can stay empty; see
+  [installation](docs/installation.md#3-existing-installations-the-data-volume)).
 
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
   all" on and the messages left on the server, getmail warns at every run that
   "all messages will be retrieved each time getmail is run" (a warning that so
-  far went only to `mail.log`). The form now switches "Read all" off while "Delete message" is
-  off, the admin refuses the combination, and a new mailbox starts with "Read
-  all" off (it was on). The comment written above `read_all` in the
+  far went only to `mail.log`). The form now switches "Read all" off while
+  "Delete message" is off, the admin refuses the combination, and a new
+  mailbox starts with "Read all" off (it was on). The comment written above `read_all` in the
   configuration file said the opposite of what the option does: fixed.
   Existing mailboxes keep their settings; one saved again from the admin with
   this combination gets "Read all" off.
