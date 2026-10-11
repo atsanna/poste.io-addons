@@ -19,6 +19,19 @@ $(function () {
     $('#form_type').on('change', toggleImapFields);
     toggleImapFields();
 
+    // "Read all" only with "Delete message": with the messages left on the
+    // server it would fetch them all again at every run (duplicates). A
+    // disabled checkbox is not submitted, so saving writes read_all = false;
+    // the controller refuses the combination anyway.
+    var $readAll = $('#form_optionsreadall'), $delete = $('#form_optionsdelete');
+    function toggleReadAll() {
+        var del = $delete.is(':checked');
+        if (!del) $readAll.prop('checked', false);
+        $readAll.prop('disabled', !del);
+    }
+    $delete.on('change', toggleReadAll);
+    toggleReadAll();
+
     // "Test connection": one login on the remote server, on click only (never
     // automatic: providers lock the account after too many failed attempts)
     var $password = $('#form_password');

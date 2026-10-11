@@ -64,6 +64,9 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 - the password is never sent back to the browser;
 - end to end: a message put in bob's mailbox is fetched by `cron.sh` (run as
   `mail`, like cron) over IMAP and delivered to alice; the logs page shows it;
+- "Read all" only with "Delete message": off for a new mailbox; with "Delete
+  message" off it is refused (HTTP 400, nothing saved), with it on it is
+  saved; the comment above `read_all` in the generated file says what it does;
 - getmail errors: after a good run `errors.log` is empty (`0640`, owned by
   `mail`) and the getmail view has no error line; a mailbox with a wrong
   password is added from the admin and run: the login error is in

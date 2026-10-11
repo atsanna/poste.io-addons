@@ -67,7 +67,7 @@ external_mailboxes:
     check_every: Kontrolovat tento účet každých
     schedule_disabled: vypnuto
     read_all: Stahovat vše
-    read_all_help: "Pokud je zapnuto, getmail stáhne všechny dostupné zprávy. Pokud je vypnuto, stáhne jen zprávy, které ještě neviděl. Výchozí: zapnuto."
+    read_all_help: "Pokud je zapnuto, getmail stáhne všechny zprávy na serveru, i ty už stažené: lze zapnout jen spolu s „Mazat zprávy“, jinak by se zprávy ponechané na serveru stahovaly znovu při každém spuštění. Pokud je vypnuto, stáhne jen zprávy, které ještě neviděl. Výchozí: vypnuto."
     delete: Mazat zprávy
     delete_help: "Pokud je zapnuto, getmail zprávy po stažení a úspěšném doručení smaže. Pokud je vypnuto, nechá je na serveru. Výchozí: vypnuto."
     delete_after: Mazat zprávy po
@@ -123,6 +123,7 @@ external_mailboxes:
     invalid_protocol: neplatný protokol
     invalid_schedule: neplatný interval
     invalid_delete_after: neplatná hodnota „Mazat zprávy po“
+    read_all_without_delete: „Stahovat vše“ lze zapnout jen spolu s „Mazat zprávy“, jinak by se zprávy ponechané na serveru stahovaly znovu při každém spuštění
     invalid_retention: neplatná doba uchování
     invalid_server: neplatná adresa serveru
     invalid_delivery: neplatná cílová schránka

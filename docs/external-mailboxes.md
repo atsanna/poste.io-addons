@@ -28,6 +28,14 @@ the Poste.io admin (super admins only): **External Mailboxes** and
   (messages and bytes, useful for the first import of a large mailbox), delete
   messages bigger than N bytes on the server, custom port and connection
   timeout.
+- **"Read all" only with "Delete message"**: with "Read all" getmail fetches
+  every message on the server, also the ones it already fetched; if they stay
+  on the server, getmail warns that "all messages will be retrieved each time
+  getmail is run". So "Read all" can
+  be set only together with "Delete message": the form switches it off when
+  "Delete message" is off, and the admin refuses the combination. For a new
+  mailbox it is off (only the messages not fetched before, remembered by
+  getmail in its `oldmail-*` files).
 - **Test connection**: one login on the remote server, from the form (with the
   values being edited) and from every row of the list (with the saved
   configuration). Never automatic, and a single attempt per click: providers

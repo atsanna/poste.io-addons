@@ -17,6 +17,17 @@ All notable changes to this project are documented here. The format follows
   **Existing installations**: `cron.sh` lives on the `/data` volume, copy the
   new one there (see [installation](docs/installation.md#3-existing-installations-the-data-volume)).
 
+### Changed
+- **External Mailboxes: "Read all" only with "Delete message".** With "Read
+  all" on and the messages left on the server, getmail warns at every run that
+  "all messages will be retrieved each time getmail is run" (a warning that so
+  far went only to `mail.log`). The form now switches "Read all" off while "Delete message" is
+  off, the admin refuses the combination, and a new mailbox starts with "Read
+  all" off (it was on). The comment written above `read_all` in the
+  configuration file said the opposite of what the option does: fixed.
+  Existing mailboxes keep their settings; one saved again from the admin with
+  this combination gets "Read all" off.
+
 ## [1.1.0] - 2026-10-11
 
 Tested on Poste.io 2.5.17 (Pro #230 in production; open source image built and

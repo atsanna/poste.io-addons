@@ -67,7 +67,7 @@ external_mailboxes:
     check_every: Check this account every
     schedule_disabled: disabled
     read_all: Read all
-    read_all_help: "If set, getmail retrieves all available messages. If unset, getmail only retrieves messages it has not seen before. Default: True."
+    read_all_help: "If set, getmail retrieves every message on the server, also the ones it has already fetched: it can be set only together with \"Delete message\", otherwise the messages left on the server would be fetched again at every run. If unset, getmail only retrieves messages it has not seen before. Default: False."
     delete: Delete message
     delete_help: "If set, getmail will delete messages after retrieving and successfully delivering them. If unset, getmail will leave messages on the server after retrieving them. Default: False."
     delete_after: Delete message after
@@ -123,6 +123,7 @@ external_mailboxes:
     invalid_protocol: invalid protocol
     invalid_schedule: invalid schedule
     invalid_delete_after: invalid "delete message after" value
+    read_all_without_delete: '"Read all" can be set only together with "Delete message": otherwise the messages left on the server are fetched again at every run'
     invalid_retention: invalid cleanup retention
     invalid_server: invalid server address
     invalid_delivery: invalid delivery mailbox

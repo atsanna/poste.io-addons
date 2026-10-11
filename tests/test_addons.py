@@ -79,6 +79,7 @@ def external_mailboxes():
     check("one IMAP folder written as a tuple", 'mailboxes = ("INBOX",)' in text, re.findall(r"^mailboxes = .*$", text, re.M))
     url, html = ADMIN.get("/admin/external-mailboxes/%s/edit" % E["BOB"])
     check("the password is never sent back to the browser", E["PB"] not in html, url)
+    read_all_rule(form)
 
     m = imap(E["BOB"], E["PB"])
     m.append("INBOX", None, None, b"From: test@example.net\r\nTo: bob@example.test\r\nSubject: Fetched by getmail\r\n\r\nhello\r\n")
@@ -89,6 +90,34 @@ def external_mailboxes():
     url, html = ADMIN.get("/admin/external-mailbox-logs/")
     check("the logs page shows the getmail log", "retrieved" in html, url)
     getmail_errors(form)
+
+
+def read_all_rule(form):
+    """"Read all" only with "Delete message": otherwise getmail fetches again,
+    at every run, every message left on the server."""
+    url, html = ADMIN.get("/admin/external-mailboxes/new")
+    f = [x for x in Panel.parse(html).forms if x["method"].lower() == "post"][0]
+    types = {n: t for n, v, t in f["fields"] if n}
+    check("new mailbox: Read all off by default", types.get("form[optionsreadall]") == "checkbox:off", types.get("form[optionsreadall]"))
+    check("the form switches Read all off when Delete is off", "toggleReadAll" in html, url)
+
+    # a mailbox that is never scheduled: nothing is fetched from it
+    other = dict(form, **{"form[email_address]": "readall@example.test", "form[checkevery]": "disabled"})
+    cfg = "/data/var/getmail/disabled/readall@example.test.cfg"
+    url, html = ADMIN.submit("/admin/external-mailboxes/new", dict(other, **{"form[optionsreadall]": "1"}),
+                             drop=("form[optionsdelete]",))
+    check("Read all without Delete is refused (400, nothing saved)",
+          ADMIN.status == 400 and "Read all" in html and not os.path.exists(cfg), (ADMIN.status, html.strip()[:120]))
+    ADMIN.submit("/admin/external-mailboxes/new", dict(other, **{"form[optionsreadall]": "1", "form[optionsdelete]": "1"}))
+    text = open(cfg).read() if os.path.exists(cfg) else ""
+    check("Read all with Delete is accepted", re.search(r"^read_all = true$", text, re.M) and re.search(r"^delete = true$", text, re.M),
+          re.findall(r"^(?:read_all|delete) = .*$", text, re.M) or "missing")
+    check("the comment above read_all says what it does", "# true: every message on the server" in text, "comment")
+    url, html = ADMIN.get("/admin/external-mailboxes/readall@example.test")
+    d = [x for x in Panel.parse(html).forms if x["action"].endswith("/delete")]
+    if d:
+        ADMIN.post(d[0]["action"], {n: v or "" for n, v, t in d[0]["fields"] if n and not t.endswith(":off")})
+    check("test mailbox deleted from the admin", not os.path.exists(cfg), ADMIN.status)
 
 
 def first_row(html):

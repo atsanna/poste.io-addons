@@ -127,7 +127,7 @@ class ExternalMailboxController extends AbstractController
 		  $deliveryto     			= '';
 		  $checkevery     			= 'disabled';
 		  $mailboxes      			= 'INBOX';
-		  $optionsreadall 			= 'true';
+		  $optionsreadall 			= 'false';
 		  $optionsdelete  			= 'false';
 		  $optionsreceived			= 'true';
 		  $optionsMessageLogSyslog	= 'false';
@@ -452,6 +452,11 @@ class ExternalMailboxController extends AbstractController
         if (!in_array((string)($data['optionsdeleteafter'] ?? ''), self::DELETE_AFTER, true)) {
             return $this->translator->trans('external_mailboxes.error.invalid_delete_after');
         }
+        // "Read all" with "Delete" off would fetch again, at every run, every
+        // message left on the server (duplicates; getmail warns on every run)
+        if (!empty($data['optionsreadall']) && empty($data['optionsdelete'])) {
+            return $this->translator->trans('external_mailboxes.error.read_all_without_delete');
+        }
         if (isset($data['cleanupretention']) && !in_array((string)$data['cleanupretention'], self::RETENTION, true)) {
             return $this->translator->trans('external_mailboxes.error.invalid_retention');
         }
@@ -720,7 +725,8 @@ group = mail";
         // !empty covers both ways the data arrives: from the Symfony form
         // (boolean, false when unchecked) and from raw $_POST (key missing when
         // unchecked); isset() returned true even for a boolean false
-        $options = "# Scarica solo i nuovi messaggi
+        $options = "# true: every message on the server, also those already fetched (only with delete = true)
+# false: only the messages not fetched before (remembered in the oldmail-* files)
 read_all = " . ( !empty($data['optionsreadall'])? 'true' : 'false') . "
 
 # Cancella dal server i messaggi non appena scaricati
