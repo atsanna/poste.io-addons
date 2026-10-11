@@ -63,7 +63,7 @@
                 <i class="fa fa-refresh"></i> {{ 'external_mailbox_logs.refresh.button'|trans }}
             </button>
 
-            {% if logType == 'getmail' %}
+            {% if logType in ['getmail', 'errors'] %}
             <form method="post" action="{{ path('external_mailbox_logs_clear') }}" style="display: inline;" onsubmit="return confirm('{{ 'external_mailbox_logs.clear.confirm'|trans|e('js') }}')">
                 <input type="hidden" name="type" value="{{ logType }}">
                 <input type="hidden" name="_token" value="{{ csrf_token('external_mailbox_logs_clear') }}">

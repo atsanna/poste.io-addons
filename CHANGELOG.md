@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **External Mailboxes: getmail errors in the admin.** `cron.sh` writes what
+  getmail reports (errors and warnings) to `/data/log/getmail/errors.log`,
+  with the time and the mailbox, shown as the new **Getmail Errors** log type
+  (with its own **Clear**). The default getmail view shows a red line on top
+  when there are such lines from the last 24 hours. Until now these lines went only to
+  `/data/log/mail.log`, which the admin cannot read: a configuration getmail
+  rejected, for example, was visible nowhere in the admin.
+  **Existing installations**: `cron.sh` lives on the `/data` volume, copy the
+  new one there (see [installation](docs/installation.md#3-existing-installations-the-data-volume)).
+
 ## [1.1.0] - 2026-10-11
 
 Tested on Poste.io 2.5.17 (Pro #230 in production; open source image built and

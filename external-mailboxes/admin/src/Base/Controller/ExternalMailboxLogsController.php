@@ -23,6 +23,17 @@ class ExternalMailboxLogsController extends AbstractController
     // user (outside /etc/cron.d, where cron would discard it)
     private const CRONTAB_FILE = '/etc/external-mailboxes.crontab';
 
+    // What getmail prints on stderr, written by cron.sh with the configuration
+    // it belongs to: /data/log/mail.log, where it also goes, is root:adm 0640
+    // and the admin (user mail) cannot read it
+    private const ERROR_LOG = '/data/log/getmail/errors.log';
+
+    // the logs that the Clear button may empty
+    private const CLEARABLE = [
+        'getmail' => '/data/log/getmail/getmail.log',
+        'errors' => self::ERROR_LOG,
+    ];
+
     private $translator;
 
     public function __construct(TranslatorInterface $translator)
@@ -34,6 +45,7 @@ class ExternalMailboxLogsController extends AbstractController
     // /var/log/{syslog,mail.log,...} and messages/daemon.log do not exist in the container)
     private $logSources = [
         'getmail' => '/data/log/getmail/getmail.log',
+        'errors' => self::ERROR_LOG,
         'cron' => '/data/log/cron.log',
         'syslog' => '/data/log/syslog',
         'mail' => '/data/log/mail.log',
@@ -119,8 +131,8 @@ class ExternalMailboxLogsController extends AbstractController
      */
     private function isLogSourceAvailable($logType)
     {
-        // getmail and cron have a status view even without a log file
-        if ($logType === 'getmail' || $logType === 'cron') {
+        // getmail, errors and cron have a status view even without a log file
+        if ($logType === 'getmail' || $logType === 'errors' || $logType === 'cron') {
             return true;
         }
 
@@ -136,6 +148,8 @@ class ExternalMailboxLogsController extends AbstractController
         switch ($logType) {
             case 'getmail':
                 return $this->getGetmailLogs($lines, $search);
+            case 'errors':
+                return $this->getErrorLogs($lines, $search);
             case 'cron':
                 return $this->getCronLogs($lines, $search);
             default:
@@ -184,7 +198,75 @@ class ExternalMailboxLogsController extends AbstractController
             return strtotime($b['timestamp']) - strtotime($a['timestamp']);
         });
 
-        return array_slice($allLogs, 0, $lines);
+        $allLogs = array_slice($allLogs, 0, $lines);
+
+        // recent errors are in another log type: say so on top of this view
+        $summary = $this->getRecentErrorsSummary();
+        if ($summary) {
+            array_unshift($allLogs, $summary);
+        }
+
+        return $allLogs;
+    }
+
+    /**
+     * Lines written by cron.sh in errors.log (getmail's stderr), newest first
+     */
+    private function getErrorLogs($lines, $search = '')
+    {
+        if (!file_exists(self::ERROR_LOG)) {
+            return [$this->createLogEntry('info',
+                'No getmail errors recorded: ' . self::ERROR_LOG . ' is created by the first run of cron.sh')];
+        }
+        if (!is_readable(self::ERROR_LOG)) {
+            return [$this->createLogEntry('error', 'Log file not readable: ' . self::ERROR_LOG)];
+        }
+
+        $logs = $this->readLogFile(self::ERROR_LOG, $lines, $search);
+        if (empty($logs) && $search === '') {
+            return [$this->createLogEntry('success', 'No getmail errors')];
+        }
+
+        // everything in this file is what getmail reported with --quiet:
+        // at least a warning, whatever the wording
+        foreach ($logs as &$log) {
+            if ($log['level'] === 'info' || $log['level'] === 'success') {
+                $log['level'] = 'warning';
+            }
+        }
+        unset($log);
+
+        return array_reverse($logs);
+    }
+
+    /**
+     * An error entry if errors.log has lines from the last 24 hours, else null
+     */
+    private function getRecentErrorsSummary()
+    {
+        if (!is_readable(self::ERROR_LOG) || filesize(self::ERROR_LOG) === 0) {
+            return null;
+        }
+
+        // the cut-off comes from the same clock and format as cron.sh's lines
+        $output = [];
+        exec("date -d '-24 hours' '+%Y-%m-%d %H:%M:%S'", $output);
+        $cutoff = $output[0] ?? '';
+        if ($cutoff === '') {
+            return null;
+        }
+
+        $recent = array_filter($this->readLogFile(self::ERROR_LOG, 1000), function ($log) use ($cutoff) {
+            return $log['timestamp'] >= $cutoff;
+        });
+        if (empty($recent)) {
+            return null;
+        }
+
+        $latest = end($recent);
+        return $this->createLogEntry('error',
+            'getmail reported ' . count($recent) . ' error or warning line(s) in the last 24 hours, the latest at '
+            . $latest['timestamp'] . ': ' . $latest['message'] . ' (see the Getmail Errors log)', $latest['timestamp']);
     }
 
     /**
@@ -565,9 +647,9 @@ class ExternalMailboxLogsController extends AbstractController
         try {
             $logType = $request->get('type', 'getmail');
 
-            if ($logType === 'getmail') {
-                $logFile = '/data/log/getmail/getmail.log';
-                // the file only appears with the first download: create it empty if missing.
+            if (isset(self::CLEARABLE[$logType])) {
+                $logFile = self::CLEARABLE[$logType];
+                // the file only appears with the first run: create it empty if missing.
                 // Admin (php-fpm) and cron both run as "mail": no 0777/0666
                 if (!is_dir(dirname($logFile))) {
                     @mkdir(dirname($logFile), 0750, true);

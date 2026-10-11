@@ -32,9 +32,19 @@ the Poste.io admin (super admins only): **External Mailboxes** and
   values being edited) and from every row of the list (with the saved
   configuration). Never automatic, and a single attempt per click: providers
   lock accounts after repeated failures.
-- **Logs page**: the getmail log, the cron log, syslog and the mail log, with
-  search, a line limit, auto-refresh and a status view (getmail version,
-  folders, number of external mailboxes per schedule).
+- **Logs page**: the getmail log, the getmail errors, the cron log, syslog and
+  the mail log, with search, a line limit, auto-refresh and a status view
+  (getmail version, folders, number of external mailboxes per schedule).
+  **Clear** empties the getmail log or the getmail errors.
+- **Getmail errors**: what getmail reports (configuration errors, failed
+  logins, unreachable servers, crashes, warnings about the configuration) is
+  written by `cron.sh` to its own log, each line with the time and the
+  mailbox file it belongs to, and shown as **Getmail Errors** in the logs
+  page. When there are lines from the last 24 hours, the default getmail view
+  says so in a red line on top (how many, and the latest). A separate file because the admin cannot read
+  `/data/log/mail.log` (`root:adm`, `0640`), where they also go, and because
+  some of them (a configuration getmail cannot read, a crash) never reach
+  getmail's own log.
 - **Translations**: English and Czech, like the rest of the Poste.io admin
   (the browser chooses).
 
@@ -50,7 +60,8 @@ The "database" is the file system, inside the `/data` volume:
 ├── disabled/                            mailboxes not scheduled
 ├── cron.sh                              the runner
 └── <schedule>/oldmail-*                 getmail's memory of already fetched messages
-/data/log/getmail/getmail.log            operational log
+/data/log/getmail/getmail.log            operational log (written by getmail)
+/data/log/getmail/errors.log             what getmail reports as errors (written by cron.sh)
 ```
 
 A mailbox with remote cleanup has up to three files in its folder:

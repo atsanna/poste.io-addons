@@ -63,7 +63,14 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   `mail`, with the IMAP folder list as a valid Python tuple;
 - the password is never sent back to the browser;
 - end to end: a message put in bob's mailbox is fetched by `cron.sh` (run as
-  `mail`, like cron) over IMAP and delivered to alice; the logs page shows it.
+  `mail`, like cron) over IMAP and delivered to alice; the logs page shows it;
+- getmail errors: after a good run `errors.log` is empty (`0640`, owned by
+  `mail`) and the getmail view has no error line; a mailbox with a wrong
+  password is added from the admin and run: the login error is in
+  `errors.log` with its mailbox, on top of the **Getmail Errors** view as an
+  error, and summarised in a red line on top of the getmail view; after the
+  mailbox is deleted from the admin, **Clear** without its CSRF token is
+  refused and with it empties the file, and the red line is gone.
 
 **Dark theme** (`tests/test_addons.py`)
 - the two `include` lines are in `base.html.twig` once each;

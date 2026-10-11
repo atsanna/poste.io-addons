@@ -175,6 +175,7 @@ external_mailbox_logs:
   no_logs: No logs found
   type:
     getmail: Getmail Log
+    errors: Getmail Errors
     cron: Cron Log
     syslog: System Log
     mail: Mail Log

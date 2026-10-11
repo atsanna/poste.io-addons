@@ -175,6 +175,7 @@ external_mailbox_logs:
   no_logs: Nebyly nalezeny žádné záznamy
   type:
     getmail: Log getmailu
+    errors: Chyby getmailu
     cron: Log cronu
     syslog: Systémový log
     mail: Log pošty

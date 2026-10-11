@@ -69,7 +69,9 @@ def external_mailboxes():
     ADMIN.submit("/admin/external-mailboxes/new", form, drop=("_token",))
     check("form without the CSRF token is refused (403, nothing saved)",
           ADMIN.status == 403 and not os.path.exists("/data/var/getmail/5min/%s.cfg" % E["BOB"]), ADMIN.status)
-    ADMIN.submit("/admin/external-mailboxes/new", form)
+    # "Read all" off: with it on and "Delete" off getmail warns on every run that
+    # it fetches everything again, and the warning lands in errors.log
+    ADMIN.submit("/admin/external-mailboxes/new", form, drop=("form[optionsreadall]",))
     cfg = "/data/var/getmail/5min/%s.cfg" % E["BOB"]
     check("mailbox saved as a getmail file, 0600, owned by mail", os.path.exists(cfg) and mode(cfg) == "600 mail",
           mode(cfg) if os.path.exists(cfg) else "missing")
@@ -86,6 +88,58 @@ def external_mailboxes():
           sh("tail -n 1 /data/log/getmail/getmail.log").strip())
     url, html = ADMIN.get("/admin/external-mailbox-logs/")
     check("the logs page shows the getmail log", "retrieved" in html, url)
+    getmail_errors(form)
+
+
+def first_row(html):
+    """The first row of the logs table, with its level class."""
+    return html.split('data-log="1"', 1)[1].split("</tr>", 1)[0] if 'data-log="1"' in html else ""
+
+
+def getmail_errors(form):
+    """What getmail prints on stderr goes to errors.log ("Getmail Errors" log
+    type): the admin cannot read mail.log. The getmail view flags recent errors."""
+    errlog = "/data/log/getmail/errors.log"
+    summary = "error or warning line(s) in the last 24 hours"
+    check("a run without errors leaves errors.log empty, 0640, owned by mail",
+          os.path.exists(errlog) and mode(errlog) == "640 mail" and os.path.getsize(errlog) == 0,
+          "%s, %d bytes" % (mode(errlog), os.path.getsize(errlog)) if os.path.exists(errlog) else "missing")
+    url, html = ADMIN.get("/admin/external-mailbox-logs/")
+    check("log types: Getmail Errors is in the menu", 'value="errors"' in html, url)
+    check("getmail view: no error summary without errors", summary not in html, url)
+
+    # carol's mailbox with a wrong password: getmail fails to log in
+    bad = dict(form, **{"form[email_address]": E["CAROL"], "form[username]": E["CAROL"],
+                        "form[password]": "wrong-" + E["PC"], "form[checkevery]": "10min"})
+    ADMIN.submit("/admin/external-mailboxes/new", bad)
+    sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 10min")
+    text = open(errlog).read() if os.path.exists(errlog) else ""
+    check("a login error is written to errors.log with its mailbox",
+          "10min/%s.cfg: " % E["CAROL"] in text and "login" in text.lower(), text.strip()[:200])
+    url, html = ADMIN.get("/admin/external-mailbox-logs/")
+    row = first_row(html)
+    check("getmail view: a red summary on top", row.startswith(' class="log-level-error"') and summary in row,
+          re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row)).strip()[:200])
+    url, html = ADMIN.get("/admin/external-mailbox-logs/?type=errors")
+    row = first_row(html)
+    check("Getmail Errors view: the error, as an error", row.startswith(' class="log-level-error"') and E["CAROL"] in row,
+          re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", row)).strip()[:200])
+
+    # remove carol's mailbox from the admin, so that cron adds nothing more
+    url, html = ADMIN.get("/admin/external-mailboxes/%s" % E["CAROL"])
+    f = [x for x in Panel.parse(html).forms if x["action"].endswith("/delete")]
+    if f:
+        ADMIN.post(f[0]["action"], {n: v or "" for n, v, t in f[0]["fields"] if n and not t.endswith(":off")})
+    check("carol's mailbox deleted from the admin", not os.path.exists("/data/var/getmail/10min/%s.cfg" % E["CAROL"]),
+          ADMIN.status)
+
+    size = os.path.getsize(errlog)
+    ADMIN.submit("/admin/external-mailbox-logs/?type=errors", {}, drop=("_token",))
+    check("Clear without the CSRF token: errors.log unchanged", os.path.getsize(errlog) == size, size)
+    ADMIN.submit("/admin/external-mailbox-logs/?type=errors", {})
+    check("Clear on Getmail Errors empties errors.log", os.path.getsize(errlog) == 0, os.path.getsize(errlog))
+    url, html = ADMIN.get("/admin/external-mailbox-logs/")
+    check("getmail view: no summary after Clear", summary not in html, url)
 
 
 def dark_theme():
