@@ -96,6 +96,7 @@ def external_mailboxes():
     check("the logs page shows the getmail log", "retrieved" in html, url)
     rspamd_filter()
     getmail_errors(form)
+    log_rotation()
 
 
 def fetched_headers(subject, seconds=60):
@@ -164,6 +165,74 @@ def read_all_rule(form):
     if d:
         ADMIN.post(d[0]["action"], {n: v or "" for n, v, t in d[0]["fields"] if n and not t.endswith(":off")})
     check("test mailbox deleted from the admin", not os.path.exists(cfg), ADMIN.status)
+
+
+def form_post(path, action_suffix, values, drop=()):
+    """POST the form of a page whose action ends with action_suffix, keeping
+    what the page has (like a browser), changing values, leaving out drop."""
+    url, html = ADMIN.get(path)
+    f = [x for x in Panel.parse(html).forms if x["action"].endswith(action_suffix)][0]
+    data = {n: (v or "") for n, v, t in f["fields"] if n and not t.endswith(":off") and t not in ("submit", "button", "file")}
+    data.update(values)
+    for n in drop:
+        data.pop(n, None)
+    return ADMIN.post(f["action"], data)
+
+
+def log_rotation():
+    """getmail.log and errors.log are rotated by Poste.io's nightly logrotate,
+    with a rule that a root script writes from the settings saved in the admin."""
+    rule, conf = "/etc/logrotate.d/external-mailboxes", "/data/var/getmail/log-rotation.ini"
+    gen = "/usr/local/bin/external-mailboxes-logrotate"
+    read = lambda f: open(f).read() if os.path.exists(f) else ""
+    text = read(rule)
+    check("default rotation rule: getmail.log weekly, errors.log at 1M, 4 copies",
+          "weekly" in text and "size 1M" in text and text.count("rotate 4") == 2, re.findall(r"^\s+(weekly|size .*|rotate .*)$", text, re.M))
+    check("the rule is rewritten by root at 00:00, before logrotate", "0 0 * * * root " + gen in read("/etc/cron.d/external-mailboxes-logrotate"),
+          read("/etc/cron.d/external-mailboxes-logrotate").strip()[-60:])
+    url, html = ADMIN.get("/admin/external-mailbox-logs/")
+    check("Rotation settings in the logs page", 'id="em-rotation"' in html and 'name="getmail_every"' in html, url)
+
+    form_post("/admin/external-mailbox-logs/", "/rotation", {"getmail_every": "daily"}, drop=("_token",))
+    check("settings without the CSRF token are refused (nothing saved)", not os.path.exists(conf), read(conf)[:60] or "no file")
+    form_post("/admin/external-mailbox-logs/", "/rotation", {"getmail_every": "daily", "errors_size": "5M", "keep": "8"})
+    saved = read(conf)
+    check("settings saved (0640, owned by mail)", "getmail_every=daily" in saved and "errors_size=5M" in saved and "keep=8" in saved
+          and mode(conf) == "640 mail", (mode(conf) if saved else "missing", re.findall(r"^\w+=.*$", saved, re.M)))
+    sh(gen)
+    text = read(rule)
+    check("the root script applies them: daily, errors at 5M, 8 copies",
+          "daily" in text and "size 5M" in text and text.count("rotate 8") == 2, re.findall(r"^\s+(daily|weekly|size .*|rotate .*)$", text, re.M))
+    form_post("/admin/external-mailbox-logs/", "/rotation", {"keep": "99"})
+    check("a value not offered by the form is refused (nothing changed)", read(conf) == saved, re.findall(r"^keep=.*$", read(conf), re.M))
+
+    # a settings file changed behind the admin: allowed values only, nothing executed
+    with open(conf, "w") as f:
+        f.write("getmail_every=hourly\nkeep=$(touch /tmp/rotation-pwned)\nerrors_size=1M;touch /tmp/rotation-pwned\n")
+    sh(gen)
+    text = read(rule)
+    check("a tampered settings file gives the defaults and runs nothing",
+          "weekly" in text and "size 1M" in text and text.count("rotate 4") == 2 and not os.path.exists("/tmp/rotation-pwned"),
+          (re.findall(r"^\s+(daily|weekly|size .*|rotate .*)$", text, re.M), os.path.exists("/tmp/rotation-pwned")))
+
+    form_post("/admin/external-mailbox-logs/", "/rotation", {"getmail_every": "weekly", "errors_size": "1M", "keep": "4"}, drop=("enabled",))
+    sh(gen)
+    off = subprocess.run("logrotate -d %s" % rule, shell=True, capture_output=True, text=True)
+    check("rotation switched off: no getmail log in the rule", "enabled=0" in read(conf) and "/data/log/getmail" not in read(rule) and off.returncode == 0,
+          (re.findall(r"^enabled=.*$", read(conf), re.M), off.returncode))
+
+    form_post("/admin/external-mailbox-logs/", "/rotation", {"enabled": "1", "getmail_every": "weekly", "errors_size": "1M", "keep": "4"})
+    sh(gen)
+    out = subprocess.run("logrotate -f -s /tmp/logrotate.test %s" % rule, shell=True, capture_output=True, text=True)
+    log, old = "/data/log/getmail/getmail.log", "/data/log/getmail/getmail.log.1"
+    check("forced rotation: no error, getmail.log.1 kept, getmail.log recreated 0640 owned by mail",
+          out.returncode == 0 and not out.stderr.strip() and os.path.exists(old) and os.path.exists(log) and mode(log) == "640 mail",
+          (out.returncode, out.stderr.strip()[:120], os.path.exists(old), mode(log) if os.path.exists(log) else "missing"))
+    sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 5min")
+    check("getmail writes to the new getmail.log", os.path.getsize(log) > 0, os.path.getsize(log))
+    url, html = ADMIN.get("/admin/external-mailbox-logs/")
+    check("the page shows the old copies", re.search(r"[1-9][0-9]* old copies", html) is not None,
+          re.findall(r"getmail\.log [^<]*old copies[^<]*", html)[:1])
 
 
 def first_row(html):

@@ -30,6 +30,15 @@ All notable changes to this project are documented here. The format follows
   admin (the password field can stay empty; see
   [installation](docs/installation.md#3-existing-installations-the-data-volume)).
 
+- **External Mailboxes: log rotation, configurable.** `getmail.log` and
+  `errors.log` were never rotated. They now are, by Poste.io's nightly
+  logrotate, with settings in the logs page (**Rotation**): on/off, getmail
+  log every day/week/month, errors above 512 KB to 10 MB, 1 to 12 old copies
+  kept compressed (defaults: weekly, 1 MB, 4). The admin saves the settings in
+  `/data/var/getmail/log-rotation.ini`; a root script writes the logrotate rule
+  from them every night at 00:00, accepting only the allowed values (see
+  [docs](docs/external-mailboxes.md#log-rotation)).
+
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
   all" on and the messages left on the server, getmail warns at every run that

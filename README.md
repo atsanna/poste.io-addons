@@ -51,7 +51,7 @@ add-ons and with each one alone ([tests](docs/testing.md)).
   fetched mail is not scanned by Poste.io at all.
 - Logs page with the getmail log, the **getmail errors** (with a red line on
   top of the getmail view when there are recent ones), the cron log and a
-  status view.
+  status view; **log rotation** set from the same page.
 - Hardened: getmail runs as `mail`, never root; configuration files `0600`;
   TLS certificates verified; passwords never sent back to the browser; explicit
   CSRF tokens; strict validation of every value written to getmail.

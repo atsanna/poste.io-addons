@@ -24,6 +24,11 @@
         .em-logs-bar .form-group { display: flex; align-items: center; gap: 6px; margin: 0; }
         .em-logs-bar label { margin: 0; white-space: nowrap; }
         .em-logs-bar input[name="search"] { width: 220px; }
+        .em-rotation { border: 1px solid var(--bs-border-color, #ddd); border-radius: 4px; padding: 12px 16px 16px; margin: 4px 0 18px; }
+        .em-rotation h3 { margin-top: 4px; font-size: 18px; }
+        .em-rot-grid { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+        .em-rot-grid .form-group { min-width: 260px; }
+        .em-rot-grid .control-label { display: block; margin-bottom: 4px; }
     </style>
     <div class="row">
         <div class="col-md-8">
@@ -59,6 +64,11 @@
         </div>
 
         <div class="col-md-4 text-right">
+            <button type="button" id="em-rotation-toggle" class="btn btn-default{% if rotationOpen %} active{% endif %}"
+                    aria-controls="em-rotation" aria-expanded="{{ rotationOpen ? 'true' : 'false' }}">
+                <i class="fa fa-cogs"></i> {{ 'external_mailbox_logs.rotation.button'|trans }}
+            </button>
+
             <button class="btn btn-info" onclick="location.reload()">
                 <i class="fa fa-refresh"></i> {{ 'external_mailbox_logs.refresh.button'|trans }}
             </button>
@@ -77,6 +87,48 @@
 
     <br>
 
+    {# log rotation settings: saved here, applied by the nightly rotation (root script + logrotate) #}
+    <div id="em-rotation" class="em-rotation"{% if not rotationOpen %} style="display: none;"{% endif %}>
+        <h3><i class="fa fa-cogs"></i> {{ 'external_mailbox_logs.rotation.title'|trans }}</h3>
+        <form method="post" action="{{ path('external_mailbox_logs_rotation') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('external_mailbox_logs_rotation') }}">
+            <div class="checkbox">
+                <label><input type="checkbox" name="enabled" value="1"{% if rotation.enabled == '1' %} checked{% endif %}> {{ 'external_mailbox_logs.rotation.enabled'|trans }}</label>
+            </div>
+            <div class="em-rot-grid">
+                <div class="form-group">
+                    <label for="em-rot-every" class="control-label">{{ 'external_mailbox_logs.rotation.getmail_every'|trans }}</label>
+                    <select name="getmail_every" id="em-rot-every" class="form-control">
+                        {% for v in rotationChoices.getmail_every %}
+                            <option value="{{ v }}"{% if rotation.getmail_every == v %} selected{% endif %}>{{ ('external_mailbox_logs.rotation.every.' ~ v)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="em-rot-size" class="control-label">{{ 'external_mailbox_logs.rotation.errors_size'|trans }}</label>
+                    <select name="errors_size" id="em-rot-size" class="form-control">
+                        {% for v in rotationChoices.errors_size %}
+                            <option value="{{ v }}"{% if rotation.errors_size == v %} selected{% endif %}>{{ v|replace({'k': ' KB', 'M': ' MB'}) }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="em-rot-keep" class="control-label">{{ 'external_mailbox_logs.rotation.keep'|trans }}</label>
+                    <select name="keep" id="em-rot-keep" class="form-control">
+                        {% for v in rotationChoices.keep %}
+                            <option value="{{ v }}"{% if rotation.keep == v %} selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="help-block">
+                {{ 'external_mailbox_logs.rotation.help'|trans }}<br>
+                {{ 'external_mailbox_logs.rotation.status'|trans({'{getmail}': rotationStatus.getmail, '{errors}': rotationStatus.errors, '{copies}': rotationStatus.copies, '{copiesSize}': rotationStatus.copiesSize}) }}
+            </p>
+            <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'external_mailbox_logs.rotation.save'|trans }}</button>
+        </form>
+    </div>
+
     <div id="result">
         {% include "Base/ExternalMailboxLogs/_logsList.html.twig" %}
     </div>
@@ -91,6 +143,14 @@
         // explicit widths: otherwise Chosen copies the select width and truncates the text
         $('#type').chosen({width: '190px', disable_search_threshold: 10});
         $('#lines').chosen({width: '80px', disable_search_threshold: 10});
+        $('#em-rotation select').chosen({width: '260px', disable_search_threshold: 10});
+
+        // "Rotation" opens and closes the settings
+        $('#em-rotation-toggle').on('click', function () {
+            var open = !$('#em-rotation').is(':visible');
+            $('#em-rotation').toggle(open);
+            $(this).toggleClass('active', open).attr('aria-expanded', open ? 'true' : 'false');
+        });
 
         // Auto-refresh every 30 seconds
         setInterval(function() {

@@ -34,6 +34,19 @@ class ExternalMailboxLogsController extends AbstractController
         'errors' => self::ERROR_LOG,
     ];
 
+    // Log rotation settings. The admin (user mail) only writes this file; a root
+    // script (/usr/local/bin/external-mailboxes-logrotate, cron at 00:00) turns
+    // it into /etc/logrotate.d/external-mailboxes before the nightly logrotate.
+    // Keys and allowed values must match that script.
+    private const ROTATION_FILE = '/data/var/getmail/log-rotation.ini';
+    private const ROTATION_DEFAULTS = ['enabled' => '1', 'getmail_every' => 'weekly', 'errors_size' => '1M', 'keep' => '4'];
+    private const ROTATION_CHOICES = [
+        'enabled' => ['0', '1'],
+        'getmail_every' => ['daily', 'weekly', 'monthly'],
+        'errors_size' => ['512k', '1M', '5M', '10M'],
+        'keep' => ['1', '2', '4', '8', '12'],
+    ];
+
     private $translator;
 
     public function __construct(TranslatorInterface $translator)
@@ -88,7 +101,11 @@ class ExternalMailboxLogsController extends AbstractController
                 'logType' => $logType,
                 'logTypes' => $this->getAvailableLogTypes(),
                 'search' => $search,
-                'lines' => $lines
+                'lines' => $lines,
+                'rotation' => $this->readRotation(),
+                'rotationChoices' => self::ROTATION_CHOICES,
+                'rotationStatus' => $this->getRotationStatus(),
+                'rotationOpen' => $request->get('rotation') !== null,
             ];
 
         } catch (\Exception $e) {
@@ -105,7 +122,11 @@ class ExternalMailboxLogsController extends AbstractController
                 'logType' => 'getmail',
                 'logTypes' => $this->getAvailableLogTypes(),
                 'search' => '',
-                'lines' => 100
+                'lines' => 100,
+                'rotation' => $this->readRotation(),
+                'rotationChoices' => self::ROTATION_CHOICES,
+                'rotationStatus' => $this->getRotationStatus(),
+                'rotationOpen' => false,
             ];
         }
     }
@@ -672,6 +693,101 @@ class ExternalMailboxLogsController extends AbstractController
         }
 
         return $this->redirectToRoute('external_mailbox_logs', ['type' => $logType ?? 'getmail']);
+    }
+
+    /**
+     * Saves the log rotation settings; the nightly rotation applies them
+     *
+     * @Route("/rotation", name="external_mailbox_logs_rotation", methods={"POST"})
+     */
+    public function rotationAction(Request $request)
+    {
+        if (!$this->isCsrfTokenValid('external_mailbox_logs_rotation', $request->request->get('_token'))) {
+            $this->addFlash('error', $this->translator->trans('external_mailboxes.error.csrf'));
+            return $this->redirectToRoute('external_mailbox_logs', ['rotation' => 1]);
+        }
+
+        $values = [
+            'enabled' => $request->request->get('enabled') !== null ? '1' : '0',
+            'getmail_every' => (string) $request->request->get('getmail_every', ''),
+            'errors_size' => (string) $request->request->get('errors_size', ''),
+            'keep' => (string) $request->request->get('keep', ''),
+        ];
+        // only the values offered by the form: the file is read by a root script
+        foreach ($values as $key => $value) {
+            if (!in_array($value, self::ROTATION_CHOICES[$key], true)) {
+                $this->addFlash('error', $this->translator->trans('external_mailbox_logs.rotation.invalid'));
+                return $this->redirectToRoute('external_mailbox_logs', ['rotation' => 1]);
+            }
+        }
+
+        $text = "# Log rotation of the external mailboxes, saved by the admin.\n"
+              . "# Applied by /usr/local/bin/external-mailboxes-logrotate (cron, 00:00).\n";
+        foreach ($values as $key => $value) {
+            $text .= $key . '=' . $value . "\n";
+        }
+        $tmp = self::ROTATION_FILE . '.tmp';
+        if (@file_put_contents($tmp, $text) === false || !@chmod($tmp, 0640) || !@rename($tmp, self::ROTATION_FILE)) {
+            @unlink($tmp);
+            $this->addFlash('error', $this->translator->trans('external_mailbox_logs.rotation.not_writable'));
+        } else {
+            $this->addFlash('notice', $this->translator->trans('external_mailbox_logs.rotation.saved'));
+        }
+
+        return $this->redirectToRoute('external_mailbox_logs', ['rotation' => 1]);
+    }
+
+    /**
+     * Saved rotation settings, read like the root script reads them: for each
+     * key the first "key=value" line; a value that is not allowed means default
+     */
+    private function readRotation(): array
+    {
+        $values = self::ROTATION_DEFAULTS;
+        if (!is_file(self::ROTATION_FILE) || !is_readable(self::ROTATION_FILE)) {
+            return $values;
+        }
+        $seen = [];
+        foreach (file(self::ROTATION_FILE, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+            if (!preg_match('/^(\w+)=([A-Za-z0-9]*)$/', $line, $m) || !isset(self::ROTATION_CHOICES[$m[1]]) || isset($seen[$m[1]])) {
+                continue;
+            }
+            $seen[$m[1]] = true;
+            if (in_array($m[2], self::ROTATION_CHOICES[$m[1]], true)) {
+                $values[$m[1]] = $m[2];
+            }
+        }
+        return $values;
+    }
+
+    /**
+     * Current size of the getmail logs and of their rotated copies
+     */
+    private function getRotationStatus(): array
+    {
+        $dir = '/data/log/getmail/';
+        $size = function ($file) {
+            return is_file($file) ? (int) filesize($file) : 0;
+        };
+        $old = glob($dir . '*.log.*') ?: [];
+
+        return [
+            'getmail' => $this->humanSize($size($dir . 'getmail.log')),
+            'errors' => $this->humanSize($size(self::ERROR_LOG)),
+            'copies' => count($old),
+            'copiesSize' => $this->humanSize(array_sum(array_map($size, $old))),
+        ];
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes >= 1048576) {
+            return round($bytes / 1048576, 1) . ' MB';
+        }
+        if ($bytes >= 1024) {
+            return round($bytes / 1024, 1) . ' KB';
+        }
+        return $bytes . ' B';
     }
 
     /**

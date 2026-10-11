@@ -56,6 +56,14 @@ the Poste.io admin (super admins only): **External Mailboxes** and
   where they also go, and because
   some of them (a configuration getmail cannot read, a crash) never reach
   getmail's own log.
+- **Log rotation**: `getmail.log` and `errors.log` are rotated by Poste.io's
+  nightly logrotate, with settings chosen in the logs page (**Rotation**
+  button): rotation on or off, how often the getmail log is rotated (day,
+  week, month), the size above which the getmail errors are rotated (512 KB to
+  10 MB) and how many old copies are kept, compressed (1 to 12). Defaults:
+  weekly, 1 MB, 4 copies. The errors are rotated by size and not by date
+  because the red line of the getmail view reads only the current
+  `errors.log`. See [How it works](#log-rotation) below.
 - **Spam check (rspamd)**: every fetched message is scanned by rspamd before
   delivery, by a getmail filter (`getmail-rspamd`, in the image). It gets the
   same `X-Rspamd-Score`, `X-Rspamd-Bar` and `X-Rspamd-Report` headers as mail
@@ -115,6 +123,33 @@ with `flock -n`, so a slow mailbox never overlaps with itself. getmail never
 runs as root. Each fetched message goes through the `getmail-rspamd` filter
 (the `[filter1]` section of the `.cfg`) and is then delivered with Poste.io's
 `sendmail`; what getmail prints as errors goes to `errors.log`.
+
+### Log rotation
+
+![Log rotation settings](screenshots/external-mailbox-rotation.png)
+
+The admin runs as `mail` and cannot write logrotate rules, which must belong
+to root. So the settings are saved in `/data/var/getmail/log-rotation.ini`
+(on the volume: they survive rebuilds and upgrades), and a root script,
+`/usr/local/bin/external-mailboxes-logrotate`, turns them into
+`/etc/logrotate.d/external-mailboxes` every night at 00:00
+(`/etc/cron.d/external-mailboxes-logrotate`), one minute before Poste.io's
+logrotate. A change made in the admin applies from the next night. The image
+contains the rule with the default settings, written by the same script at
+build time.
+
+The settings file is written by a less privileged user and read by root: the
+script executes nothing from it, and accepts only the values offered by the
+form (`enabled` 0/1, `getmail_every` daily/weekly/monthly, `errors_size`
+512k/1M/5M/10M, `keep` 1/2/4/8/12); anything else means the default. The
+admin checks the same values before saving (and its own CSRF token).
+
+```
+/data/var/getmail/log-rotation.ini          settings (admin, mail, 0640)
+/usr/local/bin/external-mailboxes-logrotate writes the rule (root)
+/etc/cron.d/external-mailboxes-logrotate    runs it at 00:00
+/etc/logrotate.d/external-mailboxes         the rule, used by logrotate at 00:01
+```
 
 ## Security
 

@@ -71,6 +71,14 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 - "Read all" only with "Delete message": off for a new mailbox; with "Delete
   message" off it is refused (HTTP 400, nothing saved), with it on it is
   saved; the comment above `read_all` in the generated file says what it does;
+- log rotation: the default rule (weekly, 1 MB, 4 copies) and its nightly
+  cron entry; the settings in the logs page; saving without the CSRF token is
+  refused; saved settings (`0640`, owned by `mail`) are applied by the root
+  script; a value not offered by the form is refused; a settings file changed
+  behind the admin gives the defaults and runs nothing; rotation switched off
+  leaves no getmail log in the rule; a forced rotation keeps
+  `getmail.log.1`, recreates `getmail.log` and getmail writes to it; the page
+  shows the old copies;
 - getmail errors: after a good run `errors.log` is empty (`0640`, owned by
   `mail`) and the getmail view has no error line; a mailbox with a wrong
   password is added from the admin and run: the login error is in

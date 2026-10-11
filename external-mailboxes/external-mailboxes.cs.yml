@@ -174,6 +174,23 @@ external_mailbox_logs:
   host: Hostitel
   raw: Surový záznam
   no_logs: Nebyly nalezeny žádné záznamy
+  rotation:
+    button: Rotace
+    title: Rotace logů
+    enabled: Rotovat logy getmailu
+    getmail_every: "Log getmailu: rotovat každý"
+    every:
+      daily: den
+      weekly: týden
+      monthly: měsíc
+    errors_size: "Chyby getmailu: rotovat při velikosti nad"
+    keep: Uchovávané staré kopie (komprimované)
+    help: "Použije se při noční rotaci (00:01). Červený řádek v zobrazení getmailu čte jen aktuální errors.log: proto se chyby rotují podle velikosti."
+    status: "Nyní: getmail.log {getmail}, errors.log {errors}, starých kopií {copies} ({copiesSize})."
+    save: Uložit
+    saved: "Rotace logů uložena: platí od příští noční rotace"
+    invalid: Neplatná hodnota rotace logů
+    not_writable: Nastavení rotace logů nelze uložit
   type:
     getmail: Log getmailu
     errors: Chyby getmailu

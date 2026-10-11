@@ -90,6 +90,15 @@ RUN chown mail:mail /data/var/getmail/cron.sh && chmod 0750 /data/var/getmail/cr
 # In the image, not on the volume: a new build updates it.
 COPY external-mailboxes/getmail-rspamd /usr/local/bin/getmail-rspamd
 RUN chmod 0755 /usr/local/bin/getmail-rspamd
+# Rotation of getmail.log and errors.log, configurable in the admin: the
+# settings are in /data/var/getmail/log-rotation.ini; this root script writes
+# the logrotate rule at 00:00, a minute before Poste.io's logrotate, and once
+# here for the default rule
+COPY external-mailboxes/external-mailboxes-logrotate /usr/local/bin/external-mailboxes-logrotate
+COPY external-mailboxes/external-mailboxes-logrotate.cron /etc/cron.d/external-mailboxes-logrotate
+RUN chmod 0755 /usr/local/bin/external-mailboxes-logrotate && \
+    chmod 0644 /etc/cron.d/external-mailboxes-logrotate && \
+    /usr/local/bin/external-mailboxes-logrotate
 # Crontab of the "mail" user; the file lives OUTSIDE /etc/cron.d (cron would
 # reject it there: no user column) and the logs page reads it from here.
 COPY external-mailboxes/external-mailboxes.crontab /etc/external-mailboxes.crontab
