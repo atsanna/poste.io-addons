@@ -118,9 +118,11 @@ devices must resync once)
   server, deduplicated and compressed, so frequent backups store only what
   changed; keep rules per job (hourly, daily, weekly, monthly).
 - Live progress, the log of every run, the space on each destination.
-- Restores from the command line for now, each procedure run by the tests as
-  documented: a mailbox, the backups read from **another machine with only the
-  key file**, a **whole server rebuilt** on a new installation.
+- **Restore a mailbox from the admin** into a new folder of the same or
+  another mailbox (nothing already there is changed); remove the backups of a
+  job; the backups read from **another machine with only the key file**; a
+  **whole server rebuilt** on a new installation, each procedure run by the
+  tests as documented.
 - Hardened: the engine runs as `mail`, never root; settings validated again
   before use; SFTP only to a server whose SSH key was confirmed; passwords
   never sent back to the browser.

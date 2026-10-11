@@ -22,6 +22,7 @@ namespace PosteBackup;
 final class Engine
 {
     public const HOST = 'poste';             // restic --host: fixed, the container name may change
+    public const MAX_LIST = 16777216;        // restic prints a list of snapshots as one line: up to 16 MB
     private const TAG = 'poste-backup';
 
     private array $cfg;
@@ -46,6 +47,11 @@ final class Engine
         try {
             $this->load();
             $this->state['tick'] = $now;
+            // a restore folder left by a run that died: emptied (nothing runs meanwhile, we hold the lock)
+            if (is_dir(Store::RESTORE) && !is_link(Store::RESTORE)) {
+                $this->emptyRestoreFolder();
+                @rmdir(Store::RESTORE);
+            }
             // logs and history are trimmed after each run, and once a day for a
             // server where nothing runs for a while
             if ($now - (int) ($this->state['housekeeping'] ?? 0) >= 86400) {
@@ -55,18 +61,29 @@ final class Engine
             $this->saveState();
 
             $runs = [];
-            // requests of the admin first ("run now")
-            foreach ((is_link(Store::QUEUE) ? [] : (@scandir(Store::QUEUE) ?: [])) as $f) {
-                if (!preg_match('/^run-([a-f0-9]{12})-[a-f0-9]{8}\.json$/', $f, $m)) {
-                    continue;
+            $tasks = [];
+            // requests of the admin first: run now, restore a mailbox, remove the
+            // backups of a job (in the order they were made)
+            $queue = is_link(Store::QUEUE) ? [] : (@scandir(Store::QUEUE) ?: []);
+            sort($queue);
+            foreach ($queue as $f) {
+                $path = Store::QUEUE . '/' . $f;
+                if (preg_match('/^run-([a-f0-9]{12})-[a-f0-9]{8}\.json$/', $f, $m)) {
+                    if (is_link($path) || !is_file($path)) {
+                        continue;
+                    }
+                    @unlink($path);
+                    if (isset($this->cfg['jobs'][$m[1]]) && !isset($runs[$m[1]])) {
+                        $runs[$m[1]] = 'manual';
+                    }
+                } elseif (preg_match('/^\d{10}-(restore|forget)-([a-f0-9]{12})\.json$/', $f, $m)) {
+                    $raw = Store::readJson($path);          // never a link, never too big
+                    @unlink($path);
+                    $tasks[$m[2]] = self::task($m[1], $raw);
                 }
-                if (is_link(Store::QUEUE . '/' . $f) || !is_file(Store::QUEUE . '/' . $f)) {
-                    continue;
-                }
-                @unlink(Store::QUEUE . '/' . $f);
-                if (isset($this->cfg['jobs'][$m[1]]) && !isset($runs[$m[1]])) {
-                    $runs[$m[1]] = 'manual';
-                }
+            }
+            foreach ($tasks as $id => $t) {
+                $this->runTask($id, $t);
             }
             foreach ($this->cfg['jobs'] as $id => $job) {
                 $last = (int) ($this->state['jobs'][$id]['last_slot'] ?? 0);
@@ -77,7 +94,7 @@ final class Engine
             foreach ($runs as $id => $why) {
                 $this->runJob($id, $why, $why === 'schedule' ? Schedule::lastSlot($this->cfg['jobs'][$id]['schedule'], $now, $this->tz) : null);
             }
-            return count($runs) . ' job(s) run';
+            return count($runs) . ' job(s) run' . ($tasks ? ', ' . count($tasks) . ' request(s) done' : '');
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
@@ -112,7 +129,7 @@ final class Engine
         $this->tz = Schedule::zone($this->cfg['settings']['timezone']);
         date_default_timezone_set($this->tz->getName());
         $this->state = Store::readJson(Store::STATE) ?? [];
-        $this->state += ['jobs' => [], 'running' => null, 'destinations' => []];
+        $this->state += ['jobs' => [], 'running' => null, 'destinations' => [], 'tasks' => []];
         $this->state['config_errors'] = $errors;
         // forget jobs and destinations that no longer exist
         $this->state['jobs'] = array_intersect_key($this->state['jobs'], $this->cfg['jobs']);
@@ -209,6 +226,343 @@ final class Engine
         }
         $this->housekeeping(time());
         return $worst;
+    }
+
+    // ---------------------------------------------------------------- requests of the admin
+
+    /** A snapshot id as restic prints it in full. */
+    public static function isSnapshotId($id): bool
+    {
+        return is_string($id) && preg_match('/^[a-f0-9]{64}$/', $id) === 1;
+    }
+
+    /**
+     * A request of the admin, validated again (the queue folder belongs to mail,
+     * like the admin): ['type' => restore|forget, ...] with only valid values,
+     * or ['type' => ..., 'invalid' => true].
+     */
+    public static function task(string $type, ?array $raw): array
+    {
+        $raw = $raw ?? [];
+        $dest = $raw['dest'] ?? null;
+        if ($type === 'restore') {
+            $ok = Config::isId($dest) && self::isSnapshotId($raw['snapshot'] ?? null)
+                && Config::isAddress($raw['source'] ?? null) && Config::isAddress($raw['target'] ?? null);
+            return $ok ? ['type' => 'restore', 'dest' => $dest, 'snapshot' => $raw['snapshot'],
+                          'source' => $raw['source'], 'target' => strtolower($raw['target'])]
+                       : ['type' => 'restore', 'invalid' => true];
+        }
+        $ok = Config::isId($dest) && Config::isId($raw['job'] ?? null);
+        return $ok ? ['type' => 'forget', 'dest' => $dest, 'job' => $raw['job']] : ['type' => 'forget', 'invalid' => true];
+    }
+
+    /** Runs a request of the admin and records its result (state.json, last 20). */
+    private function runTask(string $id, array $t): void
+    {
+        $start = time();
+        $log = $this->openLog($id, $start);
+        $did = $t['dest'] ?? null;
+        $d = $did !== null ? ($this->cfg['destinations'][$did] ?? null) : null;
+        $this->logLine($log, $t['type'] === 'restore'
+            ? 'restore of a mailbox' . (empty($t['invalid']) ? " ({$t['source']} from snapshot {$t['snapshot']} into {$t['target']})" : '')
+            : 'removal of the backups of a job' . (empty($t['invalid']) ? " ({$t['job']})" : ''));
+        $this->state['running'] = ['task' => $id, 'type' => $t['type'], 'since' => $start, 'dest' => $did, 'phase' => $t['type'],
+                                   'source' => $t['source'] ?? null, 'target' => $t['target'] ?? null, 'job' => null, 'progress' => null];
+        $this->saveState();
+        if (!empty($t['invalid'])) {
+            $r = ['status' => 'error', 'error' => 'the request is not valid'];
+        } elseif ($d === null) {
+            $r = ['status' => 'error', 'error' => 'unknown destination'];
+        } else {
+            $this->logLine($log, "--- destination \"{$d['name']}\" ($did)");
+            $r = $t['type'] === 'restore' ? $this->restoreMailbox($did, $d, $t, $log) : $this->forgetJob($did, $d, $t, $log);
+        }
+        $r += ['error' => null, 'note' => null];
+        $this->logLine($log, "result: {$r['status']}" . ($r['error'] ? " - {$r['error']}" : '') . ($r['note'] ? " ({$r['note']})" : ''));
+        $this->state['tasks'][] = [
+            'id' => $id, 'type' => $t['type'], 'dest' => $did, 'snapshot' => $t['snapshot'] ?? null, 'source' => $t['source'] ?? null,
+            'target' => $t['target'] ?? null, 'job' => $t['job'] ?? null, 'start' => $start, 'end' => time(),
+            'status' => $r['status'], 'error' => $r['error'], 'note' => $r['note'], 'log' => basename($this->logPath($id, $start)),
+        ];
+        $this->state['tasks'] = array_slice($this->state['tasks'], -20);
+        $this->state['running'] = null;
+        $this->saveState();
+        if ($log) {
+            fclose($log);
+        }
+    }
+
+    /** restic's environment for a destination, with the key. Returns [env, error]. */
+    private function resticEnv(string $did, array $d, string $tmp): array
+    {
+        if (!is_file(Store::KEY) || is_link(Store::KEY) || filesize(Store::KEY) < 32) {
+            return [null, 'the encryption key is missing (' . Store::KEY . ')'];
+        }
+        [$env, $err] = Destination::env($did, $d, $tmp, Store::CACHE);
+        if ($err) {
+            return [null, $err];
+        }
+        $env['RESTIC_PASSWORD_FILE'] = Store::KEY;
+        $env['RESTIC_CACHE_DIR'] = Store::CACHE . '/restic';
+        return [$env, null];
+    }
+
+    /**
+     * A mailbox of a snapshot back into a mailbox of this server, in a new
+     * folder "Restored <time of the snapshot>" (with its subfolders, flags and
+     * subscriptions): nothing already in the mailbox is touched. The snapshot's
+     * mailbox is first restored into a work folder of the engine, then imported
+     * by Dovecot (doveadm import, as mail like the mailboxes), then removed.
+     */
+    private function restoreMailbox(string $did, array $d, array $t, $log): array
+    {
+        $home = $this->home($t['target']);
+        if ($home === null) {
+            return ['status' => 'error', 'error' => "mailbox {$t['target']} not found"];
+        }
+        [$local, $domain] = explode('@', $t['source'], 2);
+        // an address that passed Config::isAddress has no "/" and is never "." or ".."
+        $src = '/data/domains/' . $domain . '/' . $local;
+        $tmp = $this->privateTmp();
+        if ($tmp === null) {
+            return ['status' => 'error', 'error' => 'cannot create a temporary folder'];
+        }
+        try {
+            [$env, $err] = $this->resticEnv($did, $d, $tmp);
+            if ($err) {
+                return ['status' => 'error', 'error' => $err];
+            }
+            $repo = Destination::repository($did, $d);
+
+            // the snapshot (its time names the folder) and the mailbox in it
+            $time = null;
+            $found = false;
+            $ls = $this->restic($repo, ['ls', '--json', $t['snapshot'], '/data/domains/' . $domain], $env, $log, 600,
+                function (string $line) use (&$time, &$found, $src) {
+                    $j = json_decode($line, true);
+                    if (!is_array($j)) {
+                        return;
+                    }
+                    if (($j['struct_type'] ?? '') === 'snapshot' && is_string($j['time'] ?? null)) {
+                        $time = $j['time'];
+                    } elseif (($j['type'] ?? '') === 'dir' && ($j['path'] ?? '') === $src) {
+                        $found = true;
+                    }
+                });
+            if ($ls['exit'] !== 0 || $time === null) {
+                return ['status' => 'error', 'error' => 'cannot read the snapshot: ' . self::lastLine($ls['err'])];
+            }
+            if (!$found) {
+                return ['status' => 'error', 'error' => "{$t['source']} is not in this snapshot"];
+            }
+            // the mailbox is written twice on /data (restored, then imported): enough room for both?
+            $size = 0;
+            $sz = $this->restic($repo, ['ls', '--json', '--recursive', $t['snapshot'], $src], $env, $log, 0,
+                function (string $line) use (&$size) {
+                    $j = json_decode($line, true);
+                    if (is_array($j) && ($j['type'] ?? '') === 'file') {
+                        $size += (int) ($j['size'] ?? 0);
+                    }
+                });
+            if ($sz['exit'] !== 0) {
+                return ['status' => 'error', 'error' => 'cannot read the snapshot: ' . self::lastLine($sz['err'])];
+            }
+            $free = @disk_free_space('/data');
+            if ($free !== false && !self::enoughSpace($size, (int) $free)) {
+                return ['status' => 'error', 'error' => 'not enough free space on /data: the restore needs about '
+                    . self::size(self::spaceNeeded($size)) . ', ' . self::size((int) $free) . ' are free'];
+            }
+            $this->logLine($log, "the mailbox holds $size bytes; " . (int) $free . ' bytes free on /data');
+
+            if (!$this->emptyRestoreFolder()) {
+                return ['status' => 'error', 'error' => 'cannot prepare the restore folder'];
+            }
+            $this->state['running']['phase'] = 'restore';
+            $this->saveState();
+            $r = $this->restic($repo, ['restore', $t['snapshot'], '--target', Store::RESTORE, '--include', $src], $env, $log, 0);
+            if ($r['exit'] !== 0) {
+                return ['status' => 'error', 'error' => 'restore failed: ' . self::lastLine($r['err'])];
+            }
+            // under a fixed name: the address may hold characters Dovecot reads in a location
+            $box = Store::RESTORE . '/mailbox';
+            if (!is_dir(Store::RESTORE . $src . '/Maildir') || is_link(Store::RESTORE . $src) || is_link(Store::RESTORE . $src . '/Maildir')
+                || !@rename(Store::RESTORE . $src, $box)) {
+                return ['status' => 'error', 'error' => "{$t['source']} has no mail in this snapshot"];
+            }
+            // Dovecot would follow a link to mail elsewhere on this server: links in the
+            // Maildir (what is imported) are removed first, never followed
+            $links = self::removeLinks($box . '/Maildir');
+            if ($links) {
+                $this->logLine($log, "$links symbolic link(s) in the restored Maildir removed (never followed)");
+            }
+
+            // the folder: "Restored <time>", or "Restored <time> (2)" if that one exists
+            $dt = new \DateTimeImmutable($time);
+            $base = 'Restored ' . $dt->setTimezone($this->tz)->format('Y-m-d H:i');
+            $dov = ['HOME' => Store::CACHE];
+            // read line by line: Proc keeps only the end of a long output
+            $existing = [];
+            $list = Proc::run(['doveadm', 'mailbox', 'list', '-u', $t['target']], $dov, null, 120, function (string $line) use (&$existing) {
+                if (trim($line) !== '') {
+                    $existing[] = trim($line);
+                }
+            }, $log);
+            if ($list['exit'] !== 0) {
+                return ['status' => 'error', 'error' => 'import failed: ' . self::lastLine($list['err'])];
+            }
+            $folder = $base;
+            for ($n = 2; $this->folderTaken($existing, $folder); $n++) {
+                $folder = "$base ($n)";
+            }
+            $this->state['running']['phase'] = 'import';
+            $this->saveState();
+            $this->logLine($log, "import into the folder \"$folder\" of {$t['target']}");
+            $imp = Proc::run(['doveadm', 'import', '-u', $t['target'], '-s', 'maildir:' . $box . '/Maildir', $folder, 'all'],
+                $dov, null, 0, null, $log);
+            if ($imp['exit'] !== 0) {
+                return ['status' => 'error', 'error' => 'import failed: ' . self::lastLine($imp['err'])];
+            }
+            // the messages are in its subfolders ("<folder>.INBOX", ...); "<folder>*" would also count a "<folder> (2)"
+            $n = 0;
+            Proc::run(['doveadm', 'search', '-u', $t['target'], 'mailbox', $folder . '.*', 'all'], $dov, null, 600,
+                function (string $line) use (&$n) {
+                    if (trim($line) !== '') {
+                        $n++;
+                    }
+                }, $log);
+            return ['status' => 'ok', 'note' => "$n message(s) restored into the folder \"$folder\" of {$t['target']}"];
+        } finally {
+            $this->emptyRestoreFolder();
+            @rmdir(Store::RESTORE);
+            $this->removeTmp($tmp);
+        }
+    }
+
+    /** Bytes /data needs for a restore of $size bytes: the copy, the import, and some room left. */
+    public static function spaceNeeded(int $size): int
+    {
+        return 2 * $size + 268435456;
+    }
+
+    public static function enoughSpace(int $size, int $free): bool
+    {
+        return $free >= self::spaceNeeded($size);
+    }
+
+    /** Removes every symbolic link in this folder and below (never followed); returns how many. */
+    private static function removeLinks(string $dir): int
+    {
+        $n = 0;
+        foreach (@scandir($dir) ?: [] as $e) {
+            if ($e === '.' || $e === '..') {
+                continue;
+            }
+            $p = "$dir/$e";
+            if (is_link($p)) {
+                $n += @unlink($p) ? 1 : 0;
+            } elseif (is_dir($p)) {
+                $n += self::removeLinks($p);
+            }
+        }
+        return $n;
+    }
+
+    /** "1.5 GB": 1024 units, one decimal (the same as the admin's). */
+    public static function size(int $bytes): string
+    {
+        foreach (['TB' => 1 << 40, 'GB' => 1 << 30, 'MB' => 1 << 20, 'KB' => 1 << 10] as $u => $n) {
+            if ($bytes >= $n) {
+                return round($bytes / $n, 1) . " $u";
+            }
+        }
+        return "$bytes B";
+    }
+
+    /** Is this folder name (or a folder under it) in the list? */
+    private function folderTaken(array $existing, string $folder): bool
+    {
+        foreach ($existing as $name) {
+            if ($name === $folder || strpos($name, $folder . '.') === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Empties the restore folder (made 0700 if missing). Links are removed,
+     * never followed; folders restored without write permission get it first.
+     */
+    private function emptyRestoreFolder(): bool
+    {
+        $dir = Store::RESTORE;
+        if (is_link($dir) || (file_exists($dir) && !is_dir($dir))) {
+            return false;
+        }
+        if (!is_dir($dir)) {
+            return @mkdir($dir, 0700);
+        }
+        @chmod($dir, 0700);
+        $walk = function (string $path) use (&$walk) {
+            foreach (@scandir($path) ?: [] as $e) {
+                if ($e === '.' || $e === '..') {
+                    continue;
+                }
+                $p = "$path/$e";
+                if (is_dir($p) && !is_link($p)) {
+                    @chmod($p, 0700);
+                    $walk($p);
+                    @rmdir($p);
+                } else {
+                    @unlink($p);
+                }
+            }
+        };
+        $walk($dir);
+        return (@scandir($dir) ?: ['x', 'y', 'z']) === ['.', '..'];
+    }
+
+    /** Removes every snapshot of a job from a destination (restic forget + prune). */
+    private function forgetJob(string $did, array $d, array $t, $log): array
+    {
+        $tmp = $this->privateTmp();
+        if ($tmp === null) {
+            return ['status' => 'error', 'error' => 'cannot create a temporary folder'];
+        }
+        try {
+            [$env, $err] = $this->resticEnv($did, $d, $tmp);
+            if ($err) {
+                return ['status' => 'error', 'error' => $err];
+            }
+            $repo = Destination::repository($did, $d);
+            $json = '';
+            $l = $this->restic($repo, ['snapshots', '--json', '--host', self::HOST, '--tag', 'job:' . $t['job']], $env, $log, 600,
+                function (string $line) use (&$json) {
+                    $json .= $line;
+                }, null, self::MAX_LIST);
+            $list = json_decode($json, true);
+            if ($l['exit'] !== 0 || !is_array($list)) {
+                return ['status' => 'error', 'error' => 'cannot read the snapshots: ' . self::lastLine($l['err'])];
+            }
+            $ids = [];
+            foreach ($list as $snap) {
+                if (self::isSnapshotId($snap['id'] ?? null)) {
+                    $ids[] = $snap['id'];
+                }
+            }
+            if (!$ids) {
+                return ['status' => 'ok', 'note' => 'there were no backups of this job on this destination'];
+            }
+            $this->logLine($log, count($ids) . ' snapshot(s) of the job to remove');
+            $f = $this->restic($repo, array_merge(['forget', '--prune'], $ids), $env, $log, 0);
+            if ($f['exit'] !== 0) {
+                return ['status' => 'error', 'error' => 'removing the backups failed: ' . self::lastLine($f['err'])];
+            }
+            $this->state['destinations'][$did] = $this->space($did, $d, $env, $tmp, $log) + ['t' => time()];
+            return ['status' => 'ok', 'note' => count($ids) . ' backup(s) of the job removed'];
+        } finally {
+            $this->removeTmp($tmp);
+        }
     }
 
     // ---------------------------------------------------------------- what
@@ -667,14 +1021,14 @@ final class Engine
 
     /** restic, with one retry after removing stale locks (a run that died). */
     private function restic(string $repo, array $args, array $env, $log, int $timeout, ?callable $onLine = null,
-                            ?callable $onErrLine = null): array
+                            ?callable $onErrLine = null, int $maxLine = 1048576): array
     {
         $cmd = array_merge(['restic', '-r', $repo], $args);
-        $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine);
+        $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine, $maxLine);
         if ($r['exit'] !== 0 && stripos($r['err'], 'repository is already locked') !== false) {
             $this->logLine($log, 'repository locked: removing stale locks and retrying once');
             Proc::run(['restic', '-r', $repo, 'unlock'], $env, null, 300, null, $log);
-            $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine);
+            $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine, $maxLine);
         }
         return $r;
     }

@@ -1,0 +1,109 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.snapshots.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
+{% if live.running %}
+<p class="text-info"><i class="fa fa-spinner fa-spin"></i> <span class="bk-live-text">{{ live.running.text }}</span></p>
+{% endif %}
+
+{% if not destinations %}
+    <div class="alert alert-info">{{ 'poste_backup.jobs.no_destination'|trans }} <a href="{{ path('poste_backup_destination_new') }}">{{ 'poste_backup.destinations.add'|trans }}</a></div>
+{% else %}
+<form method="get" action="{{ path('poste_backup_snapshots') }}" class="bk-row" style="margin-bottom:12px">
+    <div class="form-group"><label class="control-label" for="bk-dest">{{ 'poste_backup.snapshots.destination'|trans }}</label>
+        <select id="bk-dest" name="dest">
+            {% for did, d in destinations %}<option value="{{ did }}"{% if did == dest %} selected{% endif %}>{{ d.name }}</option>{% endfor %}
+        </select></div>
+    <div class="form-group"><button type="submit" class="btn btn-default btn-sm"><i class="fa fa-refresh"></i> {{ 'poste_backup.snapshots.show'|trans }}</button></div>
+</form>
+
+{% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+{% if snapshots is not null %}
+<table class="table table-striped table-hover bk">
+    <thead><tr><th>{{ 'poste_backup.snapshots.time'|trans }}</th><th>{{ 'poste_backup.snapshots.job'|trans }}</th>
+        <th>{{ 'poste_backup.snapshots.what'|trans }}</th><th>{{ 'poste_backup.snapshots.id'|trans }}</th><th></th></tr></thead>
+    <tbody>
+    {% for s in snapshots %}
+        <tr>
+            <td style="white-space:nowrap">{{ s.time|date('Y-m-d H:i') }}</td>
+            <td>{% if s.job is null %}<span class="bk-muted">{{ 'poste_backup.snapshots.job_none'|trans }}</span>
+                {% elseif jobs[s.job] is defined %}{{ jobs[s.job].name }}
+                {% else %}<span class="bk-muted">{{ 'poste_backup.snapshots.job_deleted'|trans({'{id}': s.job}) }}</span>{% endif %}</td>
+            <td>{% if s.what.config %}{{ 'poste_backup.jobs.what_config'|trans }}{% endif %}{% if s.what.config and (s.what.all or s.what.boxes) %} + {% endif %}{% if s.what.all %}{{ 'poste_backup.jobs.what_all'|trans }}{% elseif s.what.boxes %}{{ 'poste_backup.jobs.what_selected'|trans({'{count}': s.what.boxes}) }}{% endif %}</td>
+            <td><code>{{ s.short }}</code></td>
+            <td class="text-right" style="white-space:nowrap">
+                {% if s.what.all or s.what.boxes %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: s.id}) }}"><i class="fa fa-user"></i> {{ 'poste_backup.snapshots.restore_mailbox'|trans }}</a>{% endif %}
+                {% if s.what.config %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_server', {dest: dest, snap: s.id}) }}"><i class="fa fa-server"></i> {{ 'poste_backup.snapshots.restore_server'|trans }}</a>{% endif %}
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="5" class="text-center"><em>{{ 'poste_backup.snapshots.none'|trans }}</em></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+<p class="help-block">{{ 'poste_backup.snapshots.read_help'|trans }}</p>
+
+{% if byJob %}
+<div class="bk-box" style="max-width:900px">
+    <h4><i class="fa fa-trash-o"></i> {{ 'poste_backup.snapshots.by_job_title'|trans }}</h4>
+    <p class="help-block">{{ 'poste_backup.snapshots.by_job_help'|trans }}</p>
+    <table class="table bk" style="margin-bottom:0">
+    {% for job, count in byJob %}
+        <tr>
+            <td>{% if job == '-' %}<span class="bk-muted">{{ 'poste_backup.snapshots.job_none'|trans }}</span>
+                {% elseif jobs[job] is defined %}<strong>{{ jobs[job].name }}</strong>
+                {% else %}<span class="bk-muted">{{ 'poste_backup.snapshots.job_deleted'|trans({'{id}': job}) }}</span>{% endif %}</td>
+            <td>{{ 'poste_backup.snapshots.count'|trans({'{count}': count}) }}</td>
+            <td class="text-right">{% if job != '-' %}
+                <form method="post" action="{{ path('poste_backup_snapshots_forget', {dest: dest}) }}" style="display:inline"
+                      onsubmit="return confirm('{{ 'poste_backup.snapshots.forget_confirm_js'|trans|e('js') }}')">
+                    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_forget') }}">
+                    <input type="hidden" name="job" value="{{ job }}">
+                    <label style="font-weight:normal; font-size:12px"><input type="checkbox" name="confirm" value="yes" required>
+                        {{ 'poste_backup.snapshots.forget_confirm_label'|trans }}</label>
+                    <button type="submit" class="btn btn-default btn-xs"><i class="fa fa-trash"></i> {{ 'poste_backup.snapshots.forget'|trans }}</button>
+                </form>{% endif %}</td>
+        </tr>
+    {% endfor %}
+    </table>
+</div>
+{% endif %}
+{% endif %}
+{% endif %}
+
+<div class="bk-box" style="max-width:900px">
+    <h4><i class="fa fa-history"></i> {{ 'poste_backup.snapshots.tasks_title'|trans }}</h4>
+    {% for id, p in pending %}
+        <p class="text-info"><i class="fa fa-hourglass-half"></i> {{ 'poste_backup.snapshots.pending'|trans }}:
+            {% if p.type == 'restore' %}{{ 'poste_backup.snapshots.task_restore'|trans({'{source}': p.source ?? '', '{target}': p.target ?? ''}) }}
+            {% else %}{{ 'poste_backup.snapshots.task_forget'|trans({'{job}': jobs[p.job ?? ''].name ?? (p.job ?? '')}) }}{% endif %}
+            &middot; {{ destinations[p.dest ?? ''].name ?? (p.dest ?? '') }}</p>
+    {% endfor %}
+    {% for t in tasks %}
+        <p style="margin:0 0 8px">
+            {% if t.status == 'ok' %}<span class="glyphicon glyphicon-ok text-success"></span>{% else %}<span class="glyphicon glyphicon-remove text-danger"></span>{% endif %}
+            {{ t.start|date('Y-m-d H:i') }} &middot;
+            {% if t.type == 'restore' %}{{ 'poste_backup.snapshots.task_restore'|trans({'{source}': t.source ?? '?', '{target}': t.target ?? '?'}) }}
+            {% else %}{{ 'poste_backup.snapshots.task_forget'|trans({'{job}': jobs[t.job ?? ''].name ?? (t.job ?? '?')}) }}{% endif %}
+            &middot; {{ destinations[t.dest ?? ''].name ?? (t.dest ?? '?') }}
+            {% if t.log %}<a href="{{ path('poste_backup_log', {name: t.log}) }}" style="font-size:12px">{{ 'poste_backup.jobs.log'|trans }}</a>{% endif %}
+            <br><span class="{{ t.status == 'ok' ? 'text-success' : 'text-danger' }}" style="font-size:12px">{{ t.status == 'ok' ? t.note : t.error }}</span>
+        </p>
+    {% else %}
+        {% if not pending %}<p class="bk-muted" style="margin:0">{{ 'poste_backup.snapshots.tasks_none'|trans }}</p>{% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    $('#bk-dest').chosen({width: '320px', disable_search_threshold: 10}).on('change', function () { this.form.submit(); });
+</script>
+{% include 'Base/PosteBackup/_live.html.twig' %}
+{% endblock %}

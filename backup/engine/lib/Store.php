@@ -13,13 +13,15 @@
  *     restic.key       repository password, made at the first start (0600);
  *                      never part of a backup, downloaded from the admin
  *     key-downloaded   when the key was last downloaded
- *     queue/           requests of the admin ("run now")
+ *     queue/           requests of the admin (run now, restore a mailbox, remove
+ *                      the backups of a job)
  *     ssh/<id>, .pub   key pair of an SFTP destination
  *   engine/    written by the engine
  *     state.json       last runs (0640)
  *     history.jsonl    one line per job run and destination
  *     logs/            output of each run
  *     staging/         consistent copies of the databases during a run (0700)
+ *     restore/         a mailbox restored from a snapshot, before it is imported (0700)
  */
 
 namespace PosteBackup;
@@ -38,6 +40,7 @@ final class Store
     public const HISTORY = self::ENGINE . '/history.jsonl';
     public const LOGS = self::ENGINE . '/logs';
     public const STAGING = self::ENGINE . '/staging';
+    public const RESTORE = self::ENGINE . '/restore';    // a mailbox being restored (0700, emptied after)
 
     // outside the volume: rebuilt when needed, never backed up
     public const CACHE = '/var/cache/poste-backup';

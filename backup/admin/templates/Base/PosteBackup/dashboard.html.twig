@@ -59,6 +59,8 @@
         <span class="bk-muted">{{ 'poste_backup.dashboard.destinations_summary'|trans({'{count}': destinations|length, '{problems}': destProblems}) }}</span></a>
     <a href="{{ path('poste_backup_jobs') }}"><i class="fa fa-clock-o"></i><strong>{{ 'poste_backup.jobs.title'|trans }}</strong>
         <span class="bk-muted">{{ 'poste_backup.dashboard.jobs_summary'|trans({'{count}': jobs|length}) }}{% if next %} &middot; {{ 'poste_backup.dashboard.next'|trans({'{time}': next|date('Y-m-d H:i')}) }}{% endif %}</span></a>
+    <a href="{{ path('poste_backup_snapshots') }}"><i class="fa fa-history"></i><strong>{{ 'poste_backup.snapshots.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.snapshots.summary'|trans }}</span></a>
     <a href="{{ path('poste_backup_logs') }}"><i class="fa fa-file-text-o"></i><strong>{{ 'poste_backup.logs.title'|trans }}</strong>
         <span class="bk-muted">{{ 'poste_backup.dashboard.logs_summary'|trans }}</span></a>
     <a href="{{ path('poste_backup_key') }}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>

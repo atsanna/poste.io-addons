@@ -8,7 +8,7 @@ snapshots and by restoring files and comparing them with the originals.
 Cron runs the engine every minute in the container too: the tests wait for
 the engine's lock instead of assuming who runs what.
 Every check prints PASS or FAIL; the exit code is the number of failures."""
-import fcntl, json, os, re, shutil, stat, subprocess, sys, time
+import fcntl, hashlib, json, os, re, shutil, stat, subprocess, sys, time
 sys.path.insert(0, "/tests")
 from panel import Panel, env
 
@@ -104,6 +104,12 @@ def run_job(job_id):
 def new_destination(values):
     url, html = post_form(BASE + "/destinations/new", values)
     m = re.search(r"/destinations/([a-f0-9]{12})/edit", url or "")
+    if not m and values.get("name") not in ("bad",):
+        # not expected (seen twice in many runs, never reproduced): everything about it
+        print("DIAG  destination %r not saved: HTTP %s, %s, alerts %s, page %r" % (values.get("name"), ADMIN.status, url,
+              re.findall(r'alert-danger">([^<]*)', html)[:3], re.sub(r"\s+", " ", html)[:300]), flush=True)
+        for log in ("/data/log/s6/php-fpm/current", "/data/log/nginx/error.log"):
+            print("DIAG  %s:\n%s" % (log, sh(["tail", "-n", "15", log]).stdout), flush=True)
     return (m.group(1) if m else None), html
 
 
@@ -672,6 +678,199 @@ z = sh(["php", "-r", 'require "/usr/local/lib/poste-backup/lib/Store.php"; forea
 check("the engine uses the time zone chosen in the admin", z.stdout.strip() == "Pacific/Kiritimati", (z.stdout.strip(), z.stderr.strip()[-200:]))
 post_form(BASE + "/jobs", {"timezone": ""}, suffix="/settings/timezone")
 check("time zone back to the container's", config()["settings"]["timezone"] == "", config().get("settings"))
+
+# ===================================================================== snapshots and restore
+print("--- backup: snapshots and restore")
+QUEUE = "/data/var/backup/settings/queue"
+
+
+def queued_tasks():
+    return sorted(f for f in os.listdir(QUEUE) if re.match(r"^\d{10}-(restore|forget)-[a-f0-9]{12}\.json$", f))
+
+
+def run_tasks(count_before, expect, timeout=600):
+    """Lets the engine take the requests in the queue; returns the new results."""
+    end = time.time() + timeout
+    while time.time() < end:
+        engine_idle()
+        sh(["poste-backup", "tick"])
+        tasks = state().get("tasks", [])
+        if len(tasks) >= count_before + expect and not queued_tasks():
+            return tasks[count_before:]
+        time.sleep(2)
+    return state().get("tasks", [])[count_before:]
+
+
+def message_files(home):
+    """Every message file of a mailbox (path -> md5), outside the restored folders."""
+    out = {}
+    for root, dirs, files in os.walk(home + "/Maildir"):
+        if "/.Restored " in root + "/" or os.path.basename(root) not in ("cur", "new"):
+            continue
+        for f in files:
+            out[os.path.join(root, f)] = hashlib.md5(open(os.path.join(root, f), "rb").read()).hexdigest()
+    return out
+
+
+def restored_folders(user):
+    return [l for l in sh(["doveadm", "mailbox", "list", "-u", user]).stdout.split("\n") if l.startswith("Restored ")]
+
+
+smb_snaps = sorted(snapshots(SMB, WHOLE) or [], key=lambda x: x["time"])
+SNAP = smb_snaps[-1]["id"] if smb_snaps else "0" * 64
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + SMB)
+check("snapshots page: the snapshots of the destination, with the job's name and what they hold",
+      ADMIN.status == 200 and SNAP[:8] in html and "Whole server" in html and "configuration + all mail" in html, (ADMIN.status, SNAP[:8]))
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + SMBBAD)
+check("a destination that cannot be read: the error is shown", ADMIN.status == 200 and "cannot read the snapshots" in html,
+      re.findall(r'alert-danger">([^<]*)', html)[:1])
+url, html = ADMIN.get(BASE + "/")
+check("dashboard: a link to snapshots and restore", "/admin/backup/snapshots" in html, url)
+
+url, html = ADMIN.get(BASE + "/snapshots/%s/%s/restore" % (SMB, SNAP))
+f = [x for x in Panel.parse(html).forms if x["method"].lower() == "post"]
+opts = re.findall(r'<option value="([^"]+)"', html)
+check("restore form: the mailboxes in the snapshot, and the server's mailboxes to restore into",
+      bool(f) and opts.count(E["ALICE"]) == 2 and opts.count(E["CAROL"]) == 2, opts)
+codes = []
+for bad in ("/snapshots/%s/%s/restore" % (SMB, SNAP[:8]), "/snapshots/%s/%s/restore" % (SMB, SNAP.upper()),
+            "/snapshots/%s/%s/restore" % ("eeeeeeeeeeee", SNAP), "/snapshots/%s/%s/server" % (SMB, "../" + SNAP[3:])):
+    ADMIN.get(BASE + bad)
+    codes.append(ADMIN.status)
+check("a snapshot id that is not one, or an unknown destination: not found", codes == [404, 404, 404, 404], codes)
+
+
+def restore_form(values, drop=()):
+    return post_form(BASE + "/snapshots/%s/%s/restore" % (SMB, SNAP), values, drop=drop)
+
+
+before_q = queued_tasks()
+restore_form({"source": E["ALICE"], "target": E["CAROL"]}, drop=("_token",))
+url, html = restore_form({"source": "nobody@example.test", "target": E["CAROL"]})
+check("restore: a mailbox that is not in the snapshot is refused, with a message", "is not in this snapshot" in html, re.findall(r'alert-danger">([^<]*)', html)[:1])
+url, html = restore_form({"source": E["ALICE"], "target": "nobody@example.test"})
+check("restore: a target that is not a mailbox of the server is refused, with a message", "nobody@example.test not found" in html,
+      re.findall(r'alert-danger">([^<]*)', html)[:1])
+check("restore: without the CSRF token or with a refused value, nothing is asked of the engine", queued_tasks() == before_q, queued_tasks())
+
+# into another mailbox: carol gets alice's mail in a new folder; nothing of carol's changes
+alice_home = "%s/%s" % (dom, E["ALICE"].split("@")[0])
+carol_home = sh(["sqlite3", "/data/users.db", "SELECT home FROM users WHERE address = '%s';" % E["CAROL"]]).stdout.strip()
+# carol's own mail before: one message, so that "nothing changed" could fail
+sh(["doveadm", "save", "-u", E["CAROL"]], input="From: x@example.net\r\nTo: %s\r\nSubject: carol's own\r\nMessage-ID: <carol-own@example.net>\r\n\r\nmine\r\n" % E["CAROL"])
+carol_before, alice_before = message_files(carol_home), message_files(alice_home)
+n0 = len(state().get("tasks", []))
+url, html = restore_form({"source": E["ALICE"], "target": E["CAROL"]})
+check("restore requested from the admin (the engine does it within a minute)", "Restore requested" in html, url)
+done = run_tasks(n0, 1)
+r = done[0] if done else {}
+folders = restored_folders(E["CAROL"])
+check("restore into another mailbox: ok, with the folder and the number of messages",
+      r.get("status") == "ok" and re.match(r'^\d+ message\(s\) restored into the folder "Restored \d{4}-\d\d-\d\d \d\d:\d\d" of ' + re.escape(E["CAROL"]) + '$',
+                                           r.get("note") or "") is not None, (r.get("status"), r.get("note"), r.get("error")))
+# message files only (Dovecot's index cache holds the headers too)
+found = [l for l in sh(["grep", "-rl", "restore-me@example.net", carol_home + "/Maildir"]).stdout.split("\n")
+         if "/.Restored " in l and re.search(r"/(cur|new)/[^/]+$", l)]
+check("the message is in carol's folder Restored <time>.INBOX, identical to alice's", len(found) == 1 and ".INBOX/" in found[0]
+      and open(found[0], "rb").read() == saved, found)
+subs = sh(["doveadm", "mailbox", "list", "-s", "-u", E["CAROL"]]).stdout.split("\n")
+check("the restored folders are subscribed (the mail programs show them)", any(f.endswith(".INBOX") for f in folders)
+      and all(f in subs for f in folders if "." in f), (folders, subs))
+after = message_files(carol_home)
+check("nothing of carol's own mail changed", len(carol_before) >= 1 and all(after.get(p) == h for p, h in carol_before.items()), len(carol_before))
+check("the restore folder of the engine is gone", not os.path.exists("/data/var/backup/engine/restore"), "removed")
+
+# into the same mailbox, twice: the second folder gets " (2)"
+n0 = len(state().get("tasks", []))
+restore_form({"source": E["ALICE"], "target": E["ALICE"]})
+restore_form({"source": E["ALICE"], "target": E["ALICE"]})
+done = run_tasks(n0, 2)
+notes = [t.get("note") or t.get("error") for t in done]
+counts = [int(n.split(" ")[0]) if n and n[0].isdigit() else -1 for n in notes]
+check("restored twice into the same mailbox: two folders, the second with (2), the same number of messages in both",
+      len(done) == 2 and all(t.get("status") == "ok" for t in done) and '(2)" of ' in (notes[1] if len(notes) > 1 else "")
+      and counts[0] > 0 and counts[0] == counts[-1], notes)
+after = message_files(alice_home)
+check("nothing of alice's own mail changed", len(alice_before) >= 1 and all(after.get(p) == h for p, h in alice_before.items()), len(alice_before))
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + SMB)
+check("snapshots page: the restores done, with their log", "Restore of %s into %s" % (E["ALICE"], E["CAROL"]) in html
+      and "/admin/backup/logs/" in html, url)
+
+# requests changed behind the admin: refused by the engine, nothing restored
+n0 = len(state().get("tasks", []))
+for name, body in (("1000000001-restore-0a0a0a0a0a0a.json", {"dest": SMB, "snapshot": SNAP, "source": "../../etc@example.test", "target": E["CAROL"]}),
+                   ("1000000002-restore-0b0b0b0b0b0b.json", {"dest": SMB, "snapshot": "f" * 64, "source": E["ALICE"], "target": E["CAROL"]})):
+    sh(["sh", "-c", 'cat > "$1"', "sh", QUEUE + "/" + name], user="mail", input=json.dumps(body))
+done = run_tasks(n0, 2)
+errs = [t.get("error") for t in done]
+check("a request changed behind the admin is refused; a snapshot that does not exist gives an error",
+      len(done) == 2 and errs[0] == "the request is not valid" and (errs[1] or "").startswith("cannot read the snapshot"), errs)
+check("still only the folders restored on purpose", len(restored_folders(E["CAROL"])) == len(folders), restored_folders(E["CAROL"]))
+
+# a symbolic link inside a backed up Maildir (to alice's Sent): removed before the
+# import, never followed (otherwise alice's mail would land in carol's folder)
+bob_maildir = "%s/%s/Maildir" % (dom, E["BOB"].split("@")[0])
+os.symlink(alice_home + "/Maildir/.Sent", bob_maildir + "/.Leak")
+run_job(BOB)
+os.remove(bob_maildir + "/.Leak")
+bob_snaps = sorted(snapshots(LOCAL, BOB) or [], key=lambda x: x["time"])
+n0 = len(state().get("tasks", []))
+post_form(BASE + "/snapshots/%s/%s/restore" % (LOCAL, bob_snaps[-1]["id"] if bob_snaps else "0" * 64), {"source": E["BOB"], "target": E["CAROL"]})
+done = run_tasks(n0, 1)
+r = done[0] if done else {}
+leak = [f for f in restored_folders(E["CAROL"]) if f.endswith(".Leak")]
+log = open("/data/var/backup/engine/logs/" + r["log"]).read() if r.get("log") else ""
+check("a symbolic link in a restored Maildir is removed, never followed (no folder with alice's mail in carol)",
+      r.get("status") == "ok" and not leak and "1 symbolic link(s) in the restored Maildir removed" in log, (r.get("note"), r.get("error"), leak))
+
+# the whole server: the commands of the documentation for this destination and snapshot, no password
+url, html = ADMIN.get(BASE + "/snapshots/%s/%s/server" % (SMB, SNAP))
+d = config()["destinations"][SMB]
+check("restore the server: the documented commands for this destination and snapshot, values quoted, without the password",
+      ADMIN.status == 200 and "restic restore %s --target /" % SNAP in html and "RESTIC_REPOSITORY=&#039;rclone:BK:%s/%s&#039;" % (d["share"], d["folder"]) in html
+      and "RCLONE_CONFIG_BK_HOST=&#039;%s&#039;" % d["host"] in html and d["password"] not in html, ADMIN.status)
+kd = config()["destinations"][SFTPKEY]
+key_snaps = sorted(snapshots(SFTPKEY, WHOLE) or [], key=lambda x: x["time"])
+url, html = ADMIN.get(BASE + "/snapshots/%s/%s/server" % (SFTPKEY, key_snaps[-1]["id"] if key_snaps else SNAP))
+check("restore the server from SFTP with a key: a key of one's own instead of a password, the confirmed server keys in known_hosts",
+      "RCLONE_CONFIG_BK_KEY_FILE=$PWD/id_backup" in html and "Password:" not in html and kd["hostkeys"]
+      and all(k.split(" ")[1] in html for k in kd["hostkeys"]), len(kd["hostkeys"]))
+local_list = json.loads(restic(LOCAL, "snapshots", "--json").stdout or "[]")
+with_config = sum(1 for x in local_list if "/data/var/backup/engine/staging" in x["paths"])
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + LOCAL)
+check("restore the server is offered only for snapshots with the configuration",
+      html.count("/server\"") == with_config and with_config < len(local_list), (html.count("/server\""), with_config, len(local_list)))
+
+# the backups of a job that no longer exists: listed, removed on request, the others stay
+TEMP = new_job("Temporary", [LOCAL], {"config": "1", "mail": "none"})
+TEMP = TEMP[0] if TEMP else "000000000000"
+run_job(TEMP)
+whole_local = len(snapshots(LOCAL, WHOLE) or [])
+temp_local = len(snapshots(LOCAL, TEMP) or [])
+post_form(BASE + "/jobs", suffix="/%s/delete" % TEMP)
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + LOCAL)
+check("a deleted job: its backups are listed as those of a deleted job", TEMP not in config()["jobs"] and temp_local >= 1
+      and "deleted job (%s)" % TEMP in html, (temp_local, TEMP in config()["jobs"]))
+forget_path = BASE + "/snapshots/%s/forget" % LOCAL
+before_q = queued_tasks()
+ADMIN.post(forget_path, {"_token": "x", "job": TEMP, "confirm": "yes"})
+f = [x for x in Panel.parse(ADMIN.get(BASE + "/snapshots?dest=" + LOCAL)[1]).forms if x["action"].endswith("/forget")
+     and ("job", TEMP, "hidden") in x["fields"]]
+token = [v for n, v, t in f[0]["fields"] if n == "_token"][0] if f else ""
+url, html = ADMIN.post(forget_path, {"_token": token, "job": TEMP})
+check("removal without the confirmation ticked, or without the CSRF token: refused, nothing asked of the engine",
+      "Tick the confirmation" in html and queued_tasks() == before_q, queued_tasks())
+n0 = len(state().get("tasks", []))
+url, html = ADMIN.post(forget_path, {"_token": token, "job": TEMP, "confirm": "yes"})
+done = run_tasks(n0, 1)
+r = done[0] if done else {}
+check("the backups of the deleted job removed from the destination", r.get("status") == "ok"
+      and r.get("note") == "%d backup(s) of the job removed" % temp_local and snapshots(LOCAL, TEMP) == [], (r.get("note"), r.get("error")))
+check("the backups of the other jobs on the same destination are untouched", len(snapshots(LOCAL, WHOLE) or []) == whole_local, whole_local)
+
+CS = Panel(E["ALICE"], E["PA"], lang="cs")
+url, html = CS.get(BASE + "/snapshots?dest=" + SMB)
+check("in Czech: the snapshots page", "Snímky a obnova" in html and "Obnovit schránku" in html, url)
 
 # one run at a time
 with open("/run/poste-backup.lock") as f:

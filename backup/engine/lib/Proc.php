@@ -23,11 +23,14 @@ final class Proc
      * @param callable|null $onLine  called with each line of standard output
      * @param resource|null $log     standard error is copied here as it comes
      * @param callable|null $onErrLine called with each line of standard error
+     * @param int           $maxLine a line of standard output longer than this is not
+     *                               given to $onLine (restic prints some lists as one line)
      * @return array{exit:int, out:string, err:string, timeout:bool}
      *         out/err keep only the last 64 KB
      */
     public static function run(array $cmd, array $env, ?string $stdin = null, int $timeout = 0,
-                               ?callable $onLine = null, $log = null, ?callable $onErrLine = null): array
+                               ?callable $onLine = null, $log = null, ?callable $onErrLine = null,
+                               int $maxLine = 1048576): array
     {
         $env += ['PATH' => self::PATH, 'LANG' => 'C.UTF-8', 'LC_ALL' => 'C.UTF-8'];
         $spec = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
@@ -78,8 +81,8 @@ final class Proc
                             $onLine(substr($partial, 0, $pos));
                             $partial = substr($partial, $pos + 1);
                         }
-                        // a line longer than 1 MB is not one we care about
-                        if (strlen($partial) > 1048576) {
+                        // a line longer than that is not one we care about
+                        if (strlen($partial) > $maxLine) {
                             $partial = '';
                         }
                     }

@@ -195,6 +195,23 @@ check('exit 3 with no file error understood: warning, never guessed fine', $o['s
 $o = PosteBackup\Engine::outcome(0, 0, 0);
 check('exit 0: ok, no note', $o['status'] === 'ok' && $o['error'] === null && $o['note'] === null, $o);
 
+// --- requests of the admin to the engine, validated again by the engine
+$snap = str_repeat('ab', 32);
+$t = PosteBackup\Engine::task('restore', ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'Bob@Example.com']);
+check('restore request: valid, the target in lower case', $t === ['type' => 'restore', 'dest' => '0a1b2c3d4e5f', 'snapshot' => $snap,
+      'source' => 'alice@example.com', 'target' => 'bob@example.com'], $t);
+foreach ([['snapshot' => substr($snap, 0, 8)], ['snapshot' => strtoupper($snap)], ['source' => '../../etc@example.com'], ['source' => 'a/b@example.com'],
+          ['source' => 'alice@../..'], ['target' => 'x'], ['dest' => '../x'], ['source' => ['alice@example.com']]] as $bad) {
+    $t = PosteBackup\Engine::task('restore', $bad + ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com']);
+    check('restore request refused: ' . json_encode($bad), !empty($t['invalid']) && count($t) === 2, $t);
+}
+check('removal request: valid', PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'])
+      === ['type' => 'forget', 'dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'], 'forget');
+check('removal request refused: an invalid job id', !empty(PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'job:x'])['invalid']), 'invalid');
+check('restore space: twice the mailbox plus 256 MB', PosteBackup\Engine::spaceNeeded(1073741824) === 2415919104
+      && PosteBackup\Engine::enoughSpace(1073741824, 2415919104) && !PosteBackup\Engine::enoughSpace(1073741824, 2415919103), 'limits');
+check('a request that is not JSON: refused', !empty(PosteBackup\Engine::task('restore', null)['invalid']), 'invalid');
+
 // --- the messages shown in the admin: recognised, and translated in both languages
 require_once '/opt/admin/vendor/autoload.php';
 $tr = [];
@@ -263,6 +280,14 @@ $samples = [
     'backup done, but the old snapshots were not removed: repository is already locked',
     '/backup/nfs is not empty and is not a backup repository: nothing written there',
     'the folder is not empty and is not a backup repository: nothing written there',
+    // snapshots and restore
+    'the request is not valid', 'bob@example.com is not in this snapshot', 'cannot read the snapshot: Fatal: no matching ID found',
+    'cannot read the snapshots: Fatal: wrong password or no key found', 'there are no backups on this destination yet',
+    'cannot prepare the restore folder', 'restore failed: Fatal: There were 2 errors', 'bob@example.com has no mail in this snapshot',
+    'import failed: Error: Mailbox INBOX: Permission denied', '3 message(s) restored into the folder "Restored 2026-10-11 02:00 (2)" of bob@example.com',
+    'there were no backups of this job on this destination', '4 backup(s) of the job removed',
+    'removing the backups failed: Fatal: repository is already locked',
+    'not enough free space on /data: the restore needs about 2.3 GB, 1.1 GB are free',
     // what the code writes, read from the code itself
     PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
 ];

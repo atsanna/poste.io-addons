@@ -1,0 +1,36 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.snapshots.server_title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
+<h4>{{ 'poste_backup.snapshots.server_title'|trans }}</h4>
+<p class="bk-muted">{{ 'poste_backup.snapshots.snapshot_of'|trans({'{id}': snap|slice(0, 8), '{destination}': destination.name}) }}</p>
+<div style="max-width:900px">
+    <p>{{ 'poste_backup.snapshots.server_help'|trans }}</p>
+    <ol>
+        <li>{{ 'poste_backup.snapshots.server_step1'|trans }}</li>
+        <li>{{ 'poste_backup.snapshots.server_step2'|trans }}
+            <pre class="bk-log">docker run --rm -it -v &lt;data folder of the new server&gt;:/data -v /root/restore:/restore --entrypoint bash &lt;image&gt;</pre></li>
+        <li>{{ 'poste_backup.snapshots.server_step3'|trans({'{host}': host}) }}
+            <pre class="bk-log" id="bk-commands">cd /restore
+tail -n 1 poste-backup-key-{{ host }}.txt &gt; restic.key
+chmod 600 restic.key
+export RESTIC_PASSWORD_FILE=$PWD/restic.key
+{{ commands }}
+restic snapshots --group-by tags --latest 1
+restic restore {{ snap }} --target /
+S=/data/var/backup/engine/staging
+cp "$S/users.db" /data/users.db
+cp "$S/dav.db" /data/dav.db
+cp "$S/roundcube.db" /data/roundcube/roundcube.db
+rm -f /data/users.db-wal /data/users.db-shm /data/dav.db-wal /data/dav.db-shm \
+      /data/roundcube/roundcube.db-wal /data/roundcube/roundcube.db-shm "$S"/*.db
+install -o mail -g mail -m 600 restic.key /data/var/backup/settings/restic.key
+exit</pre></li>
+        <li>{{ 'poste_backup.snapshots.server_step4'|trans }}</li>
+    </ol>
+    <p class="help-block">{{ 'poste_backup.snapshots.server_docs'|trans }}</p>
+</div>
+{% endblock %}

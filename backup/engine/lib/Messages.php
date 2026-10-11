@@ -122,6 +122,22 @@ final class Messages
             // before the next one, which would read "the folder" as a path
             '/^the folder is not empty and is not a backup repository: nothing written there$/' => ['folder_not_empty', []],
             '/^(.+) is not empty and is not a backup repository: nothing written there$/' => ['local_not_empty', ['path']],
+
+            // snapshots and restore (Panel, Engine)
+            '/^the request is not valid$/' => ['request_invalid', []],
+            '/^(.+) is not in this snapshot$/' => ['not_in_snapshot', ['address']],
+            '/^cannot read the snapshot: (.*)$/s' => ['snapshot_read', ['detail']],
+            '/^cannot read the snapshots: (.*)$/s' => ['snapshots_read', ['detail']],
+            '/^there are no backups on this destination yet$/' => ['no_backups_yet', []],
+            '/^cannot prepare the restore folder$/' => ['restore_folder', []],
+            '/^restore failed: (.*)$/s' => ['restore_failed', ['detail']],
+            '/^(.+) has no mail in this snapshot$/' => ['no_mail_in_snapshot', ['address']],
+            '/^import failed: (.*)$/s' => ['import_failed', ['detail']],
+            '/^(\d+) message\(s\) restored into the folder "(.+)" of (.+)$/' => ['restored', ['count', 'folder', 'mailbox']],
+            '/^there were no backups of this job on this destination$/' => ['forget_job_none', []],
+            '/^(\d+) backup\(s\) of the job removed$/' => ['forget_job_done', ['count']],
+            '/^removing the backups failed: (.*)$/s' => ['forget_job_failed', ['detail']],
+            '/^not enough free space on \/data: the restore needs about (.+), (.+) are free$/' => ['restore_space', ['need', 'free']],
         ];
     }
 

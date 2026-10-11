@@ -67,10 +67,14 @@ All notable changes to this project are documented here. The format follows
   messages in English and Czech. The
   encryption key is made at the first start and downloaded from the admin.
   The engine runs as `mail`, never as root, and validates the settings again
-  before using them. Restores are made from the command line for now:
-  a mailbox, the backups read from another machine with only the key file,
-  and a whole server rebuilt on a new installation, each procedure run by the
-  tests as written in the [docs](docs/backup.md).
+  before using them. **Snapshots and restore** in the admin: the snapshots
+  of each destination, a mailbox restored into a new folder *Restored <time>*
+  of the same or another mailbox (nothing already there is changed; refused
+  if `/data` has no room for it), the backups of a job removed (also of a
+  deleted job), and the commands to rebuild the whole server filled in for a
+  snapshot. The backups can also be read from another machine with only the
+  key file, and a whole server is rebuilt on a new installation: both
+  procedures are run by the tests as written in the [docs](docs/backup.md).
 
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read

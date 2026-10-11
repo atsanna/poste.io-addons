@@ -122,9 +122,25 @@ class PosteBackupController extends AbstractController
         foreach ($state['jobs'] as $id => $j) {
             $sig[$id] = [$j['last_end'] ?? 0, $j['status'] ?? ''];
         }
-        $live = ['signature' => md5(json_encode([$sig, $run['job'] ?? null, array_keys(Panel::pendingRuns()), Panel::keyDownloaded() !== null])),
+        $tasks = is_array($state['tasks'] ?? null) ? $state['tasks'] : [];
+        $lastTask = $tasks ? end($tasks) : null;
+        $live = ['signature' => md5(json_encode([$sig, $run['job'] ?? null, $run['task'] ?? null, array_keys(Panel::pendingRuns()),
+                                                 array_keys(Panel::pendingTasks()), $lastTask['id'] ?? null, Panel::keyDownloaded() !== null])),
                  'running' => null];
-        if ($run) {
+        if ($run && isset($run['task'])) {
+            // a request of the admin: a restore or a removal
+            $dest = $run['dest'] ?? null;
+            $destName = $dest !== null ? ($cfg['destinations'][$dest]['name'] ?? $dest) : '';
+            $detail = $run['type'] === 'restore'
+                ? $this->t('poste_backup.live.restore_' . (in_array($run['phase'] ?? '', ['restore', 'import'], true) ? $run['phase'] : 'prepare'),
+                    ['{source}' => (string) ($run['source'] ?? ''), '{target}' => (string) ($run['target'] ?? ''), '{destination}' => $destName])
+                : $this->t('poste_backup.live.forget', ['{destination}' => $destName]);
+            $live['running'] = [
+                'job' => null,
+                'detail' => $detail,
+                'text' => $this->t('poste_backup.live.task_since', ['{since}' => date('H:i', (int) $run['since'])]) . ' — ' . $detail,
+            ];
+        } elseif ($run) {
             $dest = $run['dest'] ?? null;
             $destName = $dest !== null ? ($cfg['destinations'][$dest]['name'] ?? $dest) : '';
             $p = $run['progress'] ?? null;
@@ -812,6 +828,209 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_jobs');
     }
 
+    // ================================================================ snapshots and restore
+
+    /** What a snapshot holds, from its paths: [configuration?, all mail?, number of mailboxes]. */
+    private static function snapshotWhat(array $paths): array
+    {
+        $boxes = 0;
+        foreach ($paths as $p) {
+            if (preg_match('#^/data/domains/[^/]+/[^/]+$#', $p)) {
+                $boxes++;
+            }
+        }
+        return ['config' => in_array(Store::STAGING, $paths, true), 'all' => in_array('/data/domains', $paths, true), 'boxes' => $boxes];
+    }
+
+    /** The recent requests (restores, removals) with their messages in the user's language, newest first. */
+    private function tasksShown(array $state): array
+    {
+        $out = [];
+        foreach (array_reverse((array) ($state['tasks'] ?? [])) as $t) {
+            if (!is_array($t)) {
+                continue;
+            }
+            $t['error'] = $this->msg(is_string($t['error'] ?? null) ? $t['error'] : null);
+            $t['note'] = $this->msg(is_string($t['note'] ?? null) ? $t['note'] : null);
+            $log = (string) ($t['log'] ?? '');
+            $t['log'] = self::isLogName($log) && is_file(Store::LOGS . '/' . $log) ? $log : null;
+            $out[] = $t;
+        }
+        return $out;
+    }
+
+    /**
+     * The snapshots of a destination (read when the page opens), the backups of
+     * each job, the recent restores and removals.
+     *
+     * @Route("/snapshots", name="poste_backup_snapshots", methods={"GET"})
+     */
+    public function snapshotsAction(Request $request)
+    {
+        $cfg = Panel::config();
+        $did = (string) $request->query->get('dest', '');
+        if (!isset($cfg['destinations'][$did])) {
+            $did = (string) (array_key_first($cfg['destinations']) ?? '');
+        }
+        $snapshots = null;
+        $error = null;
+        $jobs = [];
+        if ($did !== '') {
+            [$snapshots, $error] = Panel::snapshots($did, $cfg['destinations'][$did]);
+            foreach ($snapshots ?? [] as $i => $sn) {
+                $snapshots[$i]['what'] = self::snapshotWhat($sn['paths']);
+                $key = $sn['job'] ?? '-';
+                $jobs[$key] = ($jobs[$key] ?? 0) + 1;
+            }
+        }
+        $state = Panel::state();
+        return $this->render('Base/PosteBackup/snapshots.html.twig', [
+            'destinations' => $cfg['destinations'],
+            'dest' => $did,
+            'snapshots' => $snapshots,
+            'error' => $error !== null ? $this->msg($error) : null,
+            'jobs' => $cfg['jobs'],
+            'byJob' => $jobs,
+            'tasks' => $this->tasksShown($state),
+            'pending' => Panel::pendingTasks(),
+            'live' => $this->live($cfg, $state),
+        ]);
+    }
+
+    /**
+     * A mailbox of a snapshot into a mailbox of this server, in a new folder
+     * "Restored <time>": the form, then the request to the engine.
+     *
+     * @Route("/snapshots/{dest}/{snap}/restore", name="poste_backup_snapshot_restore", methods={"GET", "POST"},
+     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
+     */
+    public function snapshotRestoreAction(Request $request, string $dest, string $snap)
+    {
+        $cfg = Panel::config();
+        $d = $cfg['destinations'][$dest] ?? null;
+        if ($d === null) {
+            throw $this->createNotFoundException();
+        }
+        [$boxes, $error] = Panel::snapshotMailboxes($dest, $d, $snap);
+        $mailboxes = Panel::mailboxes();
+        if ($request->isMethod('POST') && $error === null) {
+            if ($this->csrf($request, 'poste_backup_restore')) {
+                $source = (string) $request->request->get('source', '');
+                $target = strtolower((string) $request->request->get('target', ''));
+                if (!in_array($source, $boxes, true)) {
+                    $this->addFlash('error', $this->msg("$source is not in this snapshot"));
+                } elseif (!in_array($target, $mailboxes, true)) {
+                    $this->addFlash('error', $this->msg("mailbox $target not found"));
+                } else {
+                    $id = Panel::requestTask('restore', ['dest' => $dest, 'snapshot' => $snap, 'source' => $source, 'target' => $target]);
+                    $this->addFlash($id ? 'notice' : 'error', $this->t($id ? 'poste_backup.snapshots.restore_queued' : 'poste_backup.job.queue_error'));
+                    if ($id) {
+                        return $this->redirectToRoute('poste_backup_snapshots', ['dest' => $dest]);
+                    }
+                }
+            }
+            return $this->redirectToRoute('poste_backup_snapshot_restore', ['dest' => $dest, 'snap' => $snap]);
+        }
+        return $this->render('Base/PosteBackup/snapshot_restore.html.twig', [
+            'dest' => $dest,
+            'destination' => $d,
+            'snap' => $snap,
+            'boxes' => $boxes ?? [],
+            'mailboxes' => $mailboxes,
+            'error' => $error !== null ? $this->msg($error) : null,
+        ]);
+    }
+
+    /**
+     * Restoring the whole server is done on a new installation, from the
+     * command line (docs/backup.md): the commands for this destination and
+     * this snapshot, ready to copy (passwords are asked when they run).
+     *
+     * @Route("/snapshots/{dest}/{snap}/server", name="poste_backup_snapshot_server", methods={"GET"},
+     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
+     */
+    public function snapshotServerAction(string $dest, string $snap)
+    {
+        $d = Panel::config()['destinations'][$dest] ?? null;
+        if ($d === null) {
+            throw $this->createNotFoundException();
+        }
+        // the values passed the strict patterns of Config; each one is quoted for the
+        // shell anyway (an SMB share may contain "$")
+        $q = function (string $v): string {
+            return escapeshellarg($v);
+        };
+        $obscured = 'export RCLONE_CONFIG_BK_PASS=$(printf \'%s\n\' "$P" | rclone obscure -) && unset P';
+        $lines = [];
+        switch ($d['type']) {
+            case 'smb':
+                $lines[] = 'export RCLONE_CONFIG_BK_TYPE=smb RCLONE_CONFIG_BK_HOST=' . $q($d['host']) . ' RCLONE_CONFIG_BK_USER=' . $q($d['user'])
+                         . ($d['domain'] !== '' ? ' RCLONE_CONFIG_BK_DOMAIN=' . $q($d['domain']) : '');
+                $lines[] = "read -rsp 'Password: ' P; echo";
+                $lines[] = $obscured;
+                $lines[] = 'export RESTIC_REPOSITORY=' . $q('rclone:BK:' . $d['share'] . ($d['folder'] !== '' ? '/' . $d['folder'] : ''));
+                break;
+            case 'sftp':
+                // the server's keys confirmed in this admin, not whatever answers on that day
+                $host = $d['port'] === 22 ? $d['host'] : '[' . $d['host'] . ']:' . $d['port'];
+                $lines[] = 'printf \'%s\n\' ' . implode(' ', array_map(function ($k) use ($q, $host) {
+                    return $q($host . ' ' . $k);
+                }, $d['hostkeys'])) . ' > known_hosts';
+                $lines[] = 'export RCLONE_CONFIG_BK_TYPE=sftp RCLONE_CONFIG_BK_HOST=' . $q($d['host']) . ' RCLONE_CONFIG_BK_PORT=' . $d['port'] . ' \\';
+                $lines[] = '       RCLONE_CONFIG_BK_USER=' . $q($d['user']) . ' RCLONE_CONFIG_BK_KNOWN_HOSTS_FILE=$PWD/known_hosts';
+                if ($d['auth'] === 'key') {
+                    $lines[] = '# the key pair of this destination stays on this server and is not in the backups:';
+                    $lines[] = '# add a key of yours to that account on the SFTP server, put its private key here as id_backup, then:';
+                    $lines[] = 'export RCLONE_CONFIG_BK_KEY_FILE=$PWD/id_backup';
+                } else {
+                    $lines[] = "read -rsp 'Password: ' P; echo";
+                    $lines[] = $obscured;
+                }
+                $lines[] = 'export RESTIC_REPOSITORY=' . $q('rclone:BK:' . $d['folder']);
+                break;
+            case 's3':
+                $lines[] = 'export RCLONE_CONFIG_BK_TYPE=s3 RCLONE_CONFIG_BK_PROVIDER=Other RCLONE_CONFIG_BK_ENDPOINT=' . $q($d['endpoint']) . ' \\';
+                $lines[] = '       RCLONE_CONFIG_BK_ACCESS_KEY_ID=' . $q($d['access_key']) . ($d['region'] !== '' ? ' RCLONE_CONFIG_BK_REGION=' . $q($d['region']) : '');
+                $lines[] = "read -rsp 'Secret key: ' P; echo";
+                $lines[] = 'export RCLONE_CONFIG_BK_SECRET_ACCESS_KEY=$P && unset P';
+                $lines[] = 'export RESTIC_REPOSITORY=' . $q('rclone:BK:' . $d['bucket'] . ($d['folder'] !== '' ? '/' . $d['folder'] : ''));
+                break;
+            default:
+                $lines[] = '# where the share or disk of this destination is mounted on the host:';
+                $lines[] = 'export RESTIC_REPOSITORY=' . $q($d['path']);
+        }
+        return $this->render('Base/PosteBackup/snapshot_server.html.twig', [
+            'dest' => $dest,
+            'destination' => $d,
+            'snap' => $snap,
+            'commands' => implode("\n", $lines),
+            'host' => preg_replace('/[^A-Za-z0-9.-]/', '', (string) gethostname()),
+        ]);
+    }
+
+    /**
+     * Removes every backup of a job from a destination (also of a job that no
+     * longer exists): a request to the engine, after a confirmation.
+     *
+     * @Route("/snapshots/{dest}/forget", name="poste_backup_snapshots_forget", methods={"POST"}, requirements={"dest"="[a-f0-9]{12}"})
+     */
+    public function snapshotsForgetAction(Request $request, string $dest)
+    {
+        if (!isset(Panel::config()['destinations'][$dest])) {
+            throw $this->createNotFoundException();
+        }
+        if ($this->csrf($request, 'poste_backup_forget')) {
+            $job = (string) $request->request->get('job', '');
+            if ($request->request->get('confirm') !== 'yes') {
+                $this->addFlash('error', $this->t('poste_backup.snapshots.forget_confirm_missing'));
+            } else {
+                $id = Panel::requestTask('forget', ['dest' => $dest, 'job' => $job]);
+                $this->addFlash($id ? 'notice' : 'error', $this->t($id ? 'poste_backup.snapshots.forget_queued' : 'poste_backup.job.queue_error'));
+            }
+        }
+        return $this->redirectToRoute('poste_backup_snapshots', ['dest' => $dest]);
+    }
+
     // ================================================================ key
 
     /**
@@ -843,8 +1062,10 @@ class PosteBackupController extends AbstractController
         $text = "Encryption key of the backups of the mail server $host\n"
               . "(poste.io-addons, backup add-on). Downloaded " . date('Y-m-d H:i T') . ".\n\n"
               . "Without this key the backups cannot be read. Keep it outside the server,\n"
-              . "where you keep other passwords. To restore on a new server, see\n"
-              . "docs/backup.md (\"Restoring\").\n\n"
+              . "where you keep other passwords. The key is the last line of this file.\n"
+              . "To read the backups or to rebuild the server, see docs/backup.md of\n"
+              . "poste.io-addons (\"Reading the backups without the server\",\n"
+              . "\"Rebuilding the whole server\").\n\n"
               . $key . "\n";
         return new Response($text, 200, [
             'Content-Type' => 'text/plain; charset=utf-8',

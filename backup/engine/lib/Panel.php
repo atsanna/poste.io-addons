@@ -56,7 +56,7 @@ final class Panel
 
     public static function state(): array
     {
-        return (Store::readJson(Store::STATE) ?? []) + ['jobs' => [], 'running' => null, 'config_errors' => [], 'destinations' => []];
+        return (Store::readJson(Store::STATE) ?? []) + ['jobs' => [], 'running' => null, 'config_errors' => [], 'destinations' => [], 'tasks' => []];
     }
 
     /** Is the engine working right now? (its lock is taken) */
@@ -93,6 +93,161 @@ final class Panel
             }
         }
         return $out;
+    }
+
+    /**
+     * Asks the engine to restore a mailbox or to remove the backups of a job
+     * (at its next minute). $fields are checked by the engine again. Returns the
+     * id of the request (its log and its result have it), or null.
+     */
+    public static function requestTask(string $type, array $fields): ?string
+    {
+        if (!in_array($type, ['restore', 'forget'], true) || !empty(Engine::task($type, $fields)['invalid'])) {
+            return null;
+        }
+        $id = Config::newId();
+        // the time first: the engine runs the requests in the order they were made
+        $path = Store::QUEUE . '/' . time() . '-' . $type . '-' . $id . '.json';
+        return Store::writeAtomic($path, json_encode($fields + ['at' => time()]) . "\n", 0640) ? $id : null;
+    }
+
+    /** Requests waiting for the engine: id => fields + type. */
+    public static function pendingTasks(): array
+    {
+        $out = [];
+        foreach (@scandir(Store::QUEUE) ?: [] as $f) {
+            if (preg_match('/^\d{10}-(restore|forget)-([a-f0-9]{12})\.json$/', $f, $m)) {
+                $out[$m[2]] = (Store::readJson(Store::QUEUE . '/' . $f) ?? []) + ['type' => $m[1]];
+            }
+        }
+        return $out;
+    }
+
+    // ------------------------------------------------------------- snapshots
+
+    /**
+     * restic on a destination for the admin's pages: read only (--no-lock: a
+     * backup running meanwhile is not disturbed), with a cache of its own and a
+     * time limit. $onLine gets each line of the output. Returns [Proc result, error].
+     */
+    private static function resticRead(string $did, array $d, array $args, callable $onLine): array
+    {
+        if (self::key() === null) {
+            return [null, 'the encryption key is missing (' . Store::KEY . ')'];
+        }
+        $tmp = sys_get_temp_dir() . '/poste-backup-read-' . bin2hex(random_bytes(6));
+        if (!@mkdir($tmp, 0700)) {
+            return [null, 'cannot create a temporary folder'];
+        }
+        try {
+            [$env, $err] = Destination::env($did, $d, $tmp, $tmp);
+            if ($err) {
+                return [null, $err];
+            }
+            $env['RESTIC_PASSWORD_FILE'] = Store::KEY;
+            $env['RESTIC_CACHE_DIR'] = Store::CACHE . '/restic-admin';
+            $r = Proc::run(array_merge(['restic', '-r', Destination::repository($did, $d), '--no-lock'], $args), $env, null, 180, $onLine,
+                null, null, Engine::MAX_LIST);
+            if ($r['exit'] !== 0) {
+                if (preg_match('/Is there a repository at the following location|unable to open config file|repository does not exist/i', $r['err'])) {
+                    return [null, 'there are no backups on this destination yet'];
+                }
+                return [null, 'cannot read the snapshots: ' . Engine::lastLine($r['err'])];
+            }
+            return [$r, null];
+        } finally {
+            foreach (@scandir($tmp) ?: [] as $f) {
+                if ($f !== '.' && $f !== '..') {
+                    @unlink("$tmp/$f");
+                }
+            }
+            @rmdir($tmp);
+        }
+    }
+
+    /**
+     * The snapshots of a destination, newest first: [[id, short, time, job,
+     * paths], ...] or an error. job: the id in the tag "job:<id>" (null if none).
+     */
+    public static function snapshots(string $did, array $d): array
+    {
+        $json = '';
+        [$r, $err] = self::resticRead($did, $d, ['snapshots', '--json'], function (string $line) use (&$json) {
+            $json .= $line;
+        });
+        if ($err) {
+            return [null, $err];
+        }
+        $list = json_decode($json, true);
+        if (!is_array($list)) {
+            return [null, 'cannot read the snapshots: ' . Engine::lastLine($r['err'] ?: 'not valid JSON')];
+        }
+        $out = [];
+        foreach ($list as $s) {
+            if (!is_array($s) || !Engine::isSnapshotId($s['id'] ?? null) || !is_string($s['time'] ?? null)) {
+                continue;
+            }
+            try {
+                $t = (new \DateTimeImmutable($s['time']))->getTimestamp();
+            } catch (\Exception $e) {
+                continue;
+            }
+            $job = null;
+            foreach ((array) ($s['tags'] ?? []) as $tag) {
+                if (is_string($tag) && preg_match('/^job:([a-f0-9]{12})$/', $tag, $m)) {
+                    $job = $m[1];
+                }
+            }
+            $paths = array_values(array_filter((array) ($s['paths'] ?? []), 'is_string'));
+            $out[] = ['id' => $s['id'], 'short' => substr($s['id'], 0, 8), 'time' => $t, 'job' => $job, 'paths' => $paths];
+        }
+        usort($out, function ($a, $b) {
+            return $b['time'] <=> $a['time'];
+        });
+        return [$out, null];
+    }
+
+    /**
+     * The mailboxes in a snapshot (the folders two levels under /data/domains),
+     * sorted: [[addresses], error]. A snapshot of the configuration only has none.
+     */
+    public static function snapshotMailboxes(string $did, array $d, string $snap): array
+    {
+        if (!Engine::isSnapshotId($snap)) {
+            return [null, 'invalid id'];
+        }
+        $domains = [];
+        [$r, $err] = self::resticRead($did, $d, ['ls', '--json', $snap, '/data/domains'], function (string $line) use (&$domains) {
+            $j = json_decode($line, true);
+            if (is_array($j) && ($j['type'] ?? '') === 'dir' && preg_match('#^/data/domains/([^/]+)$#', (string) ($j['path'] ?? ''), $m)) {
+                $domains[] = $m[1];
+            }
+        });
+        if ($err) {
+            return [null, $err];
+        }
+        if (!$domains) {
+            return [[], null];
+        }
+        $boxes = [];
+        $dirs = array_map(function ($dom) {
+            return '/data/domains/' . $dom;
+        }, $domains);
+        [$r, $err] = self::resticRead($did, $d, array_merge(['ls', '--json', $snap], $dirs), function (string $line) use (&$boxes) {
+            $j = json_decode($line, true);
+            if (is_array($j) && ($j['type'] ?? '') === 'dir' && preg_match('#^/data/domains/([^/]+)/([^/]+)$#', (string) ($j['path'] ?? ''), $m)) {
+                $a = $m[2] . '@' . $m[1];
+                if (Config::isAddress($a)) {
+                    $boxes[$a] = true;
+                }
+            }
+        });
+        if ($err) {
+            return [null, $err];
+        }
+        $boxes = array_keys($boxes);
+        sort($boxes);
+        return [$boxes, null];
     }
 
     // ------------------------------------------------------------- mailboxes
@@ -349,11 +504,6 @@ final class Panel
 
     public static function size(int $bytes): string
     {
-        foreach (['TB' => 1 << 40, 'GB' => 1 << 30, 'MB' => 1 << 20, 'KB' => 1 << 10] as $u => $n) {
-            if ($bytes >= $n) {
-                return round($bytes / $n, 1) . " $u";
-            }
-        }
-        return "$bytes B";
+        return Engine::size($bytes);
     }
 }

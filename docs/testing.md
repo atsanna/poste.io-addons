@@ -187,7 +187,20 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 - space on each destination, the logs page and the log of a run (names that
   are not logs, or links, are not found), live progress while a job runs,
   the pages in Czech, the time zone of the container and the one chosen in
-  the admin, the days the logs are kept, one run at a time.
+  the admin, the days the logs are kept, one run at a time;
+- snapshots and restore: the snapshots of a destination with their job and
+  content, the error of a destination that cannot be read; a mailbox
+  restored from the admin into another mailbox and twice into the same one:
+  a new folder *Restored <time>* (then *(2)*) with the same number of
+  messages, subscribed, the message identical to the original, nothing of
+  the mailbox's own mail changed, the engine's work folder removed; refused
+  without the CSRF token, for a mailbox not in the snapshot, a target that is
+  not a mailbox, a snapshot id that is not one; requests changed behind the
+  admin refused by the engine, a snapshot that does not exist an error; the
+  page of commands to restore the server (values quoted, no password, for
+  SFTP with a key a key of one's own and the confirmed server keys), offered
+  only for snapshots with the configuration; the backups of a deleted job
+  removed after the confirmation, those of the other jobs untouched.
 
 **Restore** (`tests/test_restore.sh`, `tests/read_backups.sh`,
 `tests/rebuild_server.sh`, `tests/test_restore.py`): the two procedures of

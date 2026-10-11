@@ -7,8 +7,7 @@ mounted by the host such as NFS).
 
 > **Status of this add-on.** This page describes what is in the repository
 > now. The add-on is being built in stages; what a stage does not do yet is
-> said where it matters (for example restoring from the admin: today restores
-> are done from the command line, see [Restoring](#restoring)).
+> said where it matters (for example notifications, which come next).
 
 ![Backup](screenshots/backup-dashboard.png)
 
@@ -249,10 +248,9 @@ data it stored, how long it took, or the error, with a link to its log.
 
 Deleting a job (or a destination) removes it from the settings only: the
 backups it made stay on the destinations, encrypted, and can still be
-restored. They are no longer thinned out by any keep rule. Removing them comes to
-the admin with the next stage; for now it is done by hand: list them with
-`poste-backup restic <destination id> snapshots --tag job:<job id>`, then
-`poste-backup restic <destination id> forget --prune <snapshot ids>`.
+restored. They are no longer thinned out by any keep rule: remove them from
+*Snapshots and restore* when they are not needed any more (see
+[Removing the backups of a job](#removing-the-backups-of-a-job)).
 
 ## Watching the backups
 
@@ -283,10 +281,46 @@ backup is seen only in the admin, so look at it from time to time, or watch
 
 ## Restoring
 
-> Restoring from the admin (a mailbox into a folder *Restored …* of the same
-> mailbox, the whole server onto a new installation, browsing a snapshot) is
-> the next stage of this add-on. Until then, restores are done from the
-> command line, as below: everything needed is already in the container.
+*Backup > Snapshots and restore* lists the snapshots of a destination (read
+from it when the page opens), newest first: when, which job, what it holds
+(configuration, all mail, some mailboxes). From there:
+
+- **Restore a mailbox…** (a snapshot with mail): choose the mailbox in the
+  snapshot and the mailbox of this server to restore it into, the same one or
+  another. Its messages go into a **new folder** *Restored <time of the
+  snapshot>* of that mailbox, with the snapshot's folders under it (*INBOX*,
+  *Sent*, …), the messages' flags (read, …), and subscribed, so that mail
+  programs show them: **nothing already in the mailbox is changed**. Restoring the same snapshot again makes *Restored … (2)*. The
+  restore runs in the background (the engine takes it within a minute: the
+  page shows it, then its result and its log). The snapshot's mailbox is
+  first restored into a work folder on `/data`, then imported by Dovecot, so
+  it is written twice: the engine adds up its size first and refuses the
+  restore unless `/data` has room for twice the mailbox plus 256 MB (a full
+  disk would stop the mail). The messages count towards the quota of the
+  mailbox. A mailbox deleted from the server since the backup can be
+  restored into another one. Symbolic links in the restored Maildir are
+  removed before the import, never followed.
+- **Restore the server…**: the whole server is restored on a **new
+  installation**, not from a running server (its files would be replaced
+  while in use). The page shows the commands of
+  [Rebuilding the whole server](#rebuilding-the-whole-server) filled in for
+  that destination and that snapshot (only for snapshots with the
+  configuration); passwords are asked when they run and are never shown. For
+  SFTP the server's keys are the ones confirmed in the admin, and a
+  destination that logs in with a key needs a key of your own: the admin's
+  key pair is not in the backups.
+
+### Removing the backups of a job
+
+Under the list, *Backups of each job* counts the snapshots of each job on
+that destination, also of jobs that no longer exist (*deleted job*).
+**Remove these backups** (after ticking the confirmation) removes every
+snapshot of that job from that destination and frees the data that only
+they hold (restic's `forget --prune`); the backups of the other jobs are
+not touched. It cannot be undone. A job that still exists makes new backups
+at its next run.
+
+### From the command line
 
 `poste-backup restic <destination id> <restic command>` runs restic on a
 destination's repository with its settings and the key. The ids are in the
@@ -544,8 +578,8 @@ database and owner compared with the old server.
   would control the whole NAS.
 - **Protect the backups from the server** itself: see
   [If the mail server is compromised](#if-the-mail-server-is-compromised).
-- **Test a restore** now and then (a mailbox into a separate folder, see
-  [Restoring](#restoring); the backups read from another machine with the key
+- **Test a restore** now and then (a mailbox into a test mailbox, from
+  *Snapshots and restore*, see [Restoring](#restoring); the backups read from another machine with the key
   file, see [Reading the backups without the server](#reading-the-backups-without-the-server)):
   a backup that was never restored is a hope, not a backup.
 - **Look at the dashboard** after changes (a new destination, a new job, an
@@ -646,13 +680,15 @@ add-on.
     config.json                           destinations and jobs (0600)
     restic.key                            the encryption key (0600)
     key-downloaded, tests.json            when the key was downloaded, last tests
-    queue/                                "run now" requests
+    queue/                                requests: run now, restore a mailbox, remove
+                                          the backups of a job
     ssh/<id>, <id>.pub                    key pairs of SFTP destinations
   engine/                                 (the engine)
-    state.json                            last run of each job
+    state.json                            last run of each job, last restores and removals
     history.jsonl                         one line per run and destination
     logs/                                 log of each run (kept for the days set in the admin)
     staging/                              consistent copies of the databases, during a run
+    restore/                              a mailbox being restored, before it is imported
 /var/cache/poste-backup                   restic's cache (rebuilt when needed)
 /run/poste-backup.lock                    one run at a time
 ```
@@ -675,8 +711,10 @@ something that is not a folder owned by root.
 
 - **One repository per server**: do not point two mail servers to the same
   folder.
-- No notifications yet, and restores are made from the command line (see
-  [Restoring](#restoring)): both come with the next stages.
+- No notifications yet: they come with the next stages.
+- A mailbox is restored into a new folder; single messages or folders are
+  not chosen from the admin (take what you need from the restored folder).
+  The whole server is restored from the command line, on a new installation.
 - restic and rclone are the versions of the image's Debian release (restic
   0.14, rclone 1.60 on Poste.io 2.5.17).
 - The first backup of a large server takes a while (everything is new); later

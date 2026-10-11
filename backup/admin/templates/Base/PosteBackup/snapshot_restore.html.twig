@@ -1,0 +1,45 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.snapshots.restore_title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
+<h4>{{ 'poste_backup.snapshots.restore_title'|trans }}</h4>
+<p class="bk-muted">{{ 'poste_backup.snapshots.snapshot_of'|trans({'{id}': snap|slice(0, 8), '{destination}': destination.name}) }}</p>
+
+{% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+{% elseif not boxes %}
+    <div class="alert alert-info">{{ 'poste_backup.snapshots.no_mail'|trans }}</div>
+{% else %}
+<form method="post" class="bk-form">
+    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_restore') }}">
+    <div class="bk-row">
+        <div class="form-group"><label class="control-label" for="bk-source">{{ 'poste_backup.snapshots.source'|trans }}</label>
+            <select id="bk-source" name="source">
+                {% for b in boxes %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
+            </select></div>
+        <div class="form-group"><label class="control-label" for="bk-target">{{ 'poste_backup.snapshots.target'|trans }}</label>
+            <select id="bk-target" name="target">
+                {% for m in mailboxes %}<option value="{{ m }}"{% if m == boxes|first|lower %} selected{% endif %}>{{ m }}</option>{% endfor %}
+            </select></div>
+    </div>
+    <p class="help-block">{{ 'poste_backup.snapshots.restore_help'|trans }}</p>
+    <button type="submit" class="btn btn-primary"><i class="fa fa-undo"></i> {{ 'poste_backup.snapshots.restore_submit'|trans }}</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block javascripts %}
+<script>
+    $('#bk-source, #bk-target').chosen({width: '320px', search_contains: true});
+    // the same mailbox by default, when it exists on this server
+    $('#bk-source').on('change', function () {
+        var v = $(this).val().toLowerCase();
+        if ($('#bk-target option[value="' + v.replace(/["\\]/g, '') + '"]').length) {
+            $('#bk-target').val(v).trigger('chosen:updated');
+        }
+    });
+</script>
+{% endblock %}
