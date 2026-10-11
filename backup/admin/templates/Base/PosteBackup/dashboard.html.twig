@@ -17,7 +17,7 @@
 
 <div class="bk-status">
     <div class="bk-card"><h4><i class="fa fa-hdd-o"></i> {{ 'poste_backup.dashboard.disk'|trans }}</h4>
-        <div class="bk-bar"><span style="width: {{ disk.usedPercent }}%"></span></div>
+        <div class="bk-bar"><span class="{{ disk.usedPercent >= 90 ? 'bk-full' : (disk.usedPercent >= 80 ? 'bk-warn' : '') }}" style="width: {{ disk.usedPercent }}%"></span></div>
         {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': disk.freeText, '{total}': disk.totalText}) }}</div>
     <div class="bk-card"><h4><i class="fa fa-clock-o"></i> {{ 'poste_backup.dashboard.last_backups'|trans }}</h4>
         {% for job in jobs %}
@@ -43,7 +43,7 @@
             {% if sp is null %}
                 <span class="bk-muted">{{ 'poste_backup.dashboard.space_unknown'|trans }}</span>
             {% else %}
-                {% if sp.usedPercent is not null %}<div class="bk-bar"><span style="width: {{ sp.usedPercent }}%"></span></div>{% endif %}
+                {% if sp.usedPercent is not null %}<div class="bk-bar"><span class="{{ sp.usedPercent >= 90 ? 'bk-full' : (sp.usedPercent >= 80 ? 'bk-warn' : '') }}" style="width: {{ sp.usedPercent }}%"></span></div>{% endif %}
                 {% if sp.used is not null %}{{ 'poste_backup.dashboard.space_used'|trans({'{used}': sp.used}) }}{% endif %}
                 {% if sp.free is not null and sp.total is not null %} &middot; {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': sp.free, '{total}': sp.total}) }}
                 {% elseif sp.free is not null %} &middot; {{ 'poste_backup.dashboard.space_free'|trans({'{free}': sp.free}) }}{% endif %}

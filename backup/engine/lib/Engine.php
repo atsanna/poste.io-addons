@@ -7,6 +7,8 @@
  * tick (every minute): settings validated again, requests of the admin, jobs
  * that are due; one at a time (a lock), so a long backup simply makes the next
  * ticks wait. A job:
+ *   0. with mail: brings the list of the messages up to date (Index), for the
+ *      restore of single messages;
  *   1. collects what to back up: consistent copies of the databases (checked
  *      with an integrity check), the configuration files, the mail;
  *   2. for each destination: checks it, creates the repository only where
@@ -24,6 +26,7 @@ final class Engine
     public const HOST = 'poste';             // restic --host: fixed, the container name may change
     public const MAX_LIST = 16777216;        // restic prints a list of snapshots as one line: up to 16 MB
     public const MAX_FOLDERS = 2000;         // folders of a mailbox chosen for a restore
+    public const MAX_MESSAGES = 1000;        // single messages chosen for a restore
     private const TAG = 'poste-backup';
 
     private array $cfg;
@@ -130,11 +133,12 @@ final class Engine
         $this->tz = Schedule::zone($this->cfg['settings']['timezone']);
         date_default_timezone_set($this->tz->getName());
         $this->state = Store::readJson(Store::STATE) ?? [];
-        $this->state += ['jobs' => [], 'running' => null, 'destinations' => [], 'tasks' => []];
+        $this->state += ['jobs' => [], 'running' => null, 'destinations' => [], 'tasks' => [], 'oldest_mail' => []];
         $this->state['config_errors'] = $errors;
         // forget jobs and destinations that no longer exist
         $this->state['jobs'] = array_intersect_key($this->state['jobs'], $this->cfg['jobs']);
         $this->state['destinations'] = array_intersect_key((array) $this->state['destinations'], $this->cfg['destinations']);
+        $this->state['oldest_mail'] = array_intersect_key((array) $this->state['oldest_mail'], $this->cfg['destinations']);
     }
 
     private function saveState(): void
@@ -159,6 +163,12 @@ final class Engine
         $this->state['running'] = ['job' => $id, 'since' => $start, 'dest' => null, 'phase' => 'prepare', 'progress' => null];
         $this->saveState();
 
+        // before the copies: the backup of the configuration gets the list as it is now
+        if ($job['mail'] !== 'none') {
+            $this->phase('index', null);
+            $this->updateIndex($job, $log);
+            $this->phase('prepare', null);
+        }
         [$paths, $warnings, $error] = $this->collect($job, $log);
         foreach ($warnings as $w) {
             $this->logLine($log, "warning: $w");
@@ -195,6 +205,7 @@ final class Engine
             ]);
         }
         $this->cleanStaging();
+        $this->pruneIndex($log);
 
         $worst = 'ok';
         foreach ($results as $r) {
@@ -260,24 +271,44 @@ final class Engine
 
     /**
      * The choices of a mailbox restore, checked the same way by the admin's
-     * form and by the engine: the folders of the snapshot's mailbox ('' is its
-     * inbox, '.Name' a folder as Dovecot names it on disk), the name of the new
-     * folder and the existing folder it goes into ('' = at the top), and an
-     * optional filter (received from/to, sender, subject). Returns [options, errors].
+     * form and by the engine: what (either the folders of the snapshot's
+     * mailbox, '' its inbox and '.Name' a folder as Dovecot names it on disk,
+     * with an optional filter: received from/to, sender, subject; or, when
+     * "messages" is given, single messages: their paths in the snapshot's
+     * Maildir, see Index::isMessagePath), the name of the new folder and the
+     * existing folder it goes into ('' = at the top). Returns [options, errors].
      */
     public static function restoreOptions(array $raw): array
     {
         $e = [];
-        $o = ['folders' => [], 'name' => '', 'parent' => '', 'since' => '', 'until' => '', 'from' => '', 'subject' => ''];
+        $o = ['folders' => [], 'messages' => [], 'name' => '', 'parent' => '', 'since' => '', 'until' => '', 'from' => '', 'subject' => ''];
         $folders = $raw['folders'] ?? null;
-        if (!is_array($folders) || !$folders) {
+        $single = array_key_exists('messages', $raw);
+        if ($single) {
+            // single messages: no folders and no filter
+            $msgs = $raw['messages'];
+            if (!is_array($msgs) || !$msgs) {
+                $e[] = 'choose at least one message';
+            } elseif (count($msgs) > self::MAX_MESSAGES) {
+                $e[] = 'too many messages: up to ' . self::MAX_MESSAGES . ' at a time';
+            } else {
+                foreach ($msgs as $m) {
+                    if (!Index::isMessagePath($m)) {
+                        $e[] = 'message: not valid';
+                        break;
+                    }
+                    $o['messages'][] = $m;
+                }
+                $o['messages'] = array_values(array_unique($o['messages']));
+            }
+        } elseif (!is_array($folders) || !$folders) {
             $e[] = 'choose at least one folder';
         } elseif (count($folders) > self::MAX_FOLDERS) {
             $e[] = 'too many folders';
         } else {
             foreach ($folders as $f) {
                 // a folder of the snapshot, never a path: no "/" and never "." or ".."
-                if (!is_string($f) || ($f !== '' && ($f === '..' || preg_match('/^\.[^\/\x00-\x1f\x7f]{1,255}$/', $f) !== 1))) {
+                if (!is_string($f) || ($f !== '' && ($f === '..' || preg_match('/^\.[^\/\x00-\x1f\x7f]{1,255}$/D', $f) !== 1))) {
                     $e[] = 'folder: not valid';
                     break;
                 }
@@ -303,7 +334,7 @@ final class Engine
             $o['parent'] = $parent;
         }
         foreach (['since', 'until'] as $k) {
-            $v = $raw[$k] ?? '';
+            $v = $single ? '' : ($raw[$k] ?? '');
             if ($v === '' || $v === null) {
                 continue;
             }
@@ -317,7 +348,7 @@ final class Engine
             $e[] = 'dates: the first one is after the second';
         }
         foreach (['from' => 'sender', 'subject' => 'subject'] as $k => $what) {
-            $v = $raw[$k] ?? '';
+            $v = $single ? '' : ($raw[$k] ?? '');
             if (!is_string($v) || !mb_check_encoding($v, 'UTF-8') || mb_strlen($v) > 100 || preg_match('/[\x00-\x1f\x7f]/', $v)) {
                 $e[] = "$what: up to 100 characters";
                 continue;
@@ -362,7 +393,8 @@ final class Engine
         $d = $did !== null ? ($this->cfg['destinations'][$did] ?? null) : null;
         $this->logLine($log, $t['type'] === 'restore'
             ? 'restore of a mailbox' . (empty($t['invalid']) ? " ({$t['source']} from snapshot {$t['snapshot']} into {$t['target']}, "
-                . count($t['folders']) . ' folder(s), new folder "' . ($t['parent'] !== '' ? $t['parent'] . '.' : '') . $t['name'] . '")' : '')
+                . ($t['messages'] ? count($t['messages']) . ' message(s)' : count($t['folders']) . ' folder(s)')
+                . ', new folder "' . ($t['parent'] !== '' ? $t['parent'] . '.' : '') . $t['name'] . '")' : '')
             : 'removal of the backups of a job' . (empty($t['invalid']) ? " ({$t['job']})" : ''));
         $this->state['running'] = ['task' => $id, 'type' => $t['type'], 'since' => $start, 'dest' => $did, 'phase' => $t['type'],
                                    'source' => $t['source'] ?? null, 'target' => $t['target'] ?? null, 'job' => null, 'progress' => null];
@@ -453,14 +485,16 @@ final class Engine
             if (!$found) {
                 return ['status' => 'error', 'error' => "{$t['source']} is not in this snapshot"];
             }
-            // the folders chosen, as the snapshot has them, and their size: the mailbox is
-            // written twice on /data (restored, then imported), so is there room for both?
+            // the folders (or the messages) chosen, as the snapshot has them, and their size:
+            // the mail is written twice on /data (restored, then imported), so is there room for both?
             $present = [];
+            $found = [];
             $size = 0;
             $chosen = array_flip($t['folders']);
+            $wanted = array_flip($t['messages']);
             $maildir = $src . '/Maildir';
             $sz = $this->restic($repo, ['ls', '--json', '--recursive', $t['snapshot'], $src], $env, $log, 0,
-                function (string $line) use (&$present, &$size, $chosen, $maildir) {
+                function (string $line) use (&$present, &$found, &$size, $chosen, $wanted, $maildir) {
                     $j = json_decode($line, true);
                     if (!is_array($j) || !is_string($j['path'] ?? null)) {
                         return;
@@ -473,7 +507,14 @@ final class Engine
                     if (preg_match('#^(?:/(\.[^/]+))?/(cur|new)(/|$)#', $rel, $m) === 1) {
                         $f = $m[1] ?? '';
                         $present[$f] = true;
-                        if (($j['type'] ?? '') === 'file' && isset($chosen[$f])) {
+                        if (($j['type'] ?? '') !== 'file') {
+                            return;
+                        }
+                        if (isset($chosen[$f])) {
+                            $size += (int) ($j['size'] ?? 0);
+                        } elseif (isset($wanted[substr($rel, 1)])) {
+                            // a message chosen: a file at exactly that path of the snapshot
+                            $found[substr($rel, 1)] = true;
                             $size += (int) ($j['size'] ?? 0);
                         }
                     }
@@ -486,24 +527,31 @@ final class Engine
                     return ['status' => 'error', 'error' => 'a chosen folder is not in this snapshot'];
                 }
             }
+            if (count($found) !== count($wanted)) {
+                return ['status' => 'error', 'error' => 'a chosen message is not in this snapshot'];
+            }
             $free = @disk_free_space('/data');
             if ($free !== false && !self::enoughSpace($size, (int) $free)) {
                 return ['status' => 'error', 'error' => 'not enough free space on /data: the restore needs about '
                     . self::size(self::spaceNeeded($size)) . ', ' . self::size((int) $free) . ' are free'];
             }
-            $this->logLine($log, count($t['folders']) . " folder(s) chosen, $size bytes; " . (int) $free . ' bytes free on /data');
+            $this->logLine($log, ($t['messages'] ? count($t['messages']) . ' message(s)' : count($t['folders']) . ' folder(s)')
+                . " chosen, $size bytes; " . (int) $free . ' bytes free on /data');
 
             if (!$this->emptyRestoreFolder()) {
                 return ['status' => 'error', 'error' => 'cannot prepare the restore folder'];
             }
             $this->state['running']['phase'] = 'restore';
             $this->saveState();
-            // only the folders chosen (the inbox is the Maildir's own cur and new)
+            // only the folders chosen (the inbox is the Maildir's own cur and new), or the messages
             $args = ['restore', $t['snapshot'], '--target', Store::RESTORE];
             foreach ($t['folders'] as $f) {
                 foreach ($f === '' ? ['/cur', '/new'] : ['/' . $f] as $part) {
                     array_push($args, '--include', self::globEscape($maildir . $part));
                 }
+            }
+            foreach ($t['messages'] as $m) {
+                array_push($args, '--include', self::globEscape($maildir . '/' . $m));
             }
             $r = $this->restic($repo, $args, $env, $log, 0);
             if ($r['exit'] !== 0) {
@@ -700,6 +748,106 @@ final class Engine
         }
     }
 
+    // ---------------------------------------------------------------- the list of the messages
+
+    /** The index (Index) for the mailboxes of a job; a problem goes to the log, never fails the job. */
+    private function updateIndex(array $job, $log): void
+    {
+        $server = Index::mailboxes();
+        if ($server === null) {
+            $this->logLine($log, 'list of the messages: not updated (cannot read the mailboxes of the server)');
+            return;
+        }
+        $all = $job['mail'] === 'all';
+        $boxes = $all ? $server : array_values(array_intersect(array_map('strtolower', $job['mailboxes']), $server));
+        $t0 = microtime(true);
+        try {
+            [$new, $gone, $problems] = Index::update($boxes, $all ? $server : null);
+            foreach ($problems as $p) {
+                $this->logLine($log, "list of the messages: $p");
+            }
+            $this->logLine($log, sprintf('list of the messages: %d mailbox(es), %d new message(s), %d no longer there (%.1f s)',
+                count($boxes), $new, $gone, microtime(true) - $t0));
+        } catch (\Throwable $e) {
+            $this->logLine($log, 'list of the messages: not updated: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * After the old snapshots of a destination are removed: when its oldest
+     * snapshot with mail was taken (of any job, deleted ones too), or null if
+     * it has none. Unchanged if the snapshots cannot be read.
+     */
+    private function oldestMail(string $did, string $repo, array $env, $log): void
+    {
+        $json = '';
+        $l = $this->restic($repo, ['snapshots', '--json', '--host', self::HOST], $env, $log, 600, function (string $line) use (&$json) {
+            $json .= $line;
+        }, null, self::MAX_LIST);
+        $list = json_decode($json, true);
+        if ($l['exit'] !== 0 || !is_array($list)) {
+            return;
+        }
+        $oldest = null;
+        foreach ($list as $snap) {
+            $mail = false;
+            foreach ((array) ($snap['paths'] ?? []) as $p) {
+                if (is_string($p) && ($p === '/data/domains' || preg_match('#^/data/domains/[^/]+/[^/]+$#', $p) === 1)) {
+                    $mail = true;
+                }
+            }
+            if (!$mail || !is_string($snap['time'] ?? null)) {
+                continue;
+            }
+            try {
+                $t = (new \DateTimeImmutable($snap['time']))->getTimestamp();
+            } catch (\Exception $e) {
+                return;
+            }
+            $oldest = $oldest === null ? $t : min($oldest, $t);
+        }
+        $this->state['oldest_mail'][$did] = ['t' => $oldest, 'checked' => time()];
+    }
+
+    /**
+     * Removes from the index the messages no backup holds any more: gone from
+     * their mailbox before the oldest snapshot with mail kept on any
+     * destination. Only when that is known for every destination of the jobs
+     * with mail (a destination that never worked would otherwise stop it for
+     * ever); the other destinations count when it is known for them. At worst
+     * an old message of a destination left out is shown without its details.
+     */
+    private function pruneIndex($log): void
+    {
+        if (!is_file(Index::PATH)) {
+            return;
+        }
+        foreach ($this->cfg['jobs'] as $job) {
+            foreach ($job['mail'] !== 'none' ? $job['destinations'] : [] as $did) {
+                if (!is_array($this->state['oldest_mail'][$did] ?? null)) {
+                    return;
+                }
+            }
+        }
+        $oldest = null;
+        foreach ($this->state['oldest_mail'] as $o) {
+            if (is_array($o) && ($o['t'] ?? null) !== null) {
+                $oldest = $oldest === null ? (int) $o['t'] : min($oldest, (int) $o['t']);
+            }
+        }
+        if ($oldest === null) {
+            return;
+        }
+        try {
+            $n = Index::prune($oldest);
+            if ($n > 0) {
+                $this->logLine($log, "list of the messages: $n message(s) removed, no backup holds them any more");
+            }
+        } catch (\Throwable $e) {
+            $this->logLine($log, 'list of the messages: not cleaned: ' . $e->getMessage());
+        }
+    }
+
     // ---------------------------------------------------------------- what
 
     /** Returns [paths, warnings, error]. */
@@ -824,7 +972,7 @@ final class Engine
     }
 
     /** Home folder of a mailbox, from Poste.io's own database (read only). */
-    private function home(string $address): ?string
+    public static function home(string $address): ?string
     {
         try {
             $db = new \SQLite3('/data/users.db', SQLITE3_OPEN_READONLY);
@@ -860,8 +1008,10 @@ final class Engine
             return false;
         }
         @chmod(Store::STAGING, 0700);
-        foreach (['users.db' => '/data/users.db', 'dav.db' => '/data/dav.db', 'roundcube.db' => '/data/roundcube/roundcube.db'] as $name => $src) {
-            if (!is_file($src)) {
+        // and the list of the messages of the backups (ours)
+        foreach (['users.db' => '/data/users.db', 'dav.db' => '/data/dav.db', 'roundcube.db' => '/data/roundcube/roundcube.db',
+                  'index.db' => Index::PATH] as $name => $src) {
+            if (!is_file($src) || is_link($src)) {
                 continue;
             }
             $dst = Store::STAGING . '/' . $name;
@@ -877,6 +1027,14 @@ final class Engine
                 $ok = $this->copyForeignDb($src, $dst, $log);
             }
             $chk = Proc::run(['sqlite3', '-bail', $dst, 'PRAGMA integrity_check;'], [], null, 600, null, $log);
+            if ((!$ok || trim($chk['out']) !== 'ok') && $name === 'index.db') {
+                // the list of the messages never stops a backup: this one goes without it
+                foreach (['', '-wal', '-shm'] as $suffix) {
+                    @unlink($dst . $suffix);
+                }
+                $this->logLine($log, 'list of the messages: not in this backup (its copy failed or is damaged)');
+                continue;
+            }
             if (!$ok || trim($chk['out']) !== 'ok') {
                 $err = "copy of $src failed or is damaged";
                 return false;
@@ -919,7 +1077,7 @@ final class Engine
 
     private function cleanStaging(): void
     {
-        foreach (['users.db', 'dav.db', 'roundcube.db'] as $name) {
+        foreach (['users.db', 'dav.db', 'roundcube.db', 'index.db'] as $name) {
             foreach (['', '-wal', '-shm'] as $suffix) {
                 @unlink(Store::STAGING . '/' . $name . $suffix);
                 @unlink(Store::STAGING . '/raw-' . $name . $suffix);
@@ -1014,6 +1172,7 @@ final class Engine
                 $res['status'] = 'warning';
                 $res['error'] = 'backup done, but the old snapshots were not removed: ' . self::lastLine($f['err']);
             }
+            $this->oldestMail($did, $repo, $env, $log);
             $this->phase('space', $did);
             $res['space'] = $this->space($did, $d, $env, $tmp, $log);
             return $res;

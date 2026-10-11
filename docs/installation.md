@@ -59,7 +59,7 @@ docker compose up -d
 ```
 
 Then open `https://<your host>/admin/`. The new entries **External Mailboxes**,
-**External Mailbox Logs**, **ActiveSync Logs** and **Backup** are in the left
+**External Mailbox Logs**, **ActiveSync Logs** and **Mailserver backup** are in the left
 menu (super admins only); the theme switch is in the top bar.
 
 ## 3. Existing installations: the `/data` volume
@@ -102,7 +102,7 @@ by a start script at every container start.
 
 **Backup** needs nothing by hand either: its folder on the volume
 (`/data/var/backup`) and the encryption key are made by a start script (the
-key only once, at the first start). Then download the key from *Backup >
+key only once, at the first start). Then download the key from *Mailserver backup >
 Encryption key* and keep it outside the server (see
 [backup.md](backup.md#the-encryption-key)).
 
@@ -125,7 +125,7 @@ and a status view (getmail version, folders, number of mailboxes).
 docker exec mailserver poste-backup status
 ```
 
-In the admin, **Backup** says on its dashboard if the engine has not run for
+In the admin, **Mailserver backup** says on its dashboard if the engine has not run for
 more than ten minutes or if the start script could not prepare its folder.
 
 ## Upgrading Poste.io

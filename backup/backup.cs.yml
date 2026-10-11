@@ -2,8 +2,8 @@
 # own top-level key only: other add-ons append "menu:", and a YAML file cannot
 # have the same key twice
 poste_backup:
-  menu: Zálohy
-  title: Zálohy
+  menu: Zálohy poštovního serveru
+  title: Zálohy poštovního serveru
   error:
     csrf: Neplatný token CSRF, načtěte stránku znovu
   action:
@@ -202,6 +202,7 @@ poste_backup:
     progress: "{destination}: {percent} % · {done} z {total} · souborů {files} z {total_files}"
     prune: "{destination}: odstraňují se staré snímky"
     space: "{destination}: měří se zabrané místo"
+    index: "aktualizace seznamu zpráv"
     restore_prepare: "čte se snímek na cíli {destination}"
     restore_restore: "obnovuje se {source} z cíle {destination}"
     restore_import: "import do nové složky schránky {target}"
@@ -276,6 +277,34 @@ poste_backup:
     target_same_help: "Vybrána je stejná schránka; místo ní lze vybrat kteroukoli jinou schránku tohoto serveru."
     summary_where: "Zprávy se uloží do nové složky „{folder}“ schránky {mailbox} i s podsložkami a příznaky; pokud je název už obsazený, přidá se k němu číslo. Nic, co už ve schránce je, se nezmění."
     summary_no_target: "Vyberte schránku, do které se má obnovit."
+    what_folders: "Celé složky, nebo zprávy odpovídající filtru"
+    what_folders_help: "vyberte složky; volitelně přijato od/do, odesílatel, předmět"
+    what_messages: "Jednotlivé zprávy"
+    what_messages_help: "najděte je v seznamu a zaškrtněte (nejvýše {max, number} najednou)"
+    folder: "Složka"
+    search: "Odesílatel nebo předmět obsahuje"
+    search_button: "Hledat"
+    page_all: "všechny zprávy této stránky"
+    received: "Přijato"
+    sender: "Od"
+    subject_col: "Předmět"
+    size: "Velikost"
+    clear: "zrušit výběr"
+    previous: "předchozí"
+    next: "další"
+    range: "%from%–%to% z %total% nalezených"
+    none_found: "Žádná zpráva nenalezena."
+    loading: "Čtení snímku…"
+    load_error: "Seznam se nepodařilo načíst: obnovte stránku."
+    no_details: "bez podrobností: uloženo dříve, než se začal vést seznam zpráv"
+    chosen_one: "vybrána 1 zpráva"
+    chosen_few: "vybrány %n% zprávy"
+    chosen_other: "vybráno %n% zpráv"
+    restore_n_one: "Obnovit 1 zprávu"
+    restore_n_few: "Obnovit %n% zprávy"
+    restore_n_other: "Obnovit %n% zpráv"
+    too_many_chosen: "Nejvýše {max, number} zpráv najednou: vyberte méně, nebo obnovte složky s filtrem."
+    summary_messages: "Vybrané zprávy se uloží do nové složky „{folder}“ schránky {mailbox} (s „ (2)“, pokud je název obsazený) ve svých složkách a s příznaky. Nic, co už ve schránce je, se nezmění."
   logs:
     keep_title: "Uchovávání záznamů"
     keep_logs: "Záznamy běhů po dobu"
@@ -427,6 +456,11 @@ poste_backup:
     parent_missing: "složka {folder} ve schránce {mailbox} není"
     nothing_matched: "výběru neodpovídá žádná zpráva: nic nebylo obnoveno"
     choose_target: "vyberte schránku, do které se má obnovit"
+    choose_message: "vyberte alespoň jednu zprávu"
+    too_many_messages: "příliš mnoho zpráv: nejvýše {max} najednou"
+    message_invalid: "zpráva: neplatná"
+    message_not_in_snapshot: "vybraná zpráva v tomto snímku není"
+    list_read: "seznam zpráv nelze přečíst: {detail}"
   settings:
     timezone: "Časové pásmo plánů"
     timezone_container: "pásmo kontejneru ({zone})"

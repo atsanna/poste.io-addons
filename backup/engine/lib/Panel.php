@@ -262,6 +262,46 @@ final class Panel
         return [['time' => $time, 'boxes' => $boxes], null];
     }
 
+    /**
+     * One page of the messages of a mailbox in a snapshot, to choose single
+     * messages: the snapshot's files (read once, then from a cache) with the
+     * sender and subject the index knows. $folder: null for every folder.
+     * Returns [['total' => n, 'rows' => [[path, folder, time, size, sender, subject], ...]], error].
+     */
+    public static function snapshotMessages(string $did, array $d, string $snap, string $address, ?string $folder, string $q, int $page): array
+    {
+        if (!Engine::isSnapshotId($snap) || !Config::isAddress($address)) {
+            return [null, 'invalid id'];
+        }
+        [$local, $domain] = explode('@', $address, 2);
+        $maildir = '/data/domains/' . $domain . '/' . $local . '/Maildir';
+        $key = $did . '/' . $snap . '/' . $address;
+        try {
+            $db = Index::cache();
+            $err = Index::fill($db, $key, $maildir, function (callable $add) use ($did, $d, $snap, $maildir) {
+                $seen = false;
+                [$r, $err] = self::resticRead($did, $d, ['ls', '--json', '--recursive', $snap, $maildir], function (string $line) use ($add, &$seen) {
+                    $j = json_decode($line, true);
+                    if (!is_array($j)) {
+                        return;
+                    }
+                    if (($j['struct_type'] ?? '') === 'snapshot') {
+                        $seen = true;
+                    }
+                    $add($j);
+                });
+                // a snapshot that is not there: restic only warns, and the list would be empty
+                return $err ?? ($seen ? null : 'cannot read the snapshot: ' . Engine::lastLine($r['err'] ?: 'no snapshot'));
+            });
+            if ($err !== null) {
+                return [null, $err];
+            }
+            return [Index::page($db, $key, strtolower($address), $folder, $q, $page), null];
+        } catch (\Throwable $e) {
+            return [null, 'cannot read the list of the messages: ' . $e->getMessage()];
+        }
+    }
+
     /** A folder of a Maildir as people read it: '' the inbox (null), '.Clients.2024' "Clients / 2024". */
     public static function folderName(string $key): ?string
     {

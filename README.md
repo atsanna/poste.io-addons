@@ -119,8 +119,9 @@ devices must resync once)
   changed; keep rules per job (hourly, daily, weekly, monthly).
 - Live progress, the log of every run, the space on each destination.
 - **Restore a mailbox from the admin** into a new folder of the same or
-  another mailbox: whole, some folders, or the messages of a filter (dates,
-  sender, subject); nothing already there is changed; remove the backups of a
+  another mailbox: whole, some folders, the messages of a filter (dates,
+  sender, subject), or **single messages** found in a searchable list;
+  nothing already there is changed; remove the backups of a
   job; the backups read from **another machine with only the key file**; a
   **whole server rebuilt** on a new installation, each procedure run by the
   tests as documented.

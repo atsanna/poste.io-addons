@@ -153,6 +153,12 @@ final class Messages
             '/^the folder (.+) is not in (.+)$/' => ['parent_missing', ['folder', 'mailbox']],
             '/^no message matched the choice: nothing restored$/' => ['nothing_matched', []],
             '/^choose the mailbox to restore into$/' => ['choose_target', []],
+            // single messages chosen from a list
+            '/^choose at least one message$/' => ['choose_message', []],
+            '/^too many messages: up to (\d+) at a time$/' => ['too_many_messages', ['max']],
+            '/^message: not valid$/' => ['message_invalid', []],
+            '/^a chosen message is not in this snapshot$/' => ['message_not_in_snapshot', []],
+            '/^cannot read the list of the messages: (.*)$/s' => ['list_read', ['detail']],
         ];
     }
 

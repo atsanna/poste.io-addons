@@ -17,7 +17,7 @@ use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 
 // the backup engine's library (outside src/: shared with the engine, which
 // validates the same settings again before using them)
-foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Panel', 'Messages'] as $poste_backup_class) {
+foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Index', 'Panel', 'Messages'] as $poste_backup_class) {
     require_once '/usr/local/lib/poste-backup/lib/' . $poste_backup_class . '.php';
 }
 
@@ -157,6 +157,9 @@ class PosteBackupController extends AbstractController
                     break;
                 case 'space':
                     $detail = $this->t('poste_backup.live.space', ['{destination}' => $destName]);
+                    break;
+                case 'index':
+                    $detail = $this->t('poste_backup.live.index');
                     break;
                 default:
                     $detail = $this->t('poste_backup.live.prepare');
@@ -973,9 +976,16 @@ class PosteBackupController extends AbstractController
                 $p = $request->request;
                 $target = strtolower((string) $p->get('target', ''));
                 $chosen = array_values(array_filter($p->all('folders'), 'is_string'));
-                $fields = ['folders' => $chosen, 'name' => (string) $p->get('name', ''), 'parent' => (string) $p->get('parent', ''),
-                           'since' => (string) $p->get('since', ''), 'until' => (string) $p->get('until', ''),
-                           'from' => (string) $p->get('from', ''), 'subject' => (string) $p->get('subject', '')];
+                if ($p->get('what') === 'messages') {
+                    // single messages: their paths in the snapshot (the engine checks they are there), one
+                    // per line in one field (PHP reads at most 1000 fields of a form; browsers send CR LF)
+                    $chosen = [];
+                    $fields = ['messages' => array_values(array_filter(preg_split('/[\r\n]+/', (string) $p->get('messages', '')), 'strlen'))];
+                } else {
+                    $fields = ['folders' => $chosen, 'since' => (string) $p->get('since', ''), 'until' => (string) $p->get('until', ''),
+                               'from' => (string) $p->get('from', ''), 'subject' => (string) $p->get('subject', '')];
+                }
+                $fields += ['name' => (string) $p->get('name', ''), 'parent' => (string) $p->get('parent', '')];
                 [, $errors] = \PosteBackup\Engine::restoreOptions($fields);
                 foreach ($chosen as $f) {
                     if (($folders[$f]['messages'] ?? 0) === 0) {
@@ -1012,7 +1022,63 @@ class PosteBackupController extends AbstractController
             'mailboxes' => $mailboxes, 'target' => $target,
             'targetFolders' => $target !== null ? (Panel::mailboxFolders($target) ?? []) : [],
             'defaultName' => $time !== null ? 'Restored ' . date('Y-m-d H:i', $time) : 'Restored',
+            'maxMessages' => \PosteBackup\Engine::MAX_MESSAGES, 'pageSize' => \PosteBackup\Index::PAGE,
         ] + $view);
+    }
+
+    /**
+     * The messages of a mailbox in a snapshot, one page at a time, to choose
+     * single messages (JSON, read only): ?source=<address>&folder=<'*' every
+     * folder, '' the inbox, '.Name'>&q=<sender or subject contains>&page=<0..>.
+     *
+     * @Route("/snapshots/{dest}/{snap}/messages", name="poste_backup_snapshot_messages", methods={"GET"},
+     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
+     */
+    public function snapshotMessagesAction(Request $request, string $dest, string $snap): JsonResponse
+    {
+        $d = Panel::config()['destinations'][$dest] ?? null;
+        $source = (string) $request->query->get('source', '');
+        $folder = (string) $request->query->get('folder', '*');
+        $q = trim((string) $request->query->get('q', ''));
+        $page = (int) $request->query->get('page', '0');
+        if ($d === null || !Config::isAddress($source)) {
+            return new JsonResponse(['error' => $this->msg('the request is not valid')], 404);
+        }
+        // a folder of the snapshot, never a path (as for a restore)
+        if ($folder !== '*' && $folder !== '' && ($folder === '..' || preg_match('/^\.[^\/\x00-\x1f\x7f]{1,255}$/D', $folder) !== 1)) {
+            return new JsonResponse(['error' => $this->msg('folder: not valid')], 400);
+        }
+        if (!mb_check_encoding($q, 'UTF-8') || mb_strlen($q) > 100 || preg_match('/[\x00-\x1f\x7f]/', $q) || $page < 0 || $page > 100000) {
+            return new JsonResponse(['error' => $this->msg('the request is not valid')], 400);
+        }
+        [$r, $err] = Panel::snapshotMessages($dest, $d, $snap, $source, $folder === '*' ? null : $folder, $q, $page);
+        if ($err !== null) {
+            return new JsonResponse(['error' => $this->msg($err)], 200);
+        }
+        $rows = [];
+        foreach ($r['rows'] as [$path, $f, $time, $size, $sender, $subject]) {
+            $rows[] = [
+                'id' => $path,
+                'folder' => Panel::folderName((string) $f) ?? $this->t('poste_backup.snapshots.inbox'),
+                'time' => $time > 0 ? date('Y-m-d H:i', (int) $time) : '',
+                'size' => Panel::size((int) $size),
+                // a message the index does not know: no sender, no subject (null)
+                'from' => $subject === null ? null : self::senderName((string) $sender),
+                'sender' => $subject === null ? null : (string) $sender,
+                'subject' => $subject,
+            ];
+        }
+        return new JsonResponse(['total' => $r['total'], 'page' => $page, 'pages' => (int) ceil($r['total'] / \PosteBackup\Index::PAGE),
+                                 'rows' => $rows]);
+    }
+
+    /** "Customer Ltd" of "Customer Ltd <billing@customer.com>"; the address when there is no name. */
+    private static function senderName(string $from): string
+    {
+        if (preg_match('/^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/', $from, $m) === 1) {
+            return trim($m[1]) !== '' ? trim($m[1]) : $m[2];
+        }
+        return $from;
     }
 
     /**

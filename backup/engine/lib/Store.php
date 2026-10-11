@@ -20,6 +20,7 @@
  *     state.json       last runs (0640)
  *     history.jsonl    one line per job run and destination
  *     logs/            output of each run
+ *     index.db         the list of the messages of the backups (0600, Index)
  *     staging/         consistent copies of the databases during a run (0700)
  *     restore/         a mailbox restored from a snapshot, before it is imported (0700)
  */

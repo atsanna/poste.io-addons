@@ -209,6 +209,20 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   changed behind the admin (a path as address or as folder) refused by the
   engine, a snapshot that does not exist an error; a symbolic link in a
   folder restored removed, never followed; the
+  list of the messages: kept only by `mail`, in the backup of the
+  configuration as a copy, a subject and a sender encoded as headers are
+  decoded, every message of a mailbox listed once, a message moved to
+  another folder the same entry, a deleted one marked and kept, the log of
+  the run says how it was updated; the messages of a snapshot in the admin:
+  a search (case and accents do not matter) finds the message with its
+  folder, sender, subject, date and size, nothing found is 0, one folder
+  only, newest first, a message the list does not know shown without
+  details, a folder that is a path or a page below 0 refused; two messages
+  chosen of many restored into another mailbox and only those; refused with
+  their message: none chosen, more than 1,000, a path outside the Maildir; a
+  message that is not in the snapshot refused by the engine; cleaning: a
+  message gone before the oldest backup kept is removed, one gone since
+  then stays; the choice in Czech; the
   page of commands to restore the server (values quoted, no password, for
   SFTP with a key a key of one's own and the confirmed server keys), offered
   only for snapshots with the configuration; the backups of a deleted job
@@ -228,7 +242,8 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   server started again; then the accounts and their (hashed) passwords, the
   domains, every message, the DKIM keys, the certificates, the calendars and
   address books, the webmail database, redis and the owners and permissions
-  are those of the old server; a user logs in over IMAP with the old password
+  are those of the old server, the list of the messages of the backups is
+  back; a user logs in over IMAP with the old password
   and finds the old message; the old administrator logs in; the old key is
   back and the new server reads the old backups from a destination entered
   again.

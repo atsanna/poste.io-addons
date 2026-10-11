@@ -12,6 +12,16 @@
 .bk-folders .bk-all { font-weight: bold; border-bottom: 1px solid var(--bs-border-color, #eee); padding-bottom: 5px; margin-bottom: 6px; }
 .bk-note { border-left: 4px solid #3DC7BE; background: var(--bs-secondary-bg, #f4fbfa); padding: 8px 12px; margin: 12px 0; max-width: 900px; }
 .bk-tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--bs-secondary-bg, #eee); margin-left: 6px; }
+#bk-restore.bk-form { max-width: 1000px; }
+.bk-choice label { display: block; font-weight: normal; margin: 4px 0; }
+.bk-choice .bk-hint { color: var(--bs-secondary-color, #777); font-size: 12px; margin-left: 22px; display: block; }
+.bk-part { margin: 10px 0 0 22px; }
+.bk-msgs table { font-size: 13px; margin-bottom: 6px; }
+.bk-msgs td { white-space: nowrap; }
+.bk-msgs td.bk-subj { white-space: normal; max-width: 380px; overflow-wrap: anywhere; }
+.bk-msgs .bk-noidx { color: var(--bs-secondary-color, #999); font-style: italic; white-space: normal; }
+.bk-chosen { background: var(--bs-secondary-bg, #f4fbfa); border: 1px solid var(--bs-border-color, #cdeeea); border-radius: 3px; padding: 4px 10px; display: inline-block; }
+.bk-pager { font-size: 13px; }
 </style>
 <p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
 <p class="bk-muted" style="font-size:13px">{{ 'poste_backup.snapshots.restore_of'|trans({'{time}': time ? time|date('Y-m-d H:i') : snap|slice(0, 8), '{destination}': destination.name}) }}</p>
@@ -50,6 +60,13 @@
 
     <div class="bk-box">
         <h4><span class="bk-step">2</span> {{ 'poste_backup.snapshots.step_what'|trans }}</h4>
+        <div class="bk-choice">
+            <label><input type="radio" name="what" value="folders" checked> {{ 'poste_backup.snapshots.what_folders'|trans }}
+                <span class="bk-hint">{{ 'poste_backup.snapshots.what_folders_help'|trans }}</span></label>
+            <label><input type="radio" name="what" value="messages"> <strong>{{ 'poste_backup.snapshots.what_messages'|trans }}</strong>
+                <span class="bk-hint">{{ 'poste_backup.snapshots.what_messages_help'|trans({'{max}': maxMessages}) }}</span></label>
+        </div>
+        <div class="bk-part" id="bk-part-folders">
         <div class="bk-folders">
             <label class="bk-all"><input type="checkbox" id="bk-all" checked> {{ 'poste_backup.snapshots.all_folders'|trans }} <span class="bk-n">{{ messages|number_format(0, '.', ',') }}</span></label>
             {% for key, f in folders %}
@@ -67,6 +84,34 @@
                 <input class="form-control" id="bk-from" name="from" maxlength="100" style="width:200px"></div>
             <div class="form-group"><label class="control-label" for="bk-subject">{{ 'poste_backup.snapshots.subject'|trans }}</label>
                 <input class="form-control" id="bk-subject" name="subject" maxlength="100" style="width:200px"></div>
+        </div>
+        </div>
+        <div class="bk-part bk-msgs" id="bk-part-messages" style="display:none"
+             data-url="{{ path('poste_backup_snapshot_messages', {dest: dest, snap: snap}) }}" data-source="{{ source }}">
+            <div class="bk-row">
+                <div class="form-group"><label class="control-label" for="bk-mfolder">{{ 'poste_backup.snapshots.folder'|trans }}</label>
+                    <select class="form-control" id="bk-mfolder" style="width:240px">
+                        <option value="*">{{ 'poste_backup.snapshots.all_folders'|trans }} ({{ messages|number_format(0, '.', ',') }})</option>
+                        {% for key, f in folders %}{% if f.messages > 0 %}<option value="{{ key }}">{{ f.name ?? ('poste_backup.snapshots.inbox'|trans) }} ({{ f.messages|number_format(0, '.', ',') }})</option>{% endif %}{% endfor %}
+                    </select></div>
+                <div class="form-group"><label class="control-label" for="bk-q">{{ 'poste_backup.snapshots.search'|trans }}</label>
+                    <input class="form-control" id="bk-q" maxlength="100" style="width:260px"></div>
+                <div class="form-group"><button type="button" class="btn btn-default" id="bk-search"><i class="fa fa-search"></i> {{ 'poste_backup.snapshots.search_button'|trans }}</button></div>
+            </div>
+            <table class="table table-hover table-condensed bk" id="bk-mlist">
+                <thead><tr><th style="width:28px"><input type="checkbox" id="bk-mall" title="{{ 'poste_backup.snapshots.page_all'|trans }}"></th>
+                    <th>{{ 'poste_backup.snapshots.received'|trans }}</th><th>{{ 'poste_backup.snapshots.folder'|trans }}</th>
+                    <th>{{ 'poste_backup.snapshots.sender'|trans }}</th><th>{{ 'poste_backup.snapshots.subject_col'|trans }}</th>
+                    <th class="text-right">{{ 'poste_backup.snapshots.size'|trans }}</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <div class="bk-row" style="justify-content:space-between; align-items:center">
+                <span class="bk-chosen"><i class="fa fa-check-square-o"></i> <strong id="bk-chosen"></strong> &middot; <a href="#" id="bk-clear">{{ 'poste_backup.snapshots.clear'|trans }}</a></span>
+                <span class="bk-pager"><span id="bk-range"></span> &middot; <a href="#" id="bk-prev">&lsaquo; {{ 'poste_backup.snapshots.previous'|trans }}</a>
+                    &middot; <a href="#" id="bk-next">{{ 'poste_backup.snapshots.next'|trans }} &rsaquo;</a></span>
+            </div>
+            <p class="text-warning" id="bk-toomany" style="display:none; margin:6px 0 0"><i class="fa fa-exclamation-triangle"></i> {{ 'poste_backup.snapshots.too_many_chosen'|trans({'{max}': maxMessages}) }}</p>
+            <div id="bk-chosen-inputs"></div>
         </div>
     </div>
 
@@ -91,7 +136,7 @@
     </div>
 
     <div class="bk-note"><i class="fa fa-info-circle"></i> <span id="bk-summary"></span></div>
-    <button type="submit" class="btn btn-primary" id="bk-submit"><i class="fa fa-undo"></i> {{ 'poste_backup.snapshots.restore_submit'|trans }}</button>
+    <button type="submit" class="btn btn-primary" id="bk-submit"><i class="fa fa-undo"></i> <span id="bk-submit-text">{{ 'poste_backup.snapshots.restore_submit'|trans }}</span></button>
 </form>
 {% endif %}
 {% endblock %}
@@ -101,8 +146,21 @@
 <script>
     var bkS = {
         summary: '{{ 'poste_backup.snapshots.summary_where'|trans({'{folder}': '%folder%', '{mailbox}': '%mailbox%'})|e('js') }}',
+        summaryMessages: '{{ 'poste_backup.snapshots.summary_messages'|trans({'{folder}': '%folder%', '{mailbox}': '%mailbox%'})|e('js') }}',
         noTarget: '{{ 'poste_backup.snapshots.summary_no_target'|trans|e('js') }}',
-        top: '{{ 'poste_backup.snapshots.parent_top'|trans|e('js') }}'
+        top: '{{ 'poste_backup.snapshots.parent_top'|trans|e('js') }}',
+        restore: '{{ 'poste_backup.snapshots.restore_submit'|trans|e('js') }}',
+        restoreN: {one: '{{ 'poste_backup.snapshots.restore_n_one'|trans|e('js') }}', few: '{{ 'poste_backup.snapshots.restore_n_few'|trans|e('js') }}',
+                   other: '{{ 'poste_backup.snapshots.restore_n_other'|trans|e('js') }}'},
+        chosenN: {one: '{{ 'poste_backup.snapshots.chosen_one'|trans|e('js') }}', few: '{{ 'poste_backup.snapshots.chosen_few'|trans|e('js') }}',
+                  other: '{{ 'poste_backup.snapshots.chosen_other'|trans|e('js') }}'},
+        range: '{{ 'poste_backup.snapshots.range'|trans|e('js') }}',
+        none: '{{ 'poste_backup.snapshots.none_found'|trans|e('js') }}',
+        loading: '{{ 'poste_backup.snapshots.loading'|trans|e('js') }}',
+        noDetails: '{{ 'poste_backup.snapshots.no_details'|trans|e('js') }}',
+        loadError: '{{ 'poste_backup.snapshots.load_error'|trans|e('js') }}',
+        max: {{ maxMessages }},
+        pageSize: {{ pageSize }}
     };
     $('#bk-target, #bk-parent').chosen({width: '280px', search_contains: true});
     // the folders: "all" ticks or unticks every folder that has messages
@@ -111,12 +169,79 @@
         $('#bk-all').prop('checked', $('.bk-folder:not(:disabled):not(:checked)').length === 0);
         bkUpdate();
     });
+
+    // single messages: the list comes a page at a time; what is ticked stays ticked across pages and searches
+    var bkChosen = {}, bkPage = 0, bkPages = 0, bkLoaded = false;
+    function bkPlural(n, forms) { return (n === 1 ? forms.one : (n >= 2 && n <= 4 ? forms.few : forms.other)).replace('%n%', n.toLocaleString('en-US')); }
+    function bkCount() { return Object.keys(bkChosen).length; }
+    function bkMode() { return $('input[name=what]:checked').val(); }
+    function bkLoad(page) {
+        var $b = $('#bk-mlist tbody').empty().append($('<tr>').append($('<td colspan="6" class="bk-noidx">').text(bkS.loading)));
+        var $p = $('#bk-part-messages');
+        $.getJSON($p.data('url'), {source: $p.data('source'), folder: $('#bk-mfolder').val(), q: $.trim($('#bk-q').val()), page: page})
+            .done(function (r) {
+                $b.empty();
+                if (r.error) { $b.append($('<tr>').append($('<td colspan="6" class="text-danger">').text(r.error))); return; }
+                bkPage = r.page; bkPages = r.pages;
+                if (!r.rows.length) { $b.append($('<tr>').append($('<td colspan="6" class="bk-noidx">').text(bkS.none))); }
+                $.each(r.rows, function (i, m) {
+                    var $tr = $('<tr>');
+                    $tr.append($('<td>').append($('<input type="checkbox" class="bk-msg">').val(m.id).prop('checked', !!bkChosen[m.id])));
+                    $tr.append($('<td>').text(m.time), $('<td>').text(m.folder));
+                    if (m.subject === null) {
+                        $tr.append($('<td colspan="2" class="bk-noidx">').text(bkS.noDetails));
+                    } else {
+                        $tr.append($('<td>').text(m.from).attr('title', m.sender), $('<td class="bk-subj">').text(m.subject));
+                    }
+                    $tr.append($('<td class="text-right">').text(m.size));
+                    $b.append($tr);
+                });
+                var from = r.total ? r.page * bkS.pageSize + 1 : 0, to = r.page * bkS.pageSize + r.rows.length;
+                $('#bk-range').text(bkS.range.replace('%from%', from).replace('%to%', to).replace('%total%', r.total.toLocaleString('en-US')));
+                $('#bk-prev').toggleClass('bk-muted', bkPage <= 0);
+                $('#bk-next').toggleClass('bk-muted', bkPage >= bkPages - 1);
+                $('#bk-mall').prop('checked', r.rows.length > 0 && $('.bk-msg:not(:checked)').length === 0);
+            })
+            .fail(function () { $b.empty().append($('<tr>').append($('<td colspan="6" class="text-danger">').text(bkS.loadError))); });
+    }
+    $('input[name=what]').on('change', function () {
+        var single = bkMode() === 'messages';
+        $('#bk-part-folders').toggle(!single);
+        $('#bk-part-messages').toggle(single);
+        if (single && !bkLoaded) { bkLoaded = true; bkLoad(0); }
+        bkUpdate();
+    });
+    $('#bk-search').on('click', function () { bkLoad(0); });
+    $('#bk-mfolder').on('change', function () { bkLoad(0); });
+    $('#bk-q').on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); bkLoad(0); } });
+    $('#bk-prev').on('click', function (e) { e.preventDefault(); if (bkPage > 0) { bkLoad(bkPage - 1); } });
+    $('#bk-next').on('click', function (e) { e.preventDefault(); if (bkPage < bkPages - 1) { bkLoad(bkPage + 1); } });
+    $('#bk-mlist').on('change', '.bk-msg', function () {
+        if (this.checked) { bkChosen[this.value] = true; } else { delete bkChosen[this.value]; }
+        $('#bk-mall').prop('checked', $('.bk-msg:not(:checked)').length === 0);
+        bkUpdate();
+    });
+    $('#bk-mall').on('change', function () { var on = this.checked; $('.bk-msg').prop('checked', on).trigger('change'); });
+    $('#bk-clear').on('click', function (e) { e.preventDefault(); bkChosen = {}; $('.bk-msg, #bk-mall').prop('checked', false); bkUpdate(); });
+    // the messages ticked go with the form, in one field, one per line (PHP takes at most 1000 fields)
+    $('#bk-restore').on('submit', function () {
+        var $h = $('#bk-chosen-inputs').empty();
+        if (bkMode() === 'messages') {
+            $h.append($('<input type="hidden" name="messages">').val(Object.keys(bkChosen).join('\n')));
+        }
+    });
+
     // where the messages go, said before they go there
     function bkUpdate() {
         var target = $('#bk-target').val(), parent = $('#bk-parent').val(), name = $.trim($('#bk-name').val());
-        var folder = (parent ? parent.split('.').join(' / ') + ' / ' : '') + name;
-        $('#bk-summary').text(target ? bkS.summary.replace('%folder%', folder).replace('%mailbox%', target) : bkS.noTarget);
-        $('#bk-submit').prop('disabled', !target || !name || $('.bk-folder:checked').length === 0);
+        var folder = (parent ? parent.split('.').join(' / ') + ' / ' : '') + name, single = bkMode() === 'messages', n = bkCount();
+        var text = single ? bkS.summaryMessages : bkS.summary;
+        // functions as replacements: a "$" in a folder name is taken literally
+        $('#bk-summary').text(target ? text.replace('%folder%', function () { return folder; }).replace('%mailbox%', function () { return target; }) : bkS.noTarget);
+        $('#bk-chosen').text(bkPlural(n, bkS.chosenN));
+        $('#bk-toomany').toggle(n > bkS.max);
+        $('#bk-submit-text').text(single && n > 0 ? bkPlural(n, bkS.restoreN) : bkS.restore);
+        $('#bk-submit').prop('disabled', !target || !name || (single ? (n === 0 || n > bkS.max) : $('.bk-folder:checked').length === 0));
     }
     // another mailbox: its own folders to restore into
     $('#bk-target').on('change', function () {

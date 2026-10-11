@@ -25,6 +25,7 @@ S=/data/var/backup/engine/staging
 cp "$S/users.db" /data/users.db
 cp "$S/dav.db" /data/dav.db
 cp "$S/roundcube.db" /data/roundcube/roundcube.db
+if [ -f "$S/index.db" ]; then install -o mail -g mail -m 600 "$S/index.db" /data/var/backup/engine/index.db; fi
 rm -f /data/users.db-wal /data/users.db-shm /data/dav.db-wal /data/dav.db-shm \
       /data/roundcube/roundcube.db-wal /data/roundcube/roundcube.db-shm "$S"/*.db
 

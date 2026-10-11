@@ -51,7 +51,7 @@ All notable changes to this project are documented here. The format follows
   installation (see [docs](docs/activesync-logs.md)).
 
 - **New add-on: Backup** (`backup`). Encrypted, scheduled backups of the
-  server, set up and watched from the admin (*Backup*, super administrators
+  server, set up and watched from the admin (*Mailserver backup*, super administrators
   only): the configuration (accounts, domains, settings, certificates, DKIM
   keys, calendars and address books, webmail settings, spam filter training,
   the other add-ons' settings) and all the mail or chosen mailboxes, to one or
@@ -63,15 +63,18 @@ All notable changes to this project are documented here. The format follows
   or month in a time zone of their own, with keep rules per job; a **Test**
   of each destination before saving (reachability, empty folder or existing
   repository, free space, a write); live progress, the logs of every run,
-  the space on each destination, logs kept for a number of days; pages and
+  the space on each destination (yellow from 80% used, red from 90%), logs kept for a number of days; pages and
   messages in English and Czech. The
   encryption key is made at the first start and downloaded from the admin.
   The engine runs as `mail`, never as root, and validates the settings again
   before using them. **Snapshots and restore** in the admin: the snapshots
   of each destination, a mailbox restored into a new folder of the same or
   another mailbox (named *Restored <time>* or as you choose, at the top or
-  inside an existing folder): the whole mailbox, some of its folders, or the
-  messages of a filter (dates received, sender, subject); nothing already
+  inside an existing folder): the whole mailbox, some of its folders, the
+  messages of a filter (dates received, sender, subject), or single messages
+  chosen from a list of the snapshot's messages (sender, subject, date;
+  searchable; up to 1,000 at a time; the list is kept by the engine and is
+  part of the backup of the configuration); nothing already
   there is changed, and it is refused if `/data` has no room for it; the backups of a job removed (also of a
   deleted job), and the commands to rebuild the whole server filled in for a
   snapshot. The backups can also be read from another machine with only the

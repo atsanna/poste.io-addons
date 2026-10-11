@@ -52,6 +52,7 @@ A job backs up the **server configuration**, the **mail**, or both.
 | spam filter training (rspamd's Bayes, in redis) | `/data/redis/dump.rdb` |
 | ActiveSync device states | `/data/zpush` |
 | settings of the add-ons and of Poste.io under `/data/var` | everything there except the virus database (downloaded again) and this add-on's own folder |
+| the list of the messages of the backups (see [Restoring](#the-list-of-the-messages)) | `/data/var/backup/engine/index.db`, copied like the databases |
 
 **Mail**: either all of it (`/data/domains`, every mailbox with its folders
 and its filters, plus the messages held in quarantine) or only the mailboxes
@@ -91,7 +92,9 @@ loses nothing. One destination can serve several jobs.
 
 Each run of a job:
 
-1. copies the databases in a consistent state and checks the copies;
+1. with mail: brings the list of the messages up to date (see
+   [The list of the messages](#the-list-of-the-messages)); then copies the
+   databases in a consistent state and checks the copies;
 2. for each destination: checks it (a local folder must be a mounted volume,
    not on the disk of `/data`), creates the repository there **only if the
    folder is empty** (a folder with other files is never written to), backs
@@ -120,7 +123,7 @@ no backup can be read**, not by you and not by anyone who gets hold of the
 destination.
 
 The key is not part of any backup (a backup protected by a key stored inside
-it would be useless). **Download it** from *Backup > Encryption key* and keep
+it would be useless). **Download it** from *Mailserver backup > Encryption key* and keep
 it outside the server, where you keep your other passwords. The admin shows a
 warning until it has been downloaded once.
 
@@ -130,7 +133,7 @@ key back instead (same file, owner `mail`, mode `0600`).
 
 ## Destinations
 
-*Backup > Destinations > Add a destination.* The **Test** button next to
+*Mailserver backup > Destinations > Add a destination.* The **Test** button next to
 *Save* tries the values of the form **before** they are saved: it checks that
 the destination can be reached, that the folder is empty or already a
 repository, the free space, and writes and removes a small file. The page is
@@ -212,7 +215,7 @@ folder of the volume to that user (for an NFS export: a directory owned by
 
 ## Backup jobs
 
-*Backup > Backup jobs > Add a backup job:*
+*Mailserver backup > Backup jobs > Add a backup job:*
 
 - **What**: the server configuration, and no mail / all mail / only some
   mailboxes;
@@ -260,7 +263,8 @@ restored. They are no longer thinned out by any keep rule: remove them from
   and measuring the space), the disk of the server, the last backups and the
   **space on each destination**: what the backups use there and, where the
   server reports it, the free space (S3 does not). The space is measured
-  after each backup.
+  after each backup. The bars of the disk and of the destinations turn
+  **yellow** from 80% used and **red** from 90%.
 - The dashboard, the jobs and the logs **update themselves**: every few
   seconds while a job runs, every 15 seconds otherwise; the page reloads when
   a job starts or ends.
@@ -281,7 +285,7 @@ backup is seen only in the admin, so look at it from time to time, or watch
 
 ## Restoring
 
-*Backup > Snapshots and restore* lists the snapshots of a destination (read
+*Mailserver backup > Snapshots and restore* lists the snapshots of a destination (read
 from it when the page opens), newest first: when, which job, what it holds
 (configuration, all mail, some mailboxes). From there:
 
@@ -291,12 +295,19 @@ from it when the page opens), newest first: when, which job, what it holds
      folders (Poste.io makes one for every address, redirects included) are
      only counted, in a line under the list: there is nothing to restore
      there;
-  2. **what**: the folders of that mailbox with their messages, all ticked
-     (the whole mailbox), or only some of them; and, if you want only some
-     messages, a filter: received from / to (the dates as the server counts
-     them, both days included), the sender contains, the subject contains
-     (case does not matter). Folders and filter go together, for example
-     *only Sent, sender customer.com, from 1 to 7 October*;
+  2. **what**, one of two ways:
+     - **whole folders, or the messages that match a filter**: the folders
+       of that mailbox with their messages, all ticked (the whole mailbox),
+       or only some of them; and, if you want only some messages, a filter:
+       received from / to (the dates as the server counts them, both days
+       included), the sender contains, the subject contains (case does not
+       matter). Folders and filter go together, for example *only Sent,
+       sender customer.com, from 1 to 7 October*;
+     - **single messages**: the messages of the snapshot, newest first, 50 a
+       page, with the date received, the folder, the sender and the subject;
+       choose a folder or all of them, search the sender or the subject (case
+       does not matter, accented letters too), tick the messages you want,
+       across pages and searches (up to 1,000 at a time);
   3. **where**: the mailbox of this server to restore into (the same one is
      chosen when it exists; otherwise none is, and nothing starts until you
      choose), the name of a **new folder** (*Restored <time of the
@@ -311,6 +322,9 @@ from it when the page opens), newest first: when, which job, what it holds
   Dovecot's import does not recognise a message that is still there, so
   every one of them would appear twice. Move what you need from the restored
   folder with your mail program, then delete it.
+
+  Single messages go under the new folder in the same way, each in its
+  folder (*… / INBOX*, *… / Sent*), and only those.
 
   The restore runs in the background (the engine takes it within a minute:
   the page shows it, then its result and its log). Only the folders chosen
@@ -329,6 +343,43 @@ from it when the page opens), newest first: when, which job, what it holds
   SFTP the server's keys are the ones confirmed in the admin, and a
   destination that logs in with a key needs a key of your own: the admin's
   key pair is not in the backups.
+
+### The list of the messages
+
+A snapshot holds files: the sender, the subject and the date of each message
+come from a list the engine keeps on the server,
+`/data/var/backup/engine/index.db` (readable only by `mail`, like the rest of
+`/data/var/backup`). Before every run of a job with mail, the engine looks at
+the files of the mailboxes, reads the header of the files that are new since
+the last run (sender, subject; the date received and the size are the
+file's) and notes the messages that are no longer in their mailbox. The first
+run reads every message once; later runs read only the new ones. A problem with the list is
+written in the run's log and never makes the backup fail.
+
+A message is known by its file name in the Maildir up to the flags: the
+same in every snapshot, and after a move to another folder. A message that is no longer in its mailbox stays in the list,
+because older snapshots still hold it; it is removed once no snapshot kept on
+any destination can hold it (it left its mailbox before the oldest snapshot
+with mail on every destination of the jobs with mail).
+
+The list is part of the backup of the configuration, as a consistent copy
+(step 4 of [Rebuilding the whole server](#rebuilding-the-whole-server) puts
+it back). A message the list does not know, for example one deleted before
+the list was kept, is still shown and can be restored: with its date and
+size, without sender and subject. Note that the sender and the subject of a
+deleted message stay in the list (and in the backups of the configuration)
+as long as a backup may hold the message itself.
+
+If the list is ever damaged, the engine sets it aside
+(`index.db.damaged`) and makes it again from the mailboxes, and a backup of
+the configuration goes on without it: the list never makes a backup fail.
+The first run reads the header of every message; on a very large server it
+stops after 20 minutes and the next runs read the rest (the log says how
+many are left).
+
+The page reads the files of a snapshot once and keeps them in a cache
+(`/var/cache/poste-backup/listing.db`, the last five mailboxes looked at), so
+that pages and searches answer at once.
 
 ### Removing the backups of a job
 
@@ -397,7 +448,7 @@ lost, or to look into the backups without touching it.
 
 What you need:
 
-- the **key file** downloaded from *Backup > Encryption key*;
+- the **key file** downloaded from *Mailserver backup > Encryption key*;
 - the **destination** as it was entered in the admin: its type, server, share
   or bucket, folder, user and password (or access key and secret key). The
   add-on's settings are not in the backups, because they hold these
@@ -539,14 +590,16 @@ section).
    permissions, over the files of the new installation.
 
 4. **The databases**: the backup holds copies made while they were in use,
-   consistent and checked. Put them in place, and remove the journal files
-   of the new installation's databases:
+   consistent and checked. Put them in place (with the list of the messages
+   of the backups, if the backup has it), and remove the journal files of the
+   new installation's databases:
 
    ```bash
    S=/data/var/backup/engine/staging
    cp "$S/users.db" /data/users.db
    cp "$S/dav.db" /data/dav.db
    cp "$S/roundcube.db" /data/roundcube/roundcube.db
+   if [ -f "$S/index.db" ]; then install -o mail -g mail -m 600 "$S/index.db" /data/var/backup/engine/index.db; fi
    rm -f /data/users.db-wal /data/users.db-shm /data/dav.db-wal /data/dav.db-shm \
          /data/roundcube/roundcube.db-wal /data/roundcube/roundcube.db-shm "$S"/*.db
    ```
@@ -560,7 +613,7 @@ section).
    ```
 
 6. **Start the server** (`docker start mailserver`) and log in to the admin
-   as an administrator of the old server. Then, in *Backup*, add the
+   as an administrator of the old server. Then, in *Mailserver backup*, add the
    destinations again (their **Test** says that the folder already holds a
    backup repository; for SFTP confirm the server's key again, and with a
    key login put the new public key on the server) and the jobs. The new
@@ -707,9 +760,11 @@ add-on.
     state.json                            last run of each job, last restores and removals
     history.jsonl                         one line per run and destination
     logs/                                 log of each run (kept for the days set in the admin)
+    index.db                              the list of the messages of the backups (0600)
     staging/                              consistent copies of the databases, during a run
     restore/                              a mailbox being restored, before it is imported
-/var/cache/poste-backup                   restic's cache (rebuilt when needed)
+/var/cache/poste-backup                   restic's cache, and listing.db: the files of the
+                                          snapshots last shown in the admin (rebuilt when needed)
 /run/poste-backup.lock                    one run at a time
 ```
 
@@ -732,10 +787,10 @@ something that is not a folder owned by root.
 - **One repository per server**: do not point two mail servers to the same
   folder.
 - No notifications yet: they come with the next stages.
-- A mailbox is restored into a new folder: whole, some of its folders, or
-  the messages of a filter (dates, sender, subject); single messages are not
-  picked from a list yet. The whole server is restored from the command
-  line, on a new installation.
+- A mailbox is restored into a new folder: whole, some of its folders, the
+  messages of a filter (dates, sender, subject), or up to 1,000 single
+  messages at a time chosen from a list. The whole server is restored from
+  the command line, on a new installation.
 - restic and rclone are the versions of the image's Debian release (restic
   0.14, rclone 1.60 on Poste.io 2.5.17).
 - The first backup of a large server takes a while (everything is new); later

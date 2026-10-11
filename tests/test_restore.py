@@ -83,6 +83,7 @@ def accounts():
     return q.stdout.splitlines()
 
 
+INDEX = "/data/var/backup/engine/index.db"
 OWNED = ["/data", "/data/users.db", "/data/dav.db", "/data/server.ini", "/data/instance-id", "/data/roundcube",
          "/data/roundcube/roundcube.db", "/data/redis", "/data/redis/dump.rdb", "/data/ssl", "/data/domains",
          "/data/quarantine", "/data/var", "/data/var/getmail", "/data/var/rspamd", "/data/zpush"]
@@ -197,7 +198,7 @@ def prepare():
         for k, v in values.items():
             f.write("%s=%s\n" % (k, shlex.quote(v)))
     json.dump({"files": stable, "accounts": after[1], "dav": after[2], "roundcube": after[3], "redis": token,
-               "owners": owners([dom, alice_home, alice_home + "/Maildir", msg]),
+               "owners": owners([dom, alice_home, alice_home + "/Maildir", msg, INDEX]),
                "key": open("/data/var/backup/settings/restic.key").read().strip()}, open(BEFORE, "w"))
 
 
@@ -223,7 +224,9 @@ def verify():
     check("webmail database (roundcube.db): the same content", dump("/data/roundcube/roundcube.db", "www-data") == old["roundcube"], old["roundcube"][:8])
     r = sh(REDIS + ["GET", "poste-backup-restore-test"]).stdout.strip()
     check("redis (spam filter training): the old data is loaded", r == old["redis"], r)
-    own = owners([dom, alice_home, alice_home + "/Maildir", B["MSG"]])
+    q = sh(["runuser", "-u", "mail", "--", "sqlite3", "-readonly", INDEX, "PRAGMA integrity_check; SELECT count(*) > 0 FROM msg WHERE subject = 'restore me';"]).stdout.split()
+    check("the list of the messages of the backups is back (single messages keep their details)", q == ["ok", "1"], q)
+    own = owners([dom, alice_home, alice_home + "/Maildir", B["MSG"], INDEX])
     diff = {p: (old["owners"].get(p), own.get(p)) for p in set(own) | set(old["owners"]) if own.get(p) != old["owners"].get(p)}
     check("owners and permissions as on the old server", not diff, diff or len(own))
 

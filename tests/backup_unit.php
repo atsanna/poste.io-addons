@@ -9,6 +9,7 @@ require '/usr/local/lib/poste-backup/lib/Schedule.php';
 require '/usr/local/lib/poste-backup/lib/Store.php';
 require '/usr/local/lib/poste-backup/lib/Engine.php';
 require '/usr/local/lib/poste-backup/lib/Messages.php';
+require '/usr/local/lib/poste-backup/lib/Index.php';
 
 use PosteBackup\Config;
 use PosteBackup\Schedule;
@@ -202,7 +203,7 @@ $choice = ['folders' => ['', '.Sent', '.A[1]*?'], 'name' => 'Restored 2026-10-11
 $t = PosteBackup\Engine::task('restore', ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'Bob@Example.com'] + $choice);
 check('restore request: valid, the target in lower case, the choices kept (texts trimmed)', $t === ['type' => 'restore', 'dest' => '0a1b2c3d4e5f',
       'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com', 'folders' => ['', '.Sent', '.A[1]*?'],
-      'name' => 'Restored 2026-10-11 02:00', 'parent' => 'Archive.2024', 'since' => '2026-10-01', 'until' => '2026-10-07',
+      'messages' => [], 'name' => 'Restored 2026-10-11 02:00', 'parent' => 'Archive.2024', 'since' => '2026-10-01', 'until' => '2026-10-07',
       'from' => 'customer.com', 'subject' => 'invoice'], $t);
 foreach ([['snapshot' => substr($snap, 0, 8)], ['snapshot' => strtoupper($snap)], ['source' => '../../etc@example.com'], ['source' => 'a/b@example.com'],
           ['source' => 'alice@../..'], ['target' => 'x'], ['dest' => '../x'], ['source' => ['alice@example.com']],
@@ -226,6 +227,55 @@ check('a folder name with glob characters is taken literally by restic', PosteBa
 check('removal request: valid', PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'])
       === ['type' => 'forget', 'dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'], 'forget');
 check('removal request refused: an invalid job id', !empty(PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'job:x'])['invalid']), 'invalid');
+// single messages: their paths in the snapshot's Maildir, no folders and no filter
+$base = ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com', 'name' => 'Two', 'parent' => ''];
+$msgs = ['cur/1700000000.M1P2.mail.example.com,S=1308:2,S', '.Archive.2024/new/1700000001.M3P4.host,S=99', '.A[1]*?/cur/x:2,'];
+$t = PosteBackup\Engine::task('restore', $base + ['messages' => array_merge($msgs, [$msgs[0]]), 'folders' => [''], 'since' => '2026-10-01', 'subject' => 'x']);
+check('single messages: valid (duplicates once), folders and filter ignored', ($t['messages'] ?? null) === $msgs && $t['folders'] === []
+      && $t['since'] === '' && $t['subject'] === '' && PosteBackup\Engine::restoreQuery($t) === ['all'], $t);
+foreach ([[], ['../x'], ['cur/..'], ['cur/.'], ['../cur/x'], ['.a/b/cur/x'], ['tmp/x'], ['x'], ['/cur/x'], ['cur/x/y'], ['../../etc/cur/x'],
+          ["cur/a\nb"], ["cur/x\n"], [".Sent\n/cur/x"], [['cur/x']], 'cur/x', array_fill(0, 1001, 'cur/x')] as $bad) {
+    $t = PosteBackup\Engine::task('restore', $base + ['messages' => $bad]);
+    check('single messages refused: ' . substr(json_encode($bad), 0, 60), !empty($t['invalid']), $t);
+}
+[, $e] = PosteBackup\Engine::restoreOptions(['messages' => array_fill(0, 1001, 'cur/x'), 'name' => 'x']);
+[, $e0] = PosteBackup\Engine::restoreOptions(['messages' => [], 'name' => 'x']);
+check('single messages: the reasons (none chosen, more than 1000)', $e0 === ['choose at least one message']
+      && $e === ['too many messages: up to 1000 at a time'], [$e0, $e]);
+check('1000 messages are accepted', PosteBackup\Engine::restoreOptions(['messages' => array_map(function ($i) { return "cur/m$i"; }, range(1, 1000)), 'name' => 'x'])[1] === [], '1000');
+check('a header as shown: no format characters (a right-to-left override, a zero-width space)',
+      PosteBackup\Index::text("Invoice\u{202E}fdp.exe\u{200B} x") === 'Invoicefdp.exe x', PosteBackup\Index::text("Invoice\u{202E}fdp.exe\u{200B} x"));
+check('a folder of a restore: a final new line is not accepted', !empty(PosteBackup\Engine::task('restore', ['dest' => '0a1b2c3d4e5f',
+      'snapshot' => str_repeat('ab', 32), 'source' => 'alice@example.com', 'target' => 'bob@example.com', 'name' => 'x', 'folders' => [".Sent\n"]])['invalid']), 'refused');
+check('a header as shown: one line, valid UTF-8, at most 300 characters', PosteBackup\Index::text("a\r\n b\x00c\xff") === 'a b c' . mb_scrub("\xff", 'UTF-8')
+      && mb_strlen(PosteBackup\Index::text(str_repeat('é', 400))) === 300 && PosteBackup\Index::text(null) === '', PosteBackup\Index::text("a\r\n b\x00c\xff"));
+$md = '/data/domains/example.com/alice/Maildir';
+$node = function (string $path, string $type = 'file') {
+    return ['type' => $type, 'path' => $path, 'mtime' => '2026-10-07T09:12:30.123456789+02:00', 'size' => 84000];
+};
+$n1 = PosteBackup\Index::listingNode($md, $node("$md/cur/1700.M1P2.host,S=84000,W=85000:2,S"));
+$n2 = PosteBackup\Index::listingNode($md, $node("$md/.Archive.2025/new/1700.M3P4.host"));
+check('a message file of the snapshot: path, folder, Dovecot id (the name up to the flags), time, size',
+      $n1 === ['cur/1700.M1P2.host,S=84000,W=85000:2,S', '', '1700.M1P2.host,S=84000,W=85000', 1791357150, 84000]
+      && $n2 === ['.Archive.2025/new/1700.M3P4.host', '.Archive.2025', '1700.M3P4.host', 1791357150, 84000], [$n1, $n2]);
+$skip = [];
+foreach ([$node("$md/cur", 'dir'), $node("$md/tmp/x"), $node("$md/dovecot.index.cache"), $node("$md/.Sent/dovecot-uidlist"),
+          $node('/data/domains/example.com/alice/sieve/x'), $node("$md/.Sent/cur/x", 'symlink'), $node("{$md}x/cur/y")] as $j) {
+    $skip[] = PosteBackup\Index::listingNode($md, $j);
+}
+check('anything else of the snapshot is not a message (folders, tmp, Dovecot files, links, another mailbox)', $skip === array_fill(0, 7, null), $skip);
+$tmpf = tempnam(sys_get_temp_dir(), 'msg');
+file_put_contents($tmpf, "Received: x\r\nFrom: =?UTF-8?B?w4hyaWMgUsOpbXk=?= <e@example.org>\r\nSUBJECT: =?ISO-8859-1?Q?Caf=E9?= and\r\n a long =?UTF-8?Q?=E2=80=93_line?=\r\n"
+    . "Subject: a second one\r\n\r\nSubject: in the body\r\nFrom: body\r\n");
+$hd = PosteBackup\Index::headers($tmpf);
+file_put_contents($tmpf, "To: x\n\nFrom: in the body\n");
+$hd2 = PosteBackup\Index::headers($tmpf);
+unlink($tmpf);
+check('the header of a message file: subject and sender decoded (any charset, folded lines, any case), the first ones, never the body',
+      $hd === ['Café and a long – line', 'Èric Rémy <e@example.org>'] && $hd2 === ['', ''] && PosteBackup\Index::headers('/nonexistent') === null, [$hd, $hd2]);
+check('the key of a message: its file name up to the flags', PosteBackup\Index::guid('1700.M1P2.host,S=5,W=6:2,S') === '1700.M1P2.host,S=5,W=6'
+      && PosteBackup\Index::guid('1700.M1P2.host') === '1700.M1P2.host', 'guid');
+
 check('restore space: twice the mailbox plus 256 MB', PosteBackup\Engine::spaceNeeded(1073741824) === 2415919104
       && PosteBackup\Engine::enoughSpace(1073741824, 2415919104) && !PosteBackup\Engine::enoughSpace(1073741824, 2415919103), 'limits');
 check('a request that is not JSON: refused', !empty(PosteBackup\Engine::task('restore', null)['invalid']), 'invalid');
@@ -311,6 +361,8 @@ $samples = [
     'sender: up to 100 characters', 'subject: up to 100 characters', 'a chosen folder is not in this snapshot',
     'the folder Archive.2024 is not in bob@example.com', 'no message matched the choice: nothing restored', 'choose the mailbox to restore into',
     '7 message(s) restored into the folder "Archive / Restored 2026-10-11 02:00" of bob@example.com',
+    'choose at least one message', 'too many messages: up to 1000 at a time', 'message: not valid', 'a chosen message is not in this snapshot',
+    'cannot read the list of the messages: SQLSTATE[HY000]: General error: 5 database is locked',
     // what the code writes, read from the code itself
     PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
 ];

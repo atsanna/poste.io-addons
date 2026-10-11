@@ -2,8 +2,8 @@
 # own top-level key only: other add-ons append "menu:", and a YAML file cannot
 # have the same key twice
 poste_backup:
-  menu: Backup
-  title: Backup
+  menu: Mailserver backup
+  title: Mailserver backup
   error:
     csrf: Invalid CSRF token, reload the page
   action:
@@ -202,6 +202,7 @@ poste_backup:
     progress: "{destination}: {percent}% · {done} of {total} · {files} of {total_files} files"
     prune: "{destination}: removing the old snapshots"
     space: "{destination}: measuring the space used"
+    index: "updating the list of the messages"
     restore_prepare: "reading the snapshot on {destination}"
     restore_restore: "restoring {source} from {destination}"
     restore_import: "importing into a new folder of {target}"
@@ -276,6 +277,34 @@ poste_backup:
     target_same_help: "The same mailbox is chosen; any other mailbox of this server can be chosen instead."
     summary_where: "The messages go into a new folder «{folder}» of {mailbox}, with their folders and flags; if that name is already taken, a number is added to it. Nothing already in the mailbox is changed."
     summary_no_target: "Choose the mailbox to restore into."
+    what_folders: "Whole folders, or the messages that match a filter"
+    what_folders_help: "choose the folders; optionally received from/to, sender, subject"
+    what_messages: "Single messages"
+    what_messages_help: "find them in the list and tick them (up to {max, number} at a time)"
+    folder: "Folder"
+    search: "Sender or subject contains"
+    search_button: "Search"
+    page_all: "every message of this page"
+    received: "Received"
+    sender: "From"
+    subject_col: "Subject"
+    size: "Size"
+    clear: "clear"
+    previous: "previous"
+    next: "next"
+    range: "%from%–%to% of %total% found"
+    none_found: "No message found."
+    loading: "Reading the snapshot…"
+    load_error: "The list could not be read: reload the page."
+    no_details: "no details: saved before the list of the messages was kept"
+    chosen_one: "1 message chosen"
+    chosen_few: "%n% messages chosen"
+    chosen_other: "%n% messages chosen"
+    restore_n_one: "Restore 1 message"
+    restore_n_few: "Restore %n% messages"
+    restore_n_other: "Restore %n% messages"
+    too_many_chosen: "Up to {max, number} messages at a time: choose fewer, or restore folders with a filter."
+    summary_messages: "The messages chosen go into a new folder «{folder}» of {mailbox} (with \" (2)\" if that name is taken), in their folders and with their flags. Nothing already in the mailbox is changed."
   logs:
     keep_title: "Keeping the logs"
     keep_logs: "Logs of the runs, for"
@@ -427,6 +456,11 @@ poste_backup:
     parent_missing: "the folder {folder} is not in {mailbox}"
     nothing_matched: "no message matched the choice: nothing restored"
     choose_target: "choose the mailbox to restore into"
+    choose_message: "choose at least one message"
+    too_many_messages: "too many messages: up to {max} at a time"
+    message_invalid: "message: not valid"
+    message_not_in_snapshot: "a chosen message is not in this snapshot"
+    list_read: "cannot read the list of the messages: {detail}"
   settings:
     timezone: "Time zone of the schedules"
     timezone_container: "the container's ({zone})"

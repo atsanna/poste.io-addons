@@ -740,6 +740,9 @@ check("a destination that cannot be read: the error is shown", ADMIN.status == 2
       re.findall(r'alert-danger">([^<]*)', html)[:1])
 url, html = ADMIN.get(BASE + "/")
 check("dashboard: a link to snapshots and restore", "/admin/backup/snapshots" in html, url)
+check("the add-on's name in the menu and on its pages: Mailserver backup (Czech: Zálohy poštovního serveru)",
+      html.count("Mailserver backup") >= 2 and "Zálohy poštovního serveru" in Panel(E["ALICE"], E["PA"], lang="cs").get(BASE + "/")[1],
+      html.count("Mailserver backup"))
 
 # the mailbox deleted after the backup: still in the snapshot, no longer on the server
 DOMAIN = E["ALICE"].split("@")[1]
@@ -765,9 +768,10 @@ def restore_page(src, dest=None, snap=None):
     return BASE + "/snapshots/%s/%s/restore?source=%s" % (dest or SMB, snap or SNAP, urllib.parse.quote(src))
 
 
-def restore_post(src, values, folders=None, dest=None, snap=None, drop=()):
+def restore_post(src, values, folders=None, dest=None, snap=None, drop=(), messages=None):
     """The form of step 2 as a browser sends it: the folders ticked (all those
-    with messages, or the ones given), the other fields as on the page."""
+    with messages, or the ones given), the other fields as on the page; with
+    messages, the single messages ticked (what the page's script adds)."""
     path = restore_page(src, dest, snap)
     url, html = ADMIN.get(path)
     fs = [x for x in Panel.parse(html).forms if x["method"].lower() == "post"]
@@ -781,6 +785,8 @@ def restore_post(src, values, folders=None, dest=None, snap=None, drop=()):
             continue
         body.append((n, v or ""))
     body += [("folders[]", x) for x in (folders or [])] + list(values.items())
+    if messages is not None:
+        body = [(n, v) for n, v in body if n != "what"] + [("what", "messages"), ("messages", "\r\n".join(messages))]
     return ADMIN._open(path, urllib.parse.urlencode(body).encode())
 
 
@@ -897,6 +903,155 @@ errs = [t.get("error") for t in done]
 check("a request changed behind the admin is refused (a path as address or as folder); a snapshot that does not exist gives an error",
       len(done) == 3 and errs[0] == errs[1] == "the request is not valid" and (errs[2] or "").startswith("cannot read the snapshot"), errs)
 check("nothing restored by them", not [f for f in restored_folders(E["CAROL"]) if f.startswith("Tampered")], restored_folders(E["CAROL"]))
+
+# ===================================================================== single messages
+print("--- backup: single messages (the list of the messages)")
+INDEX = "/data/var/backup/engine/index.db"
+
+
+def idx(sql):
+    # as mail, like the engine: root would leave a journal file mail cannot write
+    return sh(["sqlite3", "-separator", "|", INDEX, sql], user="mail").stdout.strip()
+
+
+def messages_json(dest, snap, src, folder="*", q="", page=0):
+    url, body = ADMIN.get(BASE + "/snapshots/%s/%s/messages?%s" % (dest, snap, urllib.parse.urlencode(
+        {"source": src, "folder": folder, "q": q, "page": page})))
+    try:
+        return json.loads(body)
+    except ValueError:
+        return {"status": ADMIN.status, "body": body[:200]}
+
+
+A = E["ALICE"]
+alice_home = "%s/%s" % (dom, A.split("@")[0])
+check("the list of the messages exists after a backup with mail, readable only by mail", os.path.exists(INDEX) and owner(INDEX) == "mail:mail 600",
+      owner(INDEX) if os.path.exists(INDEX) else "missing")
+whole_ls = restic(LOCAL, "ls", "latest", "--tag", "job:" + WHOLE).stdout.splitlines()
+check("it is in the backup of the configuration (a consistent copy, like the databases), not as the live file",
+      "/data/var/backup/engine/staging/index.db" in whole_ls and INDEX not in whole_ls, len(whole_ls))
+# a subject and a sender encoded as e-mail headers are, a message to delete, then a job for alice's mail
+for mid, frm, subj in (("t2c-encoded", "=?UTF-8?B?w4hyaWMgUsOpbXk=?= <e@example.org>", "=?UTF-8?Q?Fattura_n=C2=B0_12_=E2=80=93_ottobre?="),
+                       ("t2c-deleted", "x@example.net", "to be deleted")):
+    sh(["doveadm", "save", "-u", A], input="From: %s\r\nTo: %s\r\nSubject: %s\r\nMessage-ID: <%s@example.net>\r\n\r\nt2c\r\n" % (frm, A, subj, mid))
+ALICEJOB = new_job("Alice mail", [LOCAL], {"mail": "selected", "keep_daily": "30", "_boxes": [A]})
+ALICEJOB = ALICEJOB[0] if ALICEJOB else "000000000000"
+run_job(ALICEJOB)
+S1 = (sorted(snapshots(LOCAL, ALICEJOB) or [], key=lambda x: x["time"]) or [{"id": "0" * 64}])[-1]["id"]
+row = idx("SELECT subject, sender, gone IS NULL FROM msg WHERE mailbox = '%s' AND subject LIKE 'Fattura%%';" % A)
+check("subject and sender decoded (UTF-8 and quoted-printable, base64), the message there", row == "Fattura n° 12 – ottobre|Èric Rémy <e@example.org>|1", row)
+files = set()
+for root, dirs, fs in os.walk(alice_home + "/Maildir"):
+    if os.path.basename(root) in ("cur", "new"):
+        files |= {f.split(":")[0] for f in fs}
+n_idx = idx("SELECT count(*) FROM msg WHERE mailbox = '%s' AND gone IS NULL;" % A)
+check("every message of the mailbox is in the list, once (a copy in another folder is the same message)", n_idx == str(len(files)) and len(files) > 5,
+      (n_idx, len(files)))
+log = open("/data/var/backup/engine/logs/" + state()["jobs"][ALICEJOB]["log"]).read() if state()["jobs"].get(ALICEJOB, {}).get("log") else ""
+check("the job's log says how the list was updated", re.search(r"list of the messages: 1 mailbox\(es\), \d+ new message\(s\), \d+ no longer there", log)
+      is not None, re.findall(r"list of the messages.*", log)[:2])
+
+# the admin's list of a snapshot's messages
+r = messages_json(LOCAL, S1, A, q="fattura")
+m = (r.get("rows") or [{}])[0]
+check("the messages of a snapshot: a search finds the message, with folder, sender's name, subject, date, size",
+      r.get("total") == 1 and m.get("folder") == "Inbox" and m.get("from") == "Èric Rémy" and m.get("sender") == "Èric Rémy <e@example.org>"
+      and m.get("subject") == "Fattura n° 12 – ottobre" and re.match(r"^\d{4}-\d\d-\d\d \d\d:\d\d$", m.get("time", "")) is not None
+      and m.get("id", "").startswith("cur/"), r)
+r2, r3 = messages_json(LOCAL, S1, A, q="ÈRIC"), messages_json(LOCAL, S1, A, q="zzz-nothing")
+check("the search: case does not matter, accented letters too; nothing found is 0", r2.get("total") == 1 and r3.get("total") == 0, (r2.get("total"), r3.get("total")))
+r4 = messages_json(LOCAL, S1, A, folder=".Sent")
+check("one folder only: Sent of that snapshot (the message moved later is not there yet)",
+      r4.get("total", 0) >= 1 and all(x["folder"] == "Sent" for x in r4.get("rows", [])) and not [x for x in r4.get("rows", []) if x["subject"] == "Fattura n° 12 – ottobre"],
+      [(x["folder"], x["subject"]) for x in r4.get("rows", [])][:3])
+allr = messages_json(LOCAL, S1, A)
+check("every message of the snapshot, newest first, one page", allr.get("total") == len(allr.get("rows", [])) > 5
+      and [x["time"] for x in allr["rows"]] == sorted([x["time"] for x in allr["rows"]], reverse=True), allr.get("total"))
+codes = []
+for bad in ({"folder": "../x"}, {"folder": "Sent"}, {"q": "a\nb"}, {"page": -1}):
+    url, body = ADMIN.get(BASE + "/snapshots/%s/%s/messages?%s" % (LOCAL, S1, urllib.parse.urlencode(dict({"source": A}, **bad))))
+    codes.append(ADMIN.status)
+ADMIN.get(BASE + "/snapshots/%s/%s/messages?source=%s" % ("eeeeeeeeeeee", S1, A))
+codes.append(ADMIN.status)
+check("the list refuses a folder that is a path, a text with a new line, a page below 0, an unknown destination", codes == [400, 400, 400, 400, 404], codes)
+r6 = messages_json(LOCAL, "f" * 64, A)
+check("a snapshot that is not there: an error, not an empty list", "cannot read the snapshot" in (r6.get("error") or "") and "rows" not in r6, r6)
+# a message the list does not know (as one saved before it was kept): shown without details
+sent_id = idx("SELECT guid FROM msg WHERE mailbox = '%s' AND subject = 'sent by alice';" % A)
+idx("DELETE FROM msg WHERE mailbox = '%s' AND guid = '%s';" % (A, sent_id))
+r5 = messages_json(LOCAL, S1, A, folder=".Sent")
+check("a message the list does not know is still listed, without sender and subject", any(x["subject"] is None and x["from"] is None for x in r5.get("rows", [])),
+      [(x["from"], x["subject"]) for x in r5.get("rows", [])])
+url, html = ADMIN.get(restore_page(A, LOCAL, S1))
+check("step 2: the choice between folders and single messages, the list of the messages", 'value="messages"' in html and "Single messages" in html
+      and "/messages" in html and 'id="bk-mlist"' in html, url)
+
+# two messages of many, into carol: only those two
+# the inbox's copies only (earlier restores put copies of "old one" in alice's Restored folders)
+ids = [x["id"] for x in allr.get("rows", []) if x["subject"] in ("Fattura n° 12 – ottobre", "old one") and x["id"].startswith("cur/")]
+n0 = len(state().get("tasks", []))
+url, html = restore_post(A, {"target": E["CAROL"], "name": "Two messages"}, dest=LOCAL, snap=S1, messages=ids)
+done = run_tasks(n0, 1)
+r = done[0] if done else {}
+got = sorted(re.findall(r"<([^>]+)>", sh(["doveadm", "fetch", "-u", E["CAROL"], "hdr.message-id", "mailbox", "Two messages.*", "all"]).stdout))
+check("two messages chosen, restored into carol: exactly those two (in their folder), nothing else",
+      len(ids) == 2 and r.get("note") == '2 message(s) restored into the folder "Two messages" of %s' % E["CAROL"]
+      and got == ["old-one@example.net", "t2c-encoded@example.net"], (ids, r.get("note"), r.get("error"), got))
+before_q = queued_tasks()
+refused = []
+for what, msgs, expect in (("none chosen", [], "choose at least one message"), ("more than 1000", ["cur/x%d" % i for i in range(1001)], "up to 1000 at a time"),
+                           ("a path outside the Maildir", ["../../../etc/cur/passwd"], "message: not valid")):
+    url, html = restore_post(A, {"target": E["CAROL"], "name": "Refused"}, dest=LOCAL, snap=S1, messages=msgs)
+    refused.append((what, expect in html))
+check("single messages refused, with their message: " + ", ".join(w for w, ok in refused), all(ok for w, ok in refused) and queued_tasks() == before_q,
+      [w for w, ok in refused if not ok])
+n0 = len(state().get("tasks", []))
+sh(["sh", "-c", 'cat > "$1"', "sh", QUEUE + "/1000000004-restore-0d0d0d0d0d0d.json"], user="mail",
+   input=json.dumps({"dest": LOCAL, "snapshot": S1, "source": A, "target": E["CAROL"], "name": "Not there", "messages": ["cur/1.M1P1.nothere:2,S"]}))
+done = run_tasks(n0, 1)
+check("a message that is not in the snapshot: refused by the engine, nothing restored",
+      [t.get("error") for t in done] == ["a chosen message is not in this snapshot"] and not [f for f in restored_folders(E["CAROL"]) if "Not there" in f]
+      and "Not there" not in sh(["doveadm", "mailbox", "list", "-u", E["CAROL"]]).stdout, [t.get("error") for t in done])
+
+CSL = Panel(E["ALICE"], E["PA"], lang="cs")
+url, html = CSL.get(restore_page(A, LOCAL, S1))
+check("in Czech: the choice of single messages", "Jednotlivé zprávy" in html and "Odesílatel nebo předmět obsahuje" in html, url)
+
+# a damaged list never makes a backup fail: a job with the configuration goes on without it,
+# the next job with mail sets it aside and makes it again
+sh(["sh", "-c", 'printf "this is not sqlite" | dd of="$1" bs=1 seek=0 conv=notrunc 2>/dev/null', "sh", INDEX], user="mail")
+CONFONLY = new_job("Configuration only", [LOCAL], {"config": "1", "mail": "none"})
+CONFONLY = CONFONLY[0] if CONFONLY else "000000000000"
+run_job(CONFONLY)
+s = state()["jobs"].get(CONFONLY, {})
+log = open("/data/var/backup/engine/logs/" + s["log"]).read() if s.get("log") else ""
+check("a damaged list: the backup of the configuration is still ok, without it", s.get("status") == "ok"
+      and "list of the messages: not in this backup" in log, (s.get("status"), re.findall(r"list of the messages.*", log)[:2]))
+run_job(ALICEJOB)
+s = state()["jobs"].get(ALICEJOB, {})
+log = open("/data/var/backup/engine/logs/" + s["log"]).read() if s.get("log") else ""
+check("then the next job with mail sets the damaged list aside and makes it again", s.get("status") == "ok"
+      and "set aside as index.db.damaged and made again" in log and os.path.exists(INDEX + ".damaged")
+      and idx("SELECT count(*) > 0 FROM msg WHERE mailbox = '%s';" % A) == "1", (s.get("status"), re.findall(r"list of the messages.*", log)[:2]))
+post_form(BASE + "/jobs", suffix="/%s/delete" % CONFONLY)
+
+
+# moved and deleted: the moved one stays as it was, the deleted one is marked, still listed for the old snapshots
+sh(["doveadm", "move", "-u", A, "Sent", "mailbox", "INBOX", "header", "Message-ID", "t2c-encoded@example.net"])
+sh(["doveadm", "expunge", "-u", A, "mailbox", "INBOX", "header", "Message-ID", "t2c-deleted@example.net"])
+run_job(ALICEJOB)
+rows = idx("SELECT subject, gone IS NULL FROM msg WHERE mailbox = '%s' AND subject IN ('to be deleted', 'Fattura n° 12 – ottobre') ORDER BY subject;" % A)
+check("a message moved to another folder: the same entry; a deleted one: marked as gone, kept", rows == "Fattura n° 12 – ottobre|1\nto be deleted|0", rows)
+
+# cleaning: what no kept backup can hold any more goes; what a backup may hold stays
+idx("UPDATE msg SET gone = 1 WHERE mailbox = '%s' AND subject = 'to be deleted';" % A)
+idx("INSERT INTO msg VALUES ('%s', 'recently-gone', 0, 0, 'recently gone', 'x', strftime('%%s','now'));" % A)
+run_job(ALICEJOB)
+left = idx("SELECT subject FROM msg WHERE mailbox = '%s' AND subject IN ('to be deleted', 'recently gone');" % A)
+om = state().get("oldest_mail", {})
+check("cleaning: a message gone before the oldest backup kept is removed, one gone since then stays",
+      left == "recently gone" and isinstance((om.get(LOCAL) or {}).get("t"), int), (left, om.get(LOCAL)))
+
 
 # a symbolic link inside a folder chosen (bob's inbox, to alice's message): removed
 # before the import, never followed (otherwise alice's message would land in carol)

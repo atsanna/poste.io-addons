@@ -19,7 +19,7 @@
 
 namespace PosteBackup;
 
-foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine'] as $c) {
+foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Index'] as $c) {
     require "/usr/local/lib/poste-backup/lib/$c.php";
 }
 
