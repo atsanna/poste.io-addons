@@ -82,6 +82,13 @@ the Poste.io admin (super admins only): **External Mailboxes** and
 
 ![Edit form](screenshots/external-mailbox-edit-dark.png)
 
+The logs page: the default getmail view, with the red line on top when there
+are recent errors, and the **Getmail Errors** view (example data).
+
+![Getmail log with recent errors](screenshots/external-mailbox-logs.png)
+
+![Getmail Errors](screenshots/external-mailbox-errors.png)
+
 ## How it works
 
 The "database" is the file system, inside the `/data` volume:
