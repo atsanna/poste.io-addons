@@ -1,9 +1,9 @@
 # Poste.io open source image with the add-ons of this repository: External
-# Mailboxes, admin dark theme, calendars and contacts over ActiveSync, and
-# two upstream fixes. Each add-on is one section below, between the
-# "ADD-ON" markers: delete a section to leave that add-on out, or run
-# select-addons.sh (see docs/choosing-addons.md). See README.md and
-# docs/installation.md.
+# Mailboxes, admin dark theme, calendars and contacts over ActiveSync,
+# ActiveSync logs in the admin, and two upstream fixes. Each add-on is one
+# section below, between the "ADD-ON" markers: delete a section to leave
+# that add-on out, or run select-addons.sh (see docs/choosing-addons.md).
+# See README.md and docs/installation.md.
 #
 #   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 #
@@ -132,6 +132,22 @@ RUN apt-get update && \
 COPY activesync-dav /tmp/activesync-dav
 RUN sh /tmp/activesync-dav/activesync-dav-install.sh /opt/z-push /tmp/activesync-dav && \
     rm -rf /tmp/activesync-dav
+
+#######################################################################
+#  ADD-ON: ActiveSync (Z-Push) logs in the admin  [activesync-logs]
+#  docs/activesync-logs.md
+#  To leave it out, delete this whole section (down to the next ADD-ON).
+#######################################################################
+#======================================================================#
+#  Page, menu entry, translations and log rotation
+#======================================================================#
+# activesync-logs-install.sh adds the "ActiveSync Logs" page right after
+# "User logs" and FAILS the build if Poste.io changes that menu entry. The
+# rotation of the Z-Push logs is configurable in the page: a root script turns
+# the saved settings into a logrotate rule (cron at 00:00 and at every start).
+COPY activesync-logs /tmp/activesync-logs
+RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt/admin && \
+    rm -rf /tmp/activesync-logs
 
 #######################################################################
 #  ADD-ON: Upstream fixes for spam learning  [upstream-fixes]

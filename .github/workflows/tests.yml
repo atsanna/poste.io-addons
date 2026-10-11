@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addons: [all, external-mailboxes, dark-theme, activesync-dav, upstream-fixes]
+        addons: [all, external-mailboxes, dark-theme, activesync-dav, activesync-logs, upstream-fixes]
     steps:
       - uses: actions/checkout@v4
 

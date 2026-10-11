@@ -13,6 +13,8 @@ image on top of the official one:
   in the top bar.
 - **Calendars and contacts over ActiveSync** — the phone's Exchange account
   gets the calendars and contacts of Poste.io's DAV server, not only the mail.
+- **ActiveSync logs in the admin** — read the Z-Push logs with filters, and
+  rotate them (Poste.io never does).
 - **Two upstream fixes** that make "move to Junk" actually teach rspamd.
 
 Take all of them or only the ones you want: each add-on is one section of the
@@ -88,6 +90,17 @@ add-ons and with each one alone ([tests](docs/testing.md)).
 → [docs/activesync-dav.md](docs/activesync-dav.md) (existing installations:
 devices must resync once)
 
+### ActiveSync logs
+
+- A page right after *User logs* with the Z-Push log and its errors log:
+  filter by level, account and text, newest lines first.
+- Log rotation set from the same page (Poste.io never rotates these logs):
+  every day, week or month, old copies kept compressed.
+- Read-only on purpose: the logs stay Z-Push's (`www-data`), as Poste.io
+  wants them.
+
+→ [docs/activesync-logs.md](docs/activesync-logs.md)
+
 ### Upstream fixes
 
 On 2.5.17 moving a message to Junk does not train rspamd: the learning scripts
@@ -125,6 +138,7 @@ using ActiveSync must resync once.
 external-mailboxes/    admin pages (admin/), translations, crontab of the mail user, cron.sh (the getmail runner), getmail-rspamd (the spam check filter)
 dark-theme/            admin files (admin/), translations, the script that hooks the theme into base.html.twig
 activesync-dav/        Z-Push backends and the script that configures Z-Push
+activesync-logs/       admin page (admin/), translations, the rotation script and its cron entry, a start script, the install script
 tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client)
 docs/                  documentation and screenshots
 Dockerfile             open source edition (analogic/poste.io), one section per add-on
@@ -139,6 +153,7 @@ select-addons.sh       prints a Dockerfile with only the add-ons you name
 - [External Mailboxes](docs/external-mailboxes.md)
 - [Dark theme](docs/dark-theme.md)
 - [Calendars and contacts over ActiveSync](docs/activesync-dav.md)
+- [ActiveSync logs in the admin](docs/activesync-logs.md)
 - [Upstream fixes](docs/upstream-fixes.md)
 - [Tests](docs/testing.md)
 - [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)

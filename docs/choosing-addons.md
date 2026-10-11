@@ -9,6 +9,7 @@ and lives in its own folder of the repository.
 | [External Mailboxes](external-mailboxes.md) | `external-mailboxes` | `external-mailboxes/` | adds admin pages and two menu entries, installs getmail6 and the `getmail-rspamd` filter (`/usr/local/bin`), adds a crontab for the `mail` user and the nightly rotation of its logs (`/etc/cron.d`, `/etc/logrotate.d`) |
 | [Dark theme for the admin](dark-theme.md) | `dark-theme` | `dark-theme/` | adds a stylesheet and two templates, two `include` lines in `base.html.twig` |
 | [Calendars and contacts over ActiveSync](activesync-dav.md) | `activesync-dav` | `activesync-dav/` | 19 lines of Z-Push configuration, two Z-Push backends, installs `libawl-php` |
+| [ActiveSync logs in the admin](activesync-logs.md) | `activesync-logs` | `activesync-logs/` | adds an admin page and one menu entry (after *User logs*), a start script (`/etc/cont-init.d`) and the nightly rotation of the Z-Push logs (`/etc/cron.d`, `/etc/logrotate.d`) |
 | [Upstream fixes for spam learning](upstream-fixes.md) | `upstream-fixes` | — (in the Dockerfile) | permissions and recipient of the Junk learning scripts |
 
 No add-on needs another one. The tests build the open source image with each
@@ -29,7 +30,7 @@ sh select-addons.sh Dockerfile external-mailboxes > Dockerfile.custom
 ```
 
 It stops with an error on an unknown name, and lists the names it knows. With
-all four names it prints the Dockerfile exactly as it is.
+all five names it prints the Dockerfile exactly as it is.
 
 ## Option 2: edit the Dockerfile
 
@@ -60,4 +61,7 @@ Removing an add-on from the image does not clean up what it left in the
   the identifiers of the ActiveSync folders, so **every device must resync**
   ([activesync-dav.md](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync)).
   Calendars and contacts themselves stay on the DAV server.
+- **ActiveSync logs**: the rotation settings stay in `/data/var/activesync-logs`,
+  the old copies of the Z-Push logs in `/data/log/z-push` (`*.log.1`,
+  `*.log.N.gz`). Delete them if you no longer need them.
 - **Dark theme** and **upstream fixes**: nothing to do.

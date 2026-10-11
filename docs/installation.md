@@ -43,7 +43,10 @@ The build, one Dockerfile section per add-on:
    `base.html.twig`;
 3. **Calendars and contacts over ActiveSync**: installs `libawl-php`,
    configures Z-Push and adds its two backends;
-4. **Upstream fixes**: applies the two [upstream fixes](upstream-fixes.md).
+4. **ActiveSync logs**: copies its page into `/opt/admin` (on Pro rebuilds the
+   classmap), adds its menu entry and translations, the rotation script, its
+   nightly cron entry and a start script;
+5. **Upstream fixes**: applies the two [upstream fixes](upstream-fixes.md).
 
 ## 2. Run it
 
@@ -55,9 +58,9 @@ cp docker-compose.example.yml docker-compose.yml   # edit hostname, TZ, data pat
 docker compose up -d
 ```
 
-Then open `https://<your host>/admin/`. The new entries **External Mailboxes**
-and **External Mailbox Logs** are in the left menu (super admins only); the
-theme switch is in the top bar.
+Then open `https://<your host>/admin/`. The new entries **External Mailboxes**,
+**External Mailbox Logs** and **ActiveSync Logs** are in the left menu (super
+admins only); the theme switch is in the top bar.
 
 ## 3. Existing installations: the `/data` volume
 
@@ -94,6 +97,9 @@ otherwise phones end up with duplicated mail folders. The commands are in
 [activesync-dav.md](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync).
 Later rebuilds and Poste.io upgrades with the add-on inside do not need it.
 
+**ActiveSync logs** needs nothing by hand: its folder on the volume is created
+by a start script at every container start.
+
 ## 4. Check that it works
 
 ```bash
@@ -124,7 +130,9 @@ image:
 - the Bayes upstream fix stops if Poste.io changed the Junk learning scripts
   (`grep -q` checks at the end of the block);
 - `activesync-dav-install.sh` stops if any of the 19 Z-Push configuration
-  lines it changes is not exactly as expected.
+  lines it changes is not exactly as expected;
+- `activesync-logs-install.sh` stops if the *User logs* menu entry is not
+  found exactly once, followed by its `</li>`.
 
 Before each upgrade, check whether the [upstream fixes](upstream-fixes.md) are
 still needed: when Poste.io ships them, delete the two blocks from the
@@ -134,7 +142,8 @@ Dockerfiles.
 
 Rebuild/run the official image. The add-ons only add files; the data they
 leave in the volume is `/data/var/getmail` (mailbox configurations, with
-passwords) and `/data/log/getmail`. Remove them if you no longer need them.
+passwords), `/data/log/getmail`, `/data/var/activesync-logs` and the old copies
+of the Z-Push logs. Remove them if you no longer need them.
 If you used calendars and contacts over ActiveSync, resync every device after
 the switch (the folder identifiers change back). To drop only some add-ons,
 see [choosing-addons.md](choosing-addons.md).

@@ -39,6 +39,17 @@ All notable changes to this project are documented here. The format follows
   from them every night at 00:00, accepting only the allowed values (see
   [docs](docs/external-mailboxes.md#log-rotation)).
 
+- **New add-on: ActiveSync logs in the admin** (`activesync-logs`). A page
+  right after *User logs* shows the Z-Push logs (`z-push.log`,
+  `z-push-error.log`), newest first, with filters by level, account and text.
+  Poste.io never rotates these logs; the page sets their rotation (on/off,
+  each log every day/week/month, 1 to 12 old copies; defaults: weekly, 4), with
+  the same design as the External Mailboxes rotation: the admin saves the
+  settings, a root script writes the logrotate rule at 00:00 and at every
+  start. No Clear button: the logs belong to Z-Push (`www-data`) and stay so.
+  Independent of the other add-ons; nothing to do by hand on an existing
+  installation (see [docs](docs/activesync-logs.md)).
+
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
   all" on and the messages left on the server, getmail warns at every run that

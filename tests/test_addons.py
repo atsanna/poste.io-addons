@@ -1,8 +1,8 @@
-"""End-to-end tests of the External Mailboxes, dark theme and upstream-fixes
-add-ons, run inside a test container by run.sh. An add-on that is not in the
+"""End-to-end tests of the External Mailboxes, ActiveSync Logs, dark theme and
+upstream-fixes add-ons, run inside a test container by run.sh. An add-on that is not in the
 image is reported as SKIP. Every check prints PASS or FAIL with what it found;
 the exit code is the number of failures."""
-import imaplib, os, re, ssl, stat, subprocess, sys, time
+import imaplib, os, re, ssl, stat, subprocess, sys, time, urllib.parse
 sys.path.insert(0, "/tests")
 from panel import Panel, env
 
@@ -286,6 +286,126 @@ def getmail_errors(form):
     check("getmail view: no summary after Clear", summary not in html, url)
 
 
+def activesync_logs():
+    """The ActiveSync Logs page reads the Z-Push logs (www-data, 0644: read, never
+    cleared) and saves their rotation settings; a root script writes the rule."""
+    ctrl = "/opt/admin/src/Base/Controller/ActiveSyncLogsController.php"
+    if not os.path.exists(ctrl):
+        print("SKIP  ActiveSync Logs: not in this image")
+        return
+    print("--- ActiveSync Logs")
+    page = "/admin/activesync-logs/"
+    rule, conf = "/etc/logrotate.d/activesync-logs", "/data/var/activesync-logs/log-rotation.ini"
+    gen = "/usr/local/bin/activesync-logs-logrotate"
+    log, errlog = "/data/log/z-push/z-push.log", "/data/log/z-push/z-push-error.log"
+    read = lambda f: open(f).read() if os.path.exists(f) else ""
+    www = int(sh("id -u www-data"))
+    owner = lambda p: "%o %s" % (stat.S_IMODE(os.stat(p).st_mode), "www-data" if os.stat(p).st_uid == www else os.stat(p).st_uid)
+    text_of = lambda html: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+    url, html = ADMIN.get("/admin/")
+    menu = open("/opt/admin/templates/_menu.html.twig").read()
+    check("menu entry right after User logs", page in html and 0 < menu.find("pro_path('auth_log')") < menu.find("activesync_logs"), url)
+    check("settings folder made at start on the volume (0750, owned by mail)",
+          os.path.isdir(os.path.dirname(conf)) and mode(os.path.dirname(conf)) == "750 mail",
+          mode(os.path.dirname(conf)) if os.path.isdir(os.path.dirname(conf)) else "missing")
+    text = read(rule)
+    body = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))   # the comments mention copytruncate
+    check("default rotation rule: both Z-Push logs weekly, 4 copies, as www-data",
+          body.count("weekly") == 2 and body.count("rotate 4") == 2 and body.count("su www-data www-data") == 2
+          and body.count("create 0644 www-data www-data") == 2 and "copytruncate" not in body,
+          re.findall(r"^\s+(weekly|rotate .*|su .*)$", text, re.M))
+    check("the rule is rewritten by root at 00:00, before logrotate", "0 0 * * * root " + gen in read("/etc/cron.d/activesync-logs-logrotate"),
+          read("/etc/cron.d/activesync-logs-logrotate").strip()[-60:])
+
+    # a real Z-Push error: an ActiveSync request with a wrong password
+    sync = "https://localhost/Microsoft-Server-ActiveSync?Cmd=FolderSync&User=%s&DeviceId=LOGTEST1&DeviceType=TestPhone" % E["BOB"]
+    subprocess.run(["curl", "-sk", "-m", "90", "-o", "/dev/null", "-u", E["BOB"] + ":wrong-" + E["PB"], "-X", "POST",
+                    "-H", "MS-ASProtocolVersion: 14.0", "-H", "Content-Type: application/vnd.ms-sync.wbxml", sync])
+    check("Z-Push logs stay www-data 0644", os.path.exists(log) and owner(log) == "644 www-data", owner(log) if os.path.exists(log) else "missing")
+    url, html = ADMIN.get(page + "?level=error&account=" + E["BOB"])
+    row = first_row(html)
+    check("a wrong ActiveSync password is shown as an error, with its account",
+          row.startswith(' class="log-level-error"') and E["BOB"] in row and "Access denied" in row, text_of(row)[:200])
+
+    # known lines, in Z-Push's format, to check the filters and the order
+    now = time.strftime("%d/%m/%Y %H:%M:%S")
+    lines = ["%s [ 4242] [ INFO] [%s] logtest-info <b>bold</b>" % (now, E["CAROL"]),
+             "%s [ 4242] [WARN] [%s] logtest-warn" % (now, E["CAROL"]),
+             "%s [ 4242] [ERROR] [%s] logtest-error version='2.7.5" % (now, E["ALICE"]),
+             "' method='POST' httpcode='500'"]
+    with open(log, "a") as f:
+        f.write("\n".join(lines) + "\n")
+    url, html = ADMIN.get(page)
+    row = first_row(html)
+    check("newest line first, a message on two lines kept together",
+          "logtest-error" in row and "httpcode=&#039;500&#039;" in row and row.startswith(' class="log-level-error"'), text_of(row)[:200])
+    check("log text is escaped (no HTML from the log)", "&lt;b&gt;bold&lt;/b&gt;" in html and "<b>bold</b>" not in html, "logtest-info")
+    url, html = ADMIN.get(page + "?level=warning")
+    check("level 'warnings and errors': WARN and ERROR, no INFO",
+          "logtest-warn" in html and "logtest-error" in html and "logtest-info" not in html, url)
+    url, html = ADMIN.get(page + "?level=error")
+    check("level 'errors only': ERROR, no WARN", "logtest-error" in html and "logtest-warn" not in html, url)
+    url, html = ADMIN.get(page + "?account=" + E["CAROL"])
+    opts = re.findall(r'<option value="([^"]+@[^"]+)"', html)
+    check("account menu from the log, and the filter",
+          E["CAROL"] in opts and E["ALICE"] in opts and "logtest-info" in html and "logtest-error" not in html, opts)
+    url, html = ADMIN.get(page + "?account=nobody@example.test")
+    check("an account not in the menu is ignored (all accounts)", "logtest-error" in html and "logtest-info" in html, url)
+    url, html = ADMIN.get(page + "?search=LOGTEST-WARN")
+    check("search, case-insensitive", "logtest-warn" in html and "logtest-info" not in html, url)
+    ADMIN.get(page + "?search=" + urllib.parse.quote("x'; touch /tmp/aslogs-pwned; echo '"))
+    check("search text is not run by the shell", not os.path.exists("/tmp/aslogs-pwned"), os.path.exists("/tmp/aslogs-pwned"))
+    url, html = ADMIN.get(page + "?type=errors")
+    check("Z-Push errors log: errors and warnings, not INFO", "Access denied" in html and "logtest-info" not in html, url)
+    actions = [x["action"] for x in Panel.parse(html).forms]
+    check("no Clear form, a Rotation form (the logs belong to Z-Push)",
+          not any(x.endswith("/clear") for x in actions) and any(x.endswith("/activesync-logs/rotation") for x in actions)
+          and 'name="zpush_every"' in html, actions)
+
+    # rotation settings
+    form_post(page, "/rotation", {"zpush_every": "daily"}, drop=("_token",))
+    check("settings without the CSRF token are refused (nothing saved)", not os.path.exists(conf), read(conf)[:60] or "no file")
+    form_post(page, "/rotation", {"zpush_every": "daily", "errors_every": "monthly", "keep": "8"})
+    saved = read(conf)
+    check("settings saved (0640, owned by mail)", "zpush_every=daily" in saved and "errors_every=monthly" in saved and "keep=8" in saved
+          and mode(conf) == "640 mail", (mode(conf) if saved else "missing", re.findall(r"^\w+=.*$", saved, re.M)))
+    sh(gen)
+    text = read(rule)
+    check("the root script applies them: z-push.log daily, errors monthly, 8 copies",
+          re.search(r"z-push\.log \{\s+daily", text) and re.search(r"z-push-error\.log \{\s+monthly", text) and text.count("rotate 8") == 2,
+          re.findall(r"^\s+(daily|weekly|monthly|rotate .*)$", text, re.M))
+    form_post(page, "/rotation", {"keep": "99"})
+    check("a value not offered by the form is refused (nothing changed)", read(conf) == saved, re.findall(r"^keep=.*$", read(conf), re.M))
+    with open(conf, "w") as f:
+        f.write("zpush_every=hourly\nkeep=$(touch /tmp/aslogs-pwned)\nerrors_every=daily;touch /tmp/aslogs-pwned\n")
+    sh(gen)
+    text = read(rule)
+    check("a tampered settings file gives the defaults and runs nothing",
+          text.count("weekly") == 2 and text.count("rotate 4") == 2 and not os.path.exists("/tmp/aslogs-pwned"),
+          (re.findall(r"^\s+(daily|weekly|monthly|rotate .*)$", text, re.M), os.path.exists("/tmp/aslogs-pwned")))
+    form_post(page, "/rotation", {"zpush_every": "weekly", "errors_every": "weekly", "keep": "4"}, drop=("enabled",))
+    sh(gen)
+    off = subprocess.run("logrotate -d %s" % rule, shell=True, capture_output=True, text=True)
+    check("rotation switched off: no Z-Push log in the rule", "enabled=0" in read(conf) and "/data/log/z-push" not in read(rule) and off.returncode == 0,
+          (re.findall(r"^enabled=.*$", read(conf), re.M), off.returncode))
+    form_post(page, "/rotation", {"enabled": "1", "zpush_every": "weekly", "errors_every": "weekly", "keep": "4"})
+    sh(gen)
+    out = subprocess.run("logrotate -f -s /tmp/logrotate-aslogs.test %s" % rule, shell=True, capture_output=True, text=True)
+    check("forced rotation: no error, z-push.log.1 kept, z-push.log recreated 0644 owned by www-data",
+          out.returncode == 0 and not out.stderr.strip() and os.path.exists(log + ".1") and os.path.exists(log) and owner(log) == "644 www-data",
+          (out.returncode, out.stderr.strip()[:120], os.path.exists(log + ".1"), owner(log) if os.path.exists(log) else "missing"))
+    subprocess.run(["curl", "-sk", "-m", "60", "-o", "/dev/null", "-u", E["ALICE"] + ":" + E["PA"], "-X", "OPTIONS",
+                    "https://localhost/Microsoft-Server-ActiveSync"])
+    check("Z-Push writes to the new z-push.log", os.path.getsize(log) > 0 and "Options request" in read(log), os.path.getsize(log))
+    url, html = ADMIN.get(page + "?rotation=1")
+    check("the page shows the old copies", re.search(r"z-push\.log [^<]* [1-9][0-9]* old copies", html) is not None,
+          re.findall(r"z-push\.log [^<]*old copies[^<]*", html)[:1])
+    out = sh("cd /opt/admin && runuser -u mail -- php bin/console lint:yaml translations --env=prod 2>&1; "
+             "runuser -u mail -- php bin/console lint:twig templates/Base/ActiveSyncLogs --env=prod 2>&1")
+    check("translations and templates are valid (lint)", "ERROR" not in out and out.count("[OK]") == 2, out.count("[OK]"))
+
+
 def dark_theme():
     if not os.path.exists("/opt/admin/public/dark-theme.css"):
         print("SKIP  dark theme: not in this image")
@@ -340,7 +460,7 @@ def upstream_fixes():
           "domain keys %d, per-address keys %d" % (len(dom), len(user)))
 
 
-for group in (external_mailboxes, dark_theme, upstream_fixes):
+for group in (external_mailboxes, activesync_logs, dark_theme, upstream_fixes):
     try:
         group()
     except Exception as ex:          # a surprise is a failure of that group, the others still run

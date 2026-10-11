@@ -12,7 +12,7 @@ editions; the Pro image is tested by hand before each release.
 
 ## What runs
 
-[`.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs five jobs
+[`.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs six jobs
 in parallel. Each builds the image from the `Dockerfile` with the Poste.io
 version pinned there (`ARG POSTE_IO_VERSION`), then runs
 [`tests/run.sh`](../tests/run.sh) on it:
@@ -20,7 +20,7 @@ version pinned there (`ARG POSTE_IO_VERSION`), then runs
 | Job | Image |
 |---|---|
 | `all` | the Dockerfile as it is, every add-on |
-| `external-mailboxes`, `dark-theme`, `activesync-dav`, `upstream-fixes` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
+| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `upstream-fixes` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
 
 The single-add-on jobs prove that each add-on builds and works without the
 others; the tests of the add-ons that are not in the image are reported as
@@ -86,6 +86,28 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   error, and summarised in a red line on top of the getmail view; after the
   mailbox is deleted from the admin, **Clear** without its CSRF token is
   refused and with it empties the file, and the red line is gone.
+
+**ActiveSync logs** (`tests/test_addons.py`)
+- the menu entry right after *User logs*; the settings folder made by the
+  start script on the fresh volume (`0750`, owned by `mail`); the default rule
+  (both logs weekly, 4 copies, rotated as `www-data`, no `copytruncate`) and its
+  nightly cron entry;
+- a real Z-Push error: an ActiveSync request with a wrong password is on top
+  of the page as an error, with its account; the Z-Push logs stay `www-data`
+  `0644`;
+- with known lines in Z-Push's format: newest first, a message written over
+  two lines shown as one, the log text escaped (no HTML from the log), the
+  level filters, the account menu and filter (an account not in the menu is
+  ignored), the case-insensitive search, a search text that is not run by
+  the shell, the errors log;
+- no Clear form; the rotation settings: refused without the CSRF token,
+  saved `0640` owned by `mail`, applied by the root script, a value not offered
+  by the form refused, a settings file changed behind the admin gives the
+  defaults and runs nothing, rotation switched off leaves no Z-Push log in the
+  rule; a forced rotation keeps `z-push.log.1`, recreates `z-push.log` `0644`
+  owned by `www-data`, Z-Push writes to it at the next request, and the page
+  shows the old copies;
+- `lint:yaml` and `lint:twig` pass.
 
 **Dark theme** (`tests/test_addons.py`)
 - the two `include` lines are in `base.html.twig` once each;

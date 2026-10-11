@@ -1,0 +1,54 @@
+
+# own top-level key only: External Mailboxes already appends "menu:",
+# and a YAML file cannot have the same key twice
+activesync_logs:
+  menu: ActiveSync Logs
+  list:
+    title: ActiveSync Logs
+  log_type:
+    label: Log
+  type:
+    zpush: Z-Push log
+    errors: Z-Push errors
+  level:
+    label: Level
+    filter: Level
+    all: All
+    warning: Warnings and errors
+    error: Errors only
+  account:
+    label: Account
+    all: All accounts
+  lines:
+    label: Lines
+  search:
+    placeholder: Search...
+    button: Search
+  refresh:
+    button: Refresh
+  timestamp:
+    label: Time
+  message:
+    label: Message
+  no_logs: No log lines found
+  not_yet: "Z-Push has not written this log yet: {file}"
+  not_readable: "Log file not readable: {file}"
+  error:
+    csrf: Invalid CSRF token, reload the page
+  rotation:
+    button: Rotation
+    title: Log rotation
+    enabled: Rotate the Z-Push logs
+    zpush_every: "Z-Push log: rotate every"
+    errors_every: "Z-Push errors: rotate every"
+    every:
+      daily: day
+      weekly: week
+      monthly: month
+    keep: Old copies kept (compressed)
+    help: "Applied by the nightly rotation (00:01). The logs belong to Z-Push: this page reads them and does not clear them."
+    status: "Now: z-push.log {zpush}, z-push-error.log {errors}, {copies} old copies ({copiesSize})."
+    save: Save
+    saved: "Log rotation saved: it applies from the next nightly rotation"
+    invalid: Invalid log rotation value
+    not_writable: Cannot save the log rotation settings

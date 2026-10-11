@@ -1,0 +1,54 @@
+
+# own top-level key only: External Mailboxes already appends "menu:",
+# and a YAML file cannot have the same key twice
+activesync_logs:
+  menu: Logy ActiveSync
+  list:
+    title: Logy ActiveSync
+  log_type:
+    label: Log
+  type:
+    zpush: Log Z-Push
+    errors: Chyby Z-Push
+  level:
+    label: Úroveň
+    filter: Úroveň
+    all: Vše
+    warning: Varování a chyby
+    error: Jen chyby
+  account:
+    label: Účet
+    all: Všechny účty
+  lines:
+    label: Řádky
+  search:
+    placeholder: Hledat...
+    button: Hledat
+  refresh:
+    button: Obnovit
+  timestamp:
+    label: Čas
+  message:
+    label: Zpráva
+  no_logs: Nebyly nalezeny žádné záznamy
+  not_yet: "Z-Push tento log zatím nezapsal: {file}"
+  not_readable: "Soubor logu nelze číst: {file}"
+  error:
+    csrf: Neplatný token CSRF, načtěte stránku znovu
+  rotation:
+    button: Rotace
+    title: Rotace logů
+    enabled: Rotovat logy Z-Push
+    zpush_every: "Log Z-Push: rotovat každý"
+    errors_every: "Chyby Z-Push: rotovat každý"
+    every:
+      daily: den
+      weekly: týden
+      monthly: měsíc
+    keep: Uchovávané staré kopie (komprimované)
+    help: "Použije se při noční rotaci (00:01). Logy patří Z-Push: tato stránka je čte a nemaže."
+    status: "Nyní: z-push.log {zpush}, z-push-error.log {errors}, starých kopií {copies} ({copiesSize})."
+    save: Uložit
+    saved: "Rotace logů uložena: platí od příští noční rotace"
+    invalid: Neplatná hodnota rotace logů
+    not_writable: Nastavení rotace logů nelze uložit

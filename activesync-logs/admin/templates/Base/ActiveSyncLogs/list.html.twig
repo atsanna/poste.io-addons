@@ -1,0 +1,171 @@
+
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'activesync_logs.list.title'|trans }}{% endblock %}
+
+{% block body -%}
+
+    {% for flashMessage in app.session.flashbag.get('notice') %}
+    <div class="alert alert-info">
+        {{ flashMessage }}
+    </div>
+    {% endfor %}
+
+    {% for flashMessage in app.session.flashbag.get('error') %}
+    <div class="alert alert-danger">
+        {{ flashMessage }}
+    </div>
+    {% endfor %}
+
+    {# filter bar: flex to align labels, Chosen menus, field and buttons vertically #}
+    <style>
+        {# base.css limits every form to 560px: here the bar uses the whole column #}
+        .as-logs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; max-width: none; }
+        .as-logs-bar .form-group { display: flex; align-items: center; gap: 6px; margin: 0; }
+        .as-logs-bar label { margin: 0; white-space: nowrap; }
+        .as-logs-bar input[name="search"] { width: 220px; }
+        .as-rotation { border: 1px solid var(--bs-border-color, #ddd); border-radius: 4px; padding: 12px 16px 16px; margin: 4px 0 18px; }
+        .as-rotation h3 { margin-top: 4px; font-size: 18px; }
+        .as-rot-grid { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+        .as-rot-grid .form-group { min-width: 260px; }
+        .as-rot-grid .control-label { display: block; margin-bottom: 4px; }
+    </style>
+    <div class="row">
+        <div class="col-md-9">
+            <form method="get" class="as-logs-bar">
+                <div class="form-group">
+                    <label for="type">{{ 'activesync_logs.log_type.label'|trans }}:</label>
+                    <select name="type" id="type" class="form-control" onchange="this.form.submit()">
+                        {% for type in ['zpush', 'errors'] %}
+                            <option value="{{ type }}" {% if logType == type %}selected{% endif %}>{{ ('activesync_logs.type.' ~ type)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="level">{{ 'activesync_logs.level.filter'|trans }}:</label>
+                    <select name="level" id="level" class="form-control" onchange="this.form.submit()">
+                        {% for l in ['all', 'warning', 'error'] %}
+                            <option value="{{ l }}" {% if level == l %}selected{% endif %}>{{ ('activesync_logs.level.' ~ l)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="account">{{ 'activesync_logs.account.label'|trans }}:</label>
+                    <select name="account" id="account" class="form-control" onchange="this.form.submit()">
+                        <option value="">{{ 'activesync_logs.account.all'|trans }}</option>
+                        {% for a in accounts %}
+                            <option value="{{ a }}" {% if account == a %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="lines">{{ 'activesync_logs.lines.label'|trans }}:</label>
+                    <select name="lines" id="lines" class="form-control" onchange="this.form.submit()">
+                        {% for n in linesChoices %}
+                            <option value="{{ n }}" {% if lines == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <input type="text" name="search" value="{{ search }}" placeholder="{{ 'activesync_logs.search.placeholder'|trans }}" class="form-control">
+                </div>
+
+                <button type="submit" class="btn btn-default">
+                    <i class="fa fa-search"></i> {{ 'activesync_logs.search.button'|trans }}
+                </button>
+            </form>
+        </div>
+
+        <div class="col-md-3 text-right">
+            <button type="button" id="as-rotation-toggle" class="btn btn-default{% if rotationOpen %} active{% endif %}"
+                    aria-controls="as-rotation" aria-expanded="{{ rotationOpen ? 'true' : 'false' }}">
+                <i class="fa fa-cogs"></i> {{ 'activesync_logs.rotation.button'|trans }}
+            </button>
+
+            <button class="btn btn-info" onclick="location.reload()">
+                <i class="fa fa-refresh"></i> {{ 'activesync_logs.refresh.button'|trans }}
+            </button>
+        </div>
+    </div>
+
+    <br>
+
+    {# log rotation settings: saved here, applied by the nightly rotation (root script + logrotate) #}
+    <div id="as-rotation" class="as-rotation"{% if not rotationOpen %} style="display: none;"{% endif %}>
+        <h3><i class="fa fa-cogs"></i> {{ 'activesync_logs.rotation.title'|trans }}</h3>
+        <form method="post" action="{{ path('activesync_logs_rotation') }}">
+            <input type="hidden" name="_token" value="{{ csrf_token('activesync_logs_rotation') }}">
+            <div class="checkbox">
+                <label><input type="checkbox" name="enabled" value="1"{% if rotation.enabled == '1' %} checked{% endif %}> {{ 'activesync_logs.rotation.enabled'|trans }}</label>
+            </div>
+            <div class="as-rot-grid">
+                <div class="form-group">
+                    <label for="as-rot-zpush" class="control-label">{{ 'activesync_logs.rotation.zpush_every'|trans }}</label>
+                    <select name="zpush_every" id="as-rot-zpush" class="form-control">
+                        {% for v in rotationChoices.zpush_every %}
+                            <option value="{{ v }}"{% if rotation.zpush_every == v %} selected{% endif %}>{{ ('activesync_logs.rotation.every.' ~ v)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="as-rot-errors" class="control-label">{{ 'activesync_logs.rotation.errors_every'|trans }}</label>
+                    <select name="errors_every" id="as-rot-errors" class="form-control">
+                        {% for v in rotationChoices.errors_every %}
+                            <option value="{{ v }}"{% if rotation.errors_every == v %} selected{% endif %}>{{ ('activesync_logs.rotation.every.' ~ v)|trans }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="as-rot-keep" class="control-label">{{ 'activesync_logs.rotation.keep'|trans }}</label>
+                    <select name="keep" id="as-rot-keep" class="form-control">
+                        {% for v in rotationChoices.keep %}
+                            <option value="{{ v }}"{% if rotation.keep == v %} selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <p class="help-block">
+                {{ 'activesync_logs.rotation.help'|trans }}<br>
+                {{ 'activesync_logs.rotation.status'|trans({'{zpush}': rotationStatus.zpush, '{errors}': rotationStatus.errors, '{copies}': rotationStatus.copies, '{copiesSize}': rotationStatus.copiesSize}) }}
+            </p>
+            <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'activesync_logs.rotation.save'|trans }}</button>
+        </form>
+    </div>
+
+    <div id="result">
+        {% include "Base/ActiveSyncLogs/_logsList.html.twig" %}
+    </div>
+
+{% endblock %}
+
+{% block javascripts %}
+    <script>
+        // drop-down menus as in the rest of Poste.io (Chosen is loaded by
+        // base.html.twig); on change Chosen calls trigger("change"), which also
+        // runs the inline onchange and therefore submits the form.
+        // Explicit widths: otherwise Chosen copies the select width and truncates the text
+        $('#type').chosen({width: '150px', disable_search_threshold: 10});
+        $('#level').chosen({width: '190px', disable_search_threshold: 10});
+        $('#account').chosen({width: '230px', disable_search_threshold: 10});
+        $('#lines').chosen({width: '80px', disable_search_threshold: 10});
+        $('#as-rotation select').chosen({width: '260px', disable_search_threshold: 10});
+
+        // "Rotation" opens and closes the settings
+        $('#as-rotation-toggle').on('click', function () {
+            var open = !$('#as-rotation').is(':visible');
+            $('#as-rotation').toggle(open);
+            $(this).toggleClass('active', open).attr('aria-expanded', open ? 'true' : 'false');
+        });
+
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            if (!document.hidden) {
+                $('#result').load('{{ path('activesync_logs') }}?ajax&type={{ logType|url_encode }}&level={{ level|url_encode }}&account={{ account|url_encode }}&lines={{ lines }}&search={{ search|url_encode }}');
+            }
+        }, 30000);
+    </script>
+{% endblock %}

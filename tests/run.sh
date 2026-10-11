@@ -72,7 +72,7 @@ docker exec "$NAME" php -r 'include "/opt/z-push/lib/wbxml/wbxmldefs.php";
     file_put_contents("/tests/wbxmldefs.json", json_encode(["codes" => $d["codes"], "namespaces" => $d["namespaces"]]));'
 
 status=0
-echo "== External Mailboxes, dark theme, upstream fixes"
+echo "== External Mailboxes, ActiveSync Logs, dark theme, upstream fixes"
 docker exec "$NAME" python3 /tests/test_addons.py || status=$((status + $?))
 echo "== calendars and contacts over ActiveSync"
 docker exec "$NAME" python3 /tests/test_activesync.py || status=$((status + $?))

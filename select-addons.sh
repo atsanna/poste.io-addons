@@ -5,7 +5,7 @@
 # left exactly as it is. The add-ons are the sections marked
 # "ADD-ON: ... [name]" in the Dockerfile:
 #
-#   external-mailboxes  dark-theme  activesync-dav  upstream-fixes
+#   external-mailboxes  dark-theme  activesync-dav  activesync-logs  upstream-fixes
 #
 # Example: only the dark theme and the upstream fixes, Pro edition
 #
