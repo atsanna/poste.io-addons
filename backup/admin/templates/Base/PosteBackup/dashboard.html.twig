@@ -6,7 +6,7 @@
 {% include 'Base/PosteBackup/_common.html.twig' %}
 
 {% if problems %}
-<div class="bk-alert"><i class="fa fa-exclamation-triangle"></i>
+<div class="alert alert-danger bk-alert"><i class="fa fa-exclamation-triangle"></i>
     <strong>{{ 'poste_backup.dashboard.problems'|trans({'{count}': problems|length}) }}</strong>
     <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
 </div>

@@ -73,6 +73,11 @@
 {% block javascripts %}
 <script>
     $('#bk-boxes').chosen({width: '100%', max_width: '600px'});
+    // Chosen like the rest of the admin (a plain select has no arrow there);
+    // fixed widths: a select hidden at load would be measured 0 px wide
+    $('#bk-every').chosen({width: '130px', disable_search_threshold: 10});
+    $('#bk-weekday').chosen({width: '150px', disable_search_threshold: 10});
+    $('#bk-monthday, #bk-hour, #bk-minute').chosen({width: '90px', disable_search_threshold: 10});
     function bkSched() {
         var every = $('#bk-every').val();
         $('.bk-sched').each(function () {

@@ -136,9 +136,14 @@
             var on = ($(this).data('type') + '').split(' ').indexOf(type) >= 0;
             $(this).toggle(on).find('input, select').prop('disabled', !on);
         });
+        $('#bk-auth').trigger('chosen:updated');
         var pw = type === 'smb' || (type === 'sftp' && $('#bk-auth').val() === 'password');
         $('.bk-password').toggle(pw).find('input').prop('disabled', !pw);
     }
+    // Chosen like the rest of the admin (a plain select has no arrow there);
+    // fixed widths: a select hidden at load would be measured 0 px wide
+    $('#bk-type').chosen({width: '320px', disable_search_threshold: 10});
+    $('#bk-auth').chosen({width: '160px', disable_search_threshold: 10});
     $('#bk-type, #bk-auth').on('change', bkFields);
     bkFields();
 </script>

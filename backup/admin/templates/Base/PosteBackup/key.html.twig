@@ -5,7 +5,7 @@
 {% block body -%}
 {% include 'Base/PosteBackup/_common.html.twig' %}
 <p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
-<div class="bk-box" style="border-color:#f0ad4e; background:#fcf8e3; max-width:900px">
+<div class="alert alert-warning" style="max-width:900px">
     <p><i class="fa fa-key"></i> <strong>{{ 'poste_backup.key.title'|trans }}.</strong> {{ 'poste_backup.key.help'|trans }}</p>
     <p>{{ 'poste_backup.key.help2'|trans }}</p>
     {% if present %}
