@@ -9,7 +9,7 @@
  *        (RCLONE_CONFIG_<NAME>_...). No rclone configuration file holds a
  *        secret; passwords are "obscured" as rclone requires, through stdin.
  *
- * Used by the engine (root) and by the admin's connection test (mail): a
+ * Used by the engine and by the admin's connection test (both as mail): a
  * caller passes the folder for the temporary files it may write.
  */
 

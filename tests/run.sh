@@ -10,6 +10,8 @@
 # backup add-on, two more throw-away containers are test destinations on the
 # same private network: Samba + SFTP (tests/backup-dest) and S3 (rclone's own
 # S3 server); a tmpfs at /backup/local plays a volume mounted by the host.
+# Then tests/test_restore.sh reads the backups from another machine and
+# rebuilds the whole server from them on a new installation.
 # Exit code 0 = every check passed. Containers, volume and network are
 # removed at the end.
 set -eu
@@ -22,8 +24,8 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 S3_IMAGE=rclone/rclone:1.68.2@sha256:74c51b8817e5431bd6d7ed27cb2a50d8ee78d77f6807b72a41ef6f898845942b
 
 cleanup() {
-    docker rm -f "$NAME" "$NAME-dest" "$NAME-s3" >/dev/null 2>&1 || true
-    docker volume rm "$NAME-data" >/dev/null 2>&1 || true
+    docker rm -f "$NAME" "$NAME-dest" "$NAME-s3" "$NAME-reader" "$NAME-new" >/dev/null 2>&1 || true
+    docker volume rm "$NAME-data" "$NAME-new-data" "$NAME-restore" >/dev/null 2>&1 || true
     docker network rm "$NAME-net" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -58,7 +60,7 @@ until docker exec "$NAME" python3 -c 'import socket; socket.create_connection(("
 done
 
 docker exec "$NAME" mkdir -p /tests
-for f in panel.py eas.py test_addons.py test_activesync.py test_backup.py backup_unit.php; do
+for f in panel.py eas.py test_addons.py test_activesync.py test_backup.py test_restore.py backup_unit.php; do
     docker cp "$DIR/$f" "$NAME:/tests/$f"
 done
 
@@ -101,6 +103,10 @@ echo "== calendars and contacts over ActiveSync"
 docker exec "$NAME" python3 /tests/test_activesync.py || status=$((status + $?))
 echo "== backup"
 docker exec "$NAME" python3 /tests/test_backup.py || status=$((status + $?))
+if docker exec "$NAME" test -x /usr/local/bin/poste-backup; then
+    echo "== backup: reading the backups without the server, a whole server rebuilt from them"
+    sh "$DIR/test_restore.sh" "$IMAGE" "$NAME" || status=$((status + $?))
+fi
 echo "== failed checks: $status"
 if [ "$status" -ne 0 ]; then
     echo "== last log lines (getmail, mail, Z-Push)"

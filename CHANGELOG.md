@@ -50,6 +50,28 @@ All notable changes to this project are documented here. The format follows
   Independent of the other add-ons; nothing to do by hand on an existing
   installation (see [docs](docs/activesync-logs.md)).
 
+- **New add-on: Backup** (`backup`). Encrypted, scheduled backups of the
+  server, set up and watched from the admin (*Backup*, super administrators
+  only): the configuration (accounts, domains, settings, certificates, DKIM
+  keys, calendars and address books, webmail settings, spam filter training,
+  the other add-ons' settings) and all the mail or chosen mailboxes, to one or
+  more destinations at once: SMB/Samba, SFTP (server key confirmed in the
+  admin, password or a key pair made by the admin), S3, or a volume mounted
+  by the host (NFS, a second disk). Made with restic (deduplicated,
+  compressed, checked) and rclone from the image's Debian packages; the
+  databases are copied consistently while in use. Jobs every hour, day, week
+  or month in a time zone of their own, with keep rules per job; a **Test**
+  of each destination before saving (reachability, empty folder or existing
+  repository, free space, a write); live progress, the logs of every run,
+  the space on each destination, logs kept for a number of days; pages and
+  messages in English and Czech. The
+  encryption key is made at the first start and downloaded from the admin.
+  The engine runs as `mail`, never as root, and validates the settings again
+  before using them. Restores are made from the command line for now:
+  a mailbox, the backups read from another machine with only the key file,
+  and a whole server rebuilt on a new installation, each procedure run by the
+  tests as written in the [docs](docs/backup.md).
+
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
   all" on and the messages left on the server, getmail warns at every run that

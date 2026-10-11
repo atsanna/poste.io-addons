@@ -2,8 +2,8 @@
 /*
  * poste.io-addons, backup add-on: the settings and their validation.
  *
- * The settings (/data/var/backup/config.json) are written by the admin, which
- * runs as "mail", and read by the backup engine, which runs as root. The same
+ * The settings (/data/var/backup/settings/config.json) are written by the
+ * admin and read by the backup engine, both as the user "mail". The same
  * rules are applied on both sides: the admin refuses what is not valid before
  * saving, and the engine validates the file again before using anything in it
  * (the file may have been changed behind the admin's back). Every value that

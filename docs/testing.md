@@ -12,7 +12,7 @@ editions; the Pro image is tested by hand before each release.
 
 ## What runs
 
-[`.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs six jobs
+[`.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs seven jobs
 in parallel. Each builds the image from the `Dockerfile` with the Poste.io
 version pinned there (`ARG POSTE_IO_VERSION`), then runs
 [`tests/run.sh`](../tests/run.sh) on it:
@@ -20,7 +20,7 @@ version pinned there (`ARG POSTE_IO_VERSION`), then runs
 | Job | Image |
 |---|---|
 | `all` | the Dockerfile as it is, every add-on |
-| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `upstream-fixes` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
+| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `backup`, `upstream-fixes` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
 
 The single-add-on jobs prove that each add-on builds and works without the
 others; the tests of the add-ons that are not in the image are reported as
@@ -43,8 +43,17 @@ others; the tests of the add-ons that are not in the image are reported as
    client speaks exactly Z-Push's ActiveSync encoding;
 4. runs `tests/test_addons.py` and `tests/test_activesync.py` inside the
    container; every check prints `PASS` or `FAIL` with what it found;
-5. removes the container and the volume. The exit code is the number of
-   failed checks.
+5. with the backup add-on: starts two more throw-away containers on the same
+   private network as backup destinations, a Samba + SFTP server
+   ([`tests/backup-dest`](../tests/backup-dest)) and an S3 server (rclone's
+   own, pinned image); a `tmpfs` at `/backup/local` plays a volume mounted by
+   the host. It runs `tests/test_backup.py`, then
+   [`tests/test_restore.sh`](../tests/test_restore.sh), which reads the
+   backups from another container with only restic, rclone and ssh
+   ([`tests/backup-reader`](../tests/backup-reader)) and rebuilds a whole
+   server from them in a new container of the same image;
+6. removes the containers, the volumes and the network. The exit code is the
+   number of failed checks.
 
 The admin is driven like a browser ([`tests/panel.py`](../tests/panel.py)):
 pages are loaded, forms are read from the page (including their CSRF token),
@@ -143,6 +152,62 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   FolderSync removes only calendars and contacts, a new phone gets mail only;
   switched on again: calendars, contacts and their content come back.
 
+**Backup** (`tests/test_backup.py`, `tests/backup_unit.php`)
+- installation: the menu entry, the pages, the folders and the encryption key
+  (`mail`, `0750`/`0700`/`0600`; 48 random bytes), cron running the engine as
+  `mail` every minute; unit checks of the schedules (also across daylight
+  saving changes), of the validation, of the messages and their translations;
+- destinations: refused without the CSRF token; invalid values refused with
+  a message (a folder on `/data`, `..`, a server name with `;`, a folder that
+  looks like an option); the local volume (a real mount) passes the test, a
+  folder that is not a mount point does not; SMB with the real size of the
+  share (`df` on the Samba server: rclone 1.60 reports half); SMB with a wrong
+  password saved but failing the test; S3; SFTP: the server's key
+  fingerprints shown, nothing trusted until confirmed, then exactly the
+  server's keys; SFTP with a key pair made by the admin; the passwords never
+  sent back to the browser;
+- the **Test** button of the form: the values typed are tested and nothing is
+  saved or remembered; wrong password, missing CSRF token, invalid server,
+  the saved password reused only for the same server; SFTP keys confirmed in
+  the form;
+- jobs and runs: a job to the five destinations run from the admin, a
+  snapshot on each with the job's tag, one history line per destination; in
+  the snapshot the database copies, redis, the DKIM keys and the mail, and
+  **not** the key or the settings with the passwords; a deleted message
+  restored identical; the mailbox restore of
+  [docs/backup.md](backup.md#restoring) run as written; the accounts database
+  restored intact from SFTP; keep rules per job; a selected mailbox only; one
+  failing destination does not stop the others, a non-empty folder is never
+  used; a file the backup cannot read gives a warning with how many;
+- hardening: settings changed behind the admin (an injected command, an
+  invalid id) are reported and nothing of them runs; the engine's files are
+  `mail`'s; a mailbox home changed in `users.db` (`..`, a symbolic link) never
+  leads outside `/data/domains`; the start script refuses a `/data/var` that
+  is not root's; a key that is a symbolic link is refused;
+- space on each destination, the logs page and the log of a run (names that
+  are not logs, or links, are not found), live progress while a job runs,
+  the pages in Czech, the time zone of the container and the one chosen in
+  the admin, the days the logs are kept, one run at a time.
+
+**Restore** (`tests/test_restore.sh`, `tests/read_backups.sh`,
+`tests/rebuild_server.sh`, `tests/test_restore.py`): the two procedures of
+[docs/backup.md](backup.md) for a lost server, run as written there.
+- reading the backups without the server, on a Debian 12 container with only
+  restic, rclone and ssh and the key file downloaded from the admin: from
+  SMB, SFTP (with the password, and with a key of one's own), S3 and a
+  folder, the snapshots are listed and a message restored identical;
+  `restic check` finds no errors; another key, the whole downloaded file
+  (instead of its last line) and an SFTP server with another key are refused;
+- rebuilding the whole server: a new installation of the image started once
+  and stopped, the backup restored as root with no service running, the
+  server started again; then the accounts and their (hashed) passwords, the
+  domains, every message, the DKIM keys, the certificates, the calendars and
+  address books, the webmail database, redis and the owners and permissions
+  are those of the old server; a user logs in over IMAP with the old password
+  and finds the old message; the old administrator logs in; the old key is
+  back and the new server reads the old backups from a destination entered
+  again.
+
 ## Running the tests yourself
 
 With Docker, from the repository:
@@ -152,5 +217,7 @@ docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t poste-addons-t
 sh tests/run.sh poste-addons-test
 ```
 
-A run takes about three minutes after the build. The same script works on a
-Pro image built with `Dockerfile-pro`.
+With all the add-ons a run takes about fifteen minutes after the build
+(measured on a desktop machine), most of it for the backup and restore tests;
+without the backup add-on, about three. The same script works on a Pro image
+built with `Dockerfile-pro`.

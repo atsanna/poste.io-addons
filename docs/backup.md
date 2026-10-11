@@ -25,6 +25,8 @@ machine, encrypted, frequent, with single mailboxes to restore.
 - [Backup jobs](#backup-jobs)
 - [Watching the backups](#watching-the-backups)
 - [Restoring](#restoring)
+- [Reading the backups without the server](#reading-the-backups-without-the-server)
+- [Rebuilding the whole server](#rebuilding-the-whole-server)
 - [Good practice](#good-practice)
 - [A backup of a server that is running](#a-backup-of-a-server-that-is-running)
 - [Security](#security)
@@ -107,8 +109,8 @@ The result of a run on a destination is **ok**, **warning** or **error**:
   changed: Dovecot gives the file a new name) is not a problem: the run says
   how many with a note, and the next backup has them where they are now.
 - *warning*: the snapshot was made, but a file could not be read (for example
-  a permission problem), or the old snapshots could not be removed. The run
-  says what; look at its log.
+  a permission problem), a mailbox chosen in the job no longer exists, or the
+  old snapshots could not be removed. The run says what; look at its log.
 - *error*: no snapshot on that destination.
 
 ## The encryption key
@@ -329,6 +331,200 @@ the server (for example the webmail's `roundcube.db`, owned by `www-data`)
 needs its owner set back by root after copying it into place
 (`chown www-data:www-data ...`).
 
+When the server itself is lost, see the next two sections.
+
+## Reading the backups without the server
+
+The backups are ordinary [restic](https://restic.net) repositories. They can
+be read from any machine with **restic 0.14** or newer and **rclone 1.60** or
+newer (on Debian or Ubuntu: `apt install restic rclone openssh-client`; both
+are also in the image built from this repository): when the mail server is
+lost, or to look into the backups without touching it.
+
+What you need:
+
+- the **key file** downloaded from *Backup > Encryption key*;
+- the **destination** as it was entered in the admin: its type, server, share
+  or bucket, folder, user and password (or access key and secret key). The
+  add-on's settings are not in the backups, because they hold these
+  passwords: keep a note of them with the key.
+
+The commands are for bash. First the key, which is the last line of the
+downloaded file (the file as a whole is not the key):
+
+```bash
+tail -n 1 poste-backup-key-mail.example.com.txt > restic.key
+chmod 600 restic.key
+export RESTIC_PASSWORD_FILE=$PWD/restic.key
+```
+
+Then the destination, one of the following. rclone reads it from variables
+(`RCLONE_CONFIG_BK_...` define a remote named `BK`), with the password
+"obscured" as rclone requires; `read -rsp` asks for it without showing it.
+`RESTIC_REPOSITORY` is the folder of the destination: for SMB the share and
+the folder in it, for SFTP the folder, for S3 the bucket and the folder in it.
+
+**SMB / Samba** (add `RCLONE_CONFIG_BK_DOMAIN=...` if the server needs a
+domain):
+
+```bash
+export RCLONE_CONFIG_BK_TYPE=smb RCLONE_CONFIG_BK_HOST=nas.example.lan RCLONE_CONFIG_BK_USER=mailbackup
+read -rsp 'Password: ' P; echo
+export RCLONE_CONFIG_BK_PASS=$(printf '%s\n' "$P" | rclone obscure -) && unset P
+export RESTIC_REPOSITORY=rclone:BK:share/folder
+```
+
+**SFTP**: the server's SSH key is checked first, as the admin does: read it,
+compare its fingerprints with the server's
+(`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server), and give
+it to rclone. A server that shows another key is then refused.
+
+```bash
+ssh-keyscan -p 22 backup.example.com > known_hosts
+ssh-keygen -lf known_hosts
+export RCLONE_CONFIG_BK_TYPE=sftp RCLONE_CONFIG_BK_HOST=backup.example.com RCLONE_CONFIG_BK_PORT=22 \
+       RCLONE_CONFIG_BK_USER=mailbackup RCLONE_CONFIG_BK_KNOWN_HOSTS_FILE=$PWD/known_hosts
+read -rsp 'Password: ' P; echo
+export RCLONE_CONFIG_BK_PASS=$(printf '%s\n' "$P" | rclone obscure -) && unset P
+export RESTIC_REPOSITORY=rclone:BK:/srv/backup/mail
+```
+
+A destination that logged in with a key: the key pair made by the admin
+stayed on the lost server (it is never in the backups). Log in with the
+account's password, or add a key of yours to the account on the SFTP server
+and use it instead of the password:
+`export RCLONE_CONFIG_BK_KEY_FILE=~/.ssh/id_ed25519`.
+
+**S3** (add `RCLONE_CONFIG_BK_REGION=...` if the provider needs a region):
+
+```bash
+export RCLONE_CONFIG_BK_TYPE=s3 RCLONE_CONFIG_BK_PROVIDER=Other RCLONE_CONFIG_BK_ENDPOINT=https://s3.example.com \
+       RCLONE_CONFIG_BK_ACCESS_KEY_ID=AKIAEXAMPLE
+read -rsp 'Secret key: ' P; echo
+export RCLONE_CONFIG_BK_SECRET_ACCESS_KEY=$P && unset P
+export RESTIC_REPOSITORY=rclone:BK:bucket/folder
+```
+
+**A folder** (a volume mounted by the host): mount the same share or disk on
+this machine, then:
+
+```bash
+export RESTIC_REPOSITORY=/mnt/mail-backup
+```
+
+Then restic, as usual:
+
+```bash
+restic snapshots --group-by tags --latest 1    # the latest snapshot of each job
+restic snapshots                               # all of them: time, paths, tags
+restic ls <snapshot>                           # what one of them holds
+restic restore <snapshot> --target ./restore --include /data/domains/example.com/alice
+restic check                                   # the repository is intact
+```
+
+The tag `job:<id>` of a snapshot is its job, and its paths say what the job
+holds: `/data/var/backup/engine/staging` among them for the configuration,
+`/data/domains` for all the mail. Restored files belong to the user who restores them. A message
+is one file in the usual Internet message format: renamed to `.eml` it opens
+in most mail programs.
+
+Reading does not change the repository. `restic check` takes it for itself
+while it runs (an exclusive lock): the server cannot write to it meanwhile,
+so run it when no backup is due. Never run `forget` or `prune` from another
+machine: the server removes its old snapshots itself.
+
+The add-on's tests run these commands, as written here, for each kind of
+destination on a machine with only Debian 12, restic, rclone and ssh.
+
+## Rebuilding the whole server
+
+When the server is lost, a new installation gets everything back from the
+backups: accounts and their passwords, domains, mail, server settings,
+certificates, DKIM keys, calendars and address books, webmail settings, spam
+filter training, the settings of the other add-ons. You need a job that
+backs up the **configuration** and one that backs up **all the mail** (or
+one job with both), the key file and the destination (see the previous
+section).
+
+1. **Install the new server** as the old one was: the image built from this
+   repository, the same version of Poste.io (upgrade afterwards), the same
+   host name and ports, and a new, **empty** data folder. Start it and wait
+   until the admin page answers (Poste.io prepares the data folder); do
+   **not** set it up. Then stop it:
+
+   ```bash
+   docker stop mailserver
+   ```
+
+2. **Put the key file in a folder** of the host, for example
+   `/root/restore`, and open a shell, as root, in a container of the same
+   image with the new server's data folder and that folder. No service runs
+   in it:
+
+   ```bash
+   docker run --rm -it -v /srv/mailserver/data:/data -v /root/restore:/restore --entrypoint bash <image>
+   ```
+
+   Use the data folder (or volume) and the image of your installation, and
+   add `--network <name>` if the destination can be reached only from the
+   server's Docker network.
+
+3. **Restore** the latest snapshot of the configuration and the latest of
+   the mail (the same snapshot if one job holds both) straight into `/data`.
+   In that shell:
+
+   ```bash
+   cd /restore
+   # the key and the destination: as in "Reading the backups without the server"
+   restic snapshots --group-by tags --latest 1
+   restic restore <configuration snapshot> --target /
+   restic restore <mail snapshot> --target /
+   ```
+
+   As root, restic puts every file back where it was, with its owner and
+   permissions, over the files of the new installation.
+
+4. **The databases**: the backup holds copies made while they were in use,
+   consistent and checked. Put them in place, and remove the journal files
+   of the new installation's databases:
+
+   ```bash
+   S=/data/var/backup/engine/staging
+   cp "$S/users.db" /data/users.db
+   cp "$S/dav.db" /data/dav.db
+   cp "$S/roundcube.db" /data/roundcube/roundcube.db
+   rm -f /data/users.db-wal /data/users.db-shm /data/dav.db-wal /data/dav.db-shm \
+         /data/roundcube/roundcube.db-wal /data/roundcube/roundcube.db-shm "$S"/*.db
+   ```
+
+5. **The key**, so that the server can read and continue the old backups;
+   then leave the shell:
+
+   ```bash
+   install -o mail -g mail -m 600 restic.key /data/var/backup/settings/restic.key
+   exit
+   ```
+
+6. **Start the server** (`docker start mailserver`) and log in to the admin
+   as an administrator of the old server. Then, in *Backup*, add the
+   destinations again (their **Test** says that the folder already holds a
+   backup repository; for SFTP confirm the server's key again, and with a
+   key login put the new public key on the server) and the jobs. The new
+   jobs continue in the same repositories, and what is already there is not
+   stored again. The snapshots of the old jobs stay, no longer thinned out:
+   remove them by hand when they are not needed any more (see
+   [Backup jobs](#backup-jobs)).
+
+Not brought back: the logs, mail still waiting in the outgoing queue, the
+virus database (downloaded again), the add-on's own settings (step 6), and
+what is listed as never backed up under
+[What is backed up](#what-is-backed-up). If the new server has another IP
+address, update the DNS records.
+
+The add-on's tests run this procedure as written here: a backup restored on
+a new installation of the image, then every account, message, setting,
+database and owner compared with the old server.
+
 ## Good practice
 
 - **3-2-1**: keep at least one copy **off the machine** and, better, one off
@@ -339,15 +535,19 @@ needs its owner set back by root after copying it into place
   configuration 24 hourly, 7 daily; mail 7 daily, 4 weekly, 12 monthly.
 - **Download the encryption key** at once and keep it in **two places**
   outside the server (a password manager and a printed copy, for example).
-  Without it no backup can be read.
+  Without it no backup can be read. Keep with it the details of each
+  destination (server, folder, user, password): the add-on's settings are not
+  in the backups, and after losing the server the key and these details are
+  all you need ([Reading the backups without the server](#reading-the-backups-without-the-server)).
 - **An account of its own** on each destination, with access to the backup
   folder only. Not the NAS administrator: whoever controls the mail server
   would control the whole NAS.
 - **Protect the backups from the server** itself: see
   [If the mail server is compromised](#if-the-mail-server-is-compromised).
 - **Test a restore** now and then (a mailbox into a separate folder, see
-  [Restoring](#restoring)): a backup that was never restored is a hope, not
-  a backup.
+  [Restoring](#restoring); the backups read from another machine with the key
+  file, see [Reading the backups without the server](#reading-the-backups-without-the-server)):
+  a backup that was never restored is a hope, not a backup.
 - **Look at the dashboard** after changes (a new destination, a new job, an
   upgrade), and from time to time: until notifications arrive, a failing
   backup does not tell anyone.

@@ -15,6 +15,9 @@ image on top of the official one:
   gets the calendars and contacts of Poste.io's DAV server, not only the mail.
 - **ActiveSync logs in the admin** — read the Z-Push logs with filters, and
   rotate them (Poste.io never does).
+- **Backup and restore** — encrypted, scheduled backups of the configuration
+  and the mail to SMB, SFTP, S3 or a mounted volume, set up and watched from
+  the admin.
 - **Two upstream fixes** that make "move to Junk" actually teach rspamd.
 
 Take all of them or only the ones you want: each add-on is one section of the
@@ -101,6 +104,29 @@ devices must resync once)
 
 → [docs/activesync-logs.md](docs/activesync-logs.md)
 
+### Backup and restore
+
+![Backup dashboard](docs/screenshots/backup-dashboard.png)
+
+- The **configuration** (accounts, domains, settings, certificates, DKIM keys,
+  calendars and address books, webmail settings, spam filter training) and
+  **all the mail or chosen mailboxes**, every hour, day, week or month.
+- To one or more destinations at once: **SMB/Samba, SFTP, S3**, or a volume
+  mounted by the host (NFS, a second disk); a **Test** of each destination
+  before saving it (reachable, empty folder, free space, a write).
+- Made with [restic](https://restic.net): encrypted before leaving the
+  server, deduplicated and compressed, so frequent backups store only what
+  changed; keep rules per job (hourly, daily, weekly, monthly).
+- Live progress, the log of every run, the space on each destination.
+- Restores from the command line for now, each procedure run by the tests as
+  documented: a mailbox, the backups read from **another machine with only the
+  key file**, a **whole server rebuilt** on a new installation.
+- Hardened: the engine runs as `mail`, never root; settings validated again
+  before use; SFTP only to a server whose SSH key was confirmed; passwords
+  never sent back to the browser.
+
+→ [docs/backup.md](docs/backup.md)
+
 ### Upstream fixes
 
 On 2.5.17 moving a message to Junk does not train rspamd: the learning scripts
@@ -139,7 +165,8 @@ external-mailboxes/    admin pages (admin/), translations, crontab of the mail u
 dark-theme/            admin files (admin/), translations, the script that hooks the theme into base.html.twig
 activesync-dav/        Z-Push backends and the script that configures Z-Push
 activesync-logs/       admin page (admin/), translations, the rotation script and its cron entry, a start script, the install script
-tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client)
+backup/                admin pages (admin/), the engine (engine/), translations, a start script, the install script
+tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client, backup destinations, restore tests)
 docs/                  documentation and screenshots
 Dockerfile             open source edition (analogic/poste.io), one section per add-on
 Dockerfile-pro         Pro edition (poste.io/mailserver), one section per add-on
@@ -154,6 +181,7 @@ select-addons.sh       prints a Dockerfile with only the add-ons you name
 - [Dark theme](docs/dark-theme.md)
 - [Calendars and contacts over ActiveSync](docs/activesync-dav.md)
 - [ActiveSync logs in the admin](docs/activesync-logs.md)
+- [Backup and restore](docs/backup.md)
 - [Upstream fixes](docs/upstream-fixes.md)
 - [Tests](docs/testing.md)
 - [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)

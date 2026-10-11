@@ -59,8 +59,8 @@ docker compose up -d
 ```
 
 Then open `https://<your host>/admin/`. The new entries **External Mailboxes**,
-**External Mailbox Logs** and **ActiveSync Logs** are in the left menu (super
-admins only); the theme switch is in the top bar.
+**External Mailbox Logs**, **ActiveSync Logs** and **Backup** are in the left
+menu (super admins only); the theme switch is in the top bar.
 
 ## 3. Existing installations: the `/data` volume
 
@@ -100,6 +100,12 @@ Later rebuilds and Poste.io upgrades with the add-on inside do not need it.
 **ActiveSync logs** needs nothing by hand: its folder on the volume is created
 by a start script at every container start.
 
+**Backup** needs nothing by hand either: its folder on the volume
+(`/data/var/backup`) and the encryption key are made by a start script (the
+key only once, at the first start). Then download the key from *Backup >
+Encryption key* and keep it outside the server (see
+[backup.md](backup.md#the-encryption-key)).
+
 ## 4. Check that it works
 
 ```bash
@@ -113,6 +119,14 @@ docker exec mailserver tail /data/log/getmail/getmail.log
 
 In the admin, **External Mailbox Logs** shows the getmail log, the cron log
 and a status view (getmail version, folders, number of mailboxes).
+
+```bash
+# backup: the last results of the jobs (JSON), and the engine ticking
+docker exec mailserver poste-backup status
+```
+
+In the admin, **Backup** says on its dashboard if the engine has not run for
+more than ten minutes or if the start script could not prepare its folder.
 
 ## Upgrading Poste.io
 
@@ -132,7 +146,10 @@ image:
 - `activesync-dav-install.sh` stops if any of the 19 Z-Push configuration
   lines it changes is not exactly as expected;
 - `activesync-logs-install.sh` stops if the *User logs* menu entry is not
-  found exactly once, followed by its `</li>`.
+  found exactly once, followed by its `</li>`;
+- `backup-install.sh` stops if a tool it needs (restic, rclone, the SSH tools,
+  smbclient, sqlite3) or a PHP extension is missing, or if the end of the
+  administrators' menu is not found exactly once.
 
 Before each upgrade, check whether the [upstream fixes](upstream-fixes.md) are
 still needed: when Poste.io ships them, delete the two blocks from the
@@ -142,8 +159,11 @@ Dockerfiles.
 
 Rebuild/run the official image. The add-ons only add files; the data they
 leave in the volume is `/data/var/getmail` (mailbox configurations, with
-passwords), `/data/log/getmail`, `/data/var/activesync-logs` and the old copies
-of the Z-Push logs. Remove them if you no longer need them.
+passwords), `/data/log/getmail`, `/data/var/activesync-logs`, the old copies
+of the Z-Push logs and `/data/var/backup` (the backup settings, with the
+passwords of the destinations, and the encryption key). Remove them if you no
+longer need them; keep the encryption key as long as you may need the
+backups.
 If you used calendars and contacts over ActiveSync, resync every device after
 the switch (the folder identifiers change back). To drop only some add-ons,
 see [choosing-addons.md](choosing-addons.md).

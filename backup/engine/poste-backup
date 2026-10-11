@@ -14,7 +14,7 @@
  *       poste-backup restic 0a1b2c3d4e5f restore latest --target /tmp/r --include /data/domains/example.com/alice
  *
  * The ids are in the admin (Backup > Destinations / Backup jobs) and in
- * /data/var/backup/config.json.
+ * /data/var/backup/settings/config.json.
  */
 
 namespace PosteBackup;
