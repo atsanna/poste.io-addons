@@ -29,14 +29,17 @@
                 {% if job.next %}<br><span class="bk-muted">{{ 'poste_backup.dashboard.next'|trans({'{time}': job.next|date('Y-m-d H:i')}) }}</span>{% endif %}</td>
             <td>{% for did in job.destinations %}{{ destinations[did].name }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
             <td>{% for k, n in job.keep %}{% if n > 0 %}{{ ('poste_backup.keep.' ~ k)|trans({'{count}': n}) }}<br>{% endif %}{% endfor %}</td>
-            <td>{% if busy and state.running and state.running.job == id %}<span class="text-info"><i class="fa fa-spinner fa-spin"></i> {{ 'poste_backup.jobs.running'|trans }}</span>
+            <td>{% if live.running and live.running.job == id %}<span class="text-info"><i class="fa fa-spinner fa-spin"></i> {{ 'poste_backup.jobs.running'|trans }}<br>
+                    <span class="bk-live-detail" style="font-size:12px">{{ live.running.detail }}</span></span>
                 {% elseif pending[id] is defined %}<span class="text-info"><i class="fa fa-hourglass-half"></i> {{ 'poste_backup.jobs.queued'|trans }}</span>
                 {% elseif s is null %}<span class="bk-muted">{{ 'poste_backup.status.never'|trans }}</span>
                 {% else %}
                     {{ s.last_end|date('Y-m-d H:i') }}
+                    {% if s.log is defined and s.log %}<a href="{{ path('poste_backup_log', {name: s.log}) }}" style="font-size:12px">{{ 'poste_backup.jobs.log'|trans }}</a>{% endif %}
                     {% for did, r in s.destinations %}
                         <br><span class="{{ r.status == 'ok' ? 'text-success' : (r.status == 'warning' ? 'text-warning' : 'text-danger') }}" style="font-size:12px">
                         {{ destinations[did].name ?? did }}: {% if r.status == 'ok' %}{{ 'poste_backup.jobs.added'|trans({'{size}': (r.added / 1048576)|round(1), '{seconds}': r.duration}) }}{% else %}{{ r.error }}{% endif %}</span>
+                        {% if r.note %}<br><span class="bk-muted">{{ r.note }}</span>{% endif %}
                     {% endfor %}
                 {% endif %}</td>
             <td class="text-right" style="white-space:nowrap">
@@ -57,5 +60,28 @@
     {% endfor %}
     </tbody>
 </table>
-<p class="help-block">{{ 'poste_backup.jobs.help'|trans }}</p>
+<p class="help-block">{{ 'poste_backup.jobs.help'|trans }} {{ 'poste_backup.jobs.zone'|trans({'{zone}': zone}) }}</p>
+
+<div class="bk-box" style="max-width:900px">
+    <form method="post" action="{{ path('poste_backup_timezone') }}">
+        <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_timezone') }}">
+        <label class="control-label" for="bk-zone"><i class="fa fa-globe"></i> {{ 'poste_backup.settings.timezone'|trans }}</label>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+            <select id="bk-zone" name="timezone">
+                <option value=""{% if chosenZone == '' %} selected{% endif %}>{{ 'poste_backup.settings.timezone_container'|trans({'{zone}': containerZone}) }}</option>
+                {% if chosenZone and chosenZone not in zones %}<option value="{{ chosenZone }}" selected>{{ chosenZone }}</option>{% endif %}
+                {% for z in zones %}<option value="{{ z }}"{% if z == chosenZone %} selected{% endif %}>{{ z }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-default btn-sm"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
+        </div>
+        <p class="help-block">{{ 'poste_backup.settings.timezone_help'|trans }}</p>
+    </form>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+{% include 'Base/PosteBackup/_live.html.twig' %}
+<script>
+    $('#bk-zone').chosen({width: '320px', search_contains: true});
+</script>
 {% endblock %}

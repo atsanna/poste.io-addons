@@ -27,6 +27,7 @@ final class Engine
     private array $cfg;
     private array $state;
     private \DateTimeZone $tz;
+    private int $progressSaved = 0;
 
     public function __construct()
     {
@@ -101,11 +102,15 @@ final class Engine
     {
         $raw = Store::readJson(Store::CONFIG);
         [$this->cfg, $errors] = $raw === null ? [Config::empty(), []] : Config::validate($raw);
+        // the time zone chosen in the admin, if any
+        $this->tz = Schedule::zone($this->cfg['settings']['timezone']);
+        date_default_timezone_set($this->tz->getName());
         $this->state = Store::readJson(Store::STATE) ?? [];
-        $this->state += ['jobs' => [], 'running' => null];
+        $this->state += ['jobs' => [], 'running' => null, 'destinations' => []];
         $this->state['config_errors'] = $errors;
-        // forget jobs that no longer exist
+        // forget jobs and destinations that no longer exist
         $this->state['jobs'] = array_intersect_key($this->state['jobs'], $this->cfg['jobs']);
+        $this->state['destinations'] = array_intersect_key((array) $this->state['destinations'], $this->cfg['destinations']);
     }
 
     private function saveState(): void
@@ -114,7 +119,7 @@ final class Engine
             // the admin would keep showing old results: say it where it can be read
             fwrite(STDERR, "poste-backup: cannot write " . Store::STATE . "\n");
             if (is_dir(Store::LOGS)) {
-                @file_put_contents(Store::LOGS . '/engine-errors.log', date('Y-m-d H:i:s') . ' cannot write ' . Store::STATE . "\n", FILE_APPEND);
+                @file_put_contents(Store::LOGS . '/engine-errors.log', date('Y-m-d H:i:s P') . ' cannot write ' . Store::STATE . "\n", FILE_APPEND);
             }
         }
     }
@@ -127,7 +132,7 @@ final class Engine
         $start = time();
         $log = $this->openLog($id, $start);
         $this->logLine($log, "job \"{$job['name']}\" ($id), started by " . ($why === 'manual' ? 'a request' : 'its schedule'));
-        $this->state['running'] = ['job' => $id, 'since' => $start];
+        $this->state['running'] = ['job' => $id, 'since' => $start, 'dest' => null, 'phase' => 'prepare', 'progress' => null];
         $this->saveState();
 
         [$paths, $warnings, $error] = $this->collect($job, $log);
@@ -143,20 +148,26 @@ final class Engine
                 $r = ['status' => 'error', 'error' => $error];
             } else {
                 $this->logLine($log, "--- destination \"{$d['name']}\" ($did)");
+                $this->phase('backup', $did);
                 $r = $this->backupTo($did, $d, $id, $job, $paths, $log);
+                if (isset($r['space'])) {
+                    $this->state['destinations'][$did] = $r['space'] + ['t' => time()];
+                    unset($r['space']);
+                }
                 if ($r['status'] === 'ok' && $warnings) {
                     $r['status'] = 'warning';
                     $r['error'] = implode('; ', $warnings);
                 }
             }
-            $r += ['added' => 0, 'files' => 0, 'bytes' => 0, 'snapshot' => null, 'error' => null];
+            $r += ['added' => 0, 'files' => 0, 'bytes' => 0, 'snapshot' => null, 'error' => null, 'note' => null];
             $r['duration'] = time() - $t0;
-            $this->logLine($log, "result: {$r['status']}" . ($r['error'] ? " - {$r['error']}" : ''));
+            $this->logLine($log, "result: {$r['status']}" . ($r['error'] ? " - {$r['error']}" : '') . ($r['note'] ? " ({$r['note']})" : ''));
             $results[$did] = $r;
             Store::appendJsonLine(Store::HISTORY, [
                 't' => time(), 'start' => $t0, 'job' => $id, 'dest' => $did, 'reason' => $why,
                 'status' => $r['status'], 'added' => $r['added'], 'files' => $r['files'], 'bytes' => $r['bytes'],
-                'duration' => $r['duration'], 'snapshot' => $r['snapshot'], 'error' => $r['error'],
+                'duration' => $r['duration'], 'snapshot' => $r['snapshot'], 'error' => $r['error'], 'note' => $r['note'],
+                'log' => basename($this->logPath($id, $start)),
             ]);
         }
         $this->cleanStaging();
@@ -440,6 +451,7 @@ final class Engine
             }
             $env['RESTIC_PASSWORD_FILE'] = Store::KEY;
             $env['RESTIC_CACHE_DIR'] = Store::CACHE . '/restic';
+            $env['RESTIC_PROGRESS_FPS'] = '1';          // one progress line a second (--json)
             $repo = Destination::repository($did, $d);
 
             [$exists, $err] = $this->repositoryExists($did, $d, $env, $log);
@@ -459,22 +471,33 @@ final class Engine
             }
 
             $summary = null;
+            $vanished = $unreadable = 0;
             $args = array_merge(['backup', '--json', '--host', self::HOST, '--tag', self::TAG, '--tag', 'job:' . $jobId], $paths);
             $r = $this->restic($repo, $args, $env, $log, 0, function (string $line) use (&$summary) {
-                if (strpos($line, '"summary"') !== false) {
+                if (strpos($line, '"message_type":"status"') !== false) {
+                    $j = json_decode($line, true);
+                    if (is_array($j)) {
+                        $this->progress($j);
+                    }
+                } elseif (strpos($line, '"summary"') !== false) {
                     $j = json_decode($line, true);
                     if (is_array($j) && ($j['message_type'] ?? '') === 'summary') {
                         $summary = $j;
                     }
+                }
+            }, function (string $line) use (&$vanished, &$unreadable) {
+                $kind = self::fileError($line);
+                if ($kind === 'vanished') {
+                    $vanished++;
+                } elseif ($kind === 'unreadable') {
+                    $unreadable++;
                 }
             });
             // restic: 0 = done, 3 = snapshot made but some files could not be read
             if (($r['exit'] !== 0 && $r['exit'] !== 3) || $summary === null) {
                 return ['status' => 'error', 'error' => 'backup failed: ' . self::lastLine($r['err'])];
             }
-            $res = [
-                'status' => $r['exit'] === 0 ? 'ok' : 'warning',
-                'error' => $r['exit'] === 0 ? null : 'some files could not be read (see the log)',
+            $res = self::outcome($r['exit'], $vanished, $unreadable) + [
                 'added' => (int) ($summary['data_added'] ?? 0),
                 'files' => (int) ($summary['total_files_processed'] ?? 0),
                 'bytes' => (int) ($summary['total_bytes_processed'] ?? 0),
@@ -490,14 +513,110 @@ final class Engine
                     array_push($forget, '--keep-' . $k, (string) $n);
                 }
             }
+            $this->phase('prune', $did);
             $f = $this->restic($repo, $forget, $env, $log, 0);
             if ($f['exit'] !== 0) {
                 $res['status'] = 'warning';
                 $res['error'] = 'backup done, but the old snapshots were not removed: ' . self::lastLine($f['err']);
             }
+            $this->phase('space', $did);
+            $res['space'] = $this->space($did, $d, $env, $log);
             return $res;
         } finally {
             $this->removeTmp($tmp);
+        }
+    }
+
+    /**
+     * One line of restic's standard error (--json): "vanished" for a file that
+     * no longer exists (ENOENT: moved or deleted while the backup ran, normal
+     * on a mail server in use, where a message moved to another folder or with
+     * a new flag gets a new name), "unreadable" for any other file restic could
+     * not read, null for a line that is not about a file.
+     */
+    public static function fileError(string $line): ?string
+    {
+        if (strpos($line, '"message_type":"error"') === false) {
+            return null;
+        }
+        $j = json_decode($line, true);
+        if (!is_array($j) || ($j['message_type'] ?? null) !== 'error') {
+            return null;
+        }
+        return ($j['error']['Err'] ?? null) === 2 ? 'vanished' : 'unreadable';
+    }
+
+    /**
+     * The result of a backup that made its snapshot (restic exit 0 or 3): only
+     * files that vanished meanwhile is ok, with a note; a file that could not
+     * be read is a warning; exit 3 with no file error understood is a warning
+     * too (never guessed to be fine).
+     */
+    public static function outcome(int $exit, int $vanished, int $unreadable): array
+    {
+        $ok = $exit === 0 || ($vanished > 0 && $unreadable === 0);
+        return [
+            'status' => $ok ? 'ok' : 'warning',
+            'error' => $ok ? null
+                : ($unreadable > 0 ? "$unreadable file(s) could not be read (see the log)" : 'some files could not be read (see the log)'),
+            'note' => $vanished > 0 ? "$vanished file(s) moved or deleted while the backup ran: the next backup has them" : null,
+        ];
+    }
+
+    /**
+     * Space on a destination after a backup: bytes used by the repository and,
+     * where the server reports it, free and total. Nothing is an error here.
+     */
+    private function space(string $did, array $d, array $env, $log): array
+    {
+        $path = $d['type'] === 'local' ? $d['path'] : Destination::rclonePath($did, $d);
+        $out = ['used' => null, 'free' => null, 'total' => null];
+        $s = Proc::run(['rclone', 'size', '--json', $path], $env, null, 600, null, $log);
+        $j = json_decode($s['out'], true);
+        if ($s['exit'] === 0 && is_array($j) && isset($j['bytes'])) {
+            $out['used'] = (int) $j['bytes'];
+        }
+        if ($d['type'] !== 's3') {
+            $a = Proc::run(['rclone', 'about', '--json', $path], $env, null, 120, null, $log);
+            $j = json_decode($a['out'], true);
+            if ($a['exit'] === 0 && is_array($j)) {
+                $out['free'] = isset($j['free']) ? (int) $j['free'] : null;
+                $out['total'] = isset($j['total']) ? (int) $j['total'] : null;
+            }
+        }
+        $this->logLine($log, 'space: ' . ($out['used'] ?? '?') . ' bytes used by the backups'
+            . ($out['free'] !== null ? ', ' . $out['free'] . ' free' : ''));
+        return $out;
+    }
+
+    // ---------------------------------------------------------------- progress
+
+    /** What the running job is doing now, for the admin (saved at once). */
+    private function phase(string $phase, ?string $did): void
+    {
+        $this->state['running']['phase'] = $phase;
+        $this->state['running']['dest'] = $did;
+        $this->state['running']['progress'] = null;
+        $this->state['running']['progressShown'] = false;
+        $this->saveState();
+        $this->progressSaved = time();
+    }
+
+    /** restic's progress (a status line), saved at most every 3 seconds. */
+    private function progress(array $j): void
+    {
+        $this->state['running']['progress'] = [
+            'percent' => round(100 * (float) ($j['percent_done'] ?? 0), 1),
+            'bytes_done' => (int) ($j['bytes_done'] ?? 0),
+            'total_bytes' => (int) ($j['total_bytes'] ?? 0),
+            'files_done' => (int) ($j['files_done'] ?? 0),
+            'total_files' => (int) ($j['total_files'] ?? 0),
+        ];
+        // the first one at once (a short backup shows it too), then every 3 seconds
+        if (empty($this->state['running']['progressShown']) || time() - $this->progressSaved >= 3) {
+            $this->state['running']['progressShown'] = true;
+            $this->saveState();
+            $this->progressSaved = time();
         }
     }
 
@@ -536,14 +655,15 @@ final class Engine
     }
 
     /** restic, with one retry after removing stale locks (a run that died). */
-    private function restic(string $repo, array $args, array $env, $log, int $timeout, ?callable $onLine = null): array
+    private function restic(string $repo, array $args, array $env, $log, int $timeout, ?callable $onLine = null,
+                            ?callable $onErrLine = null): array
     {
         $cmd = array_merge(['restic', '-r', $repo], $args);
-        $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log);
+        $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine);
         if ($r['exit'] !== 0 && stripos($r['err'], 'repository is already locked') !== false) {
             $this->logLine($log, 'repository locked: removing stale locks and retrying once');
             Proc::run(['restic', '-r', $repo, 'unlock'], $env, null, 300, null, $log);
-            $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log);
+            $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine);
         }
         return $r;
     }
@@ -603,7 +723,8 @@ final class Engine
     private function logLine($log, string $line): void
     {
         if ($log) {
-            fwrite($log, date('Y-m-d H:i:s') . ' ' . $line . "\n");
+            // with the offset: the other logs of the container may be in UTC
+            fwrite($log, date('Y-m-d H:i:s P') . ' ' . $line . "\n");
         }
     }
 

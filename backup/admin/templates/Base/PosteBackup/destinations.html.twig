@@ -9,7 +9,7 @@
 <table class="table table-striped table-hover bk">
     <thead><tr><th>{{ 'poste_backup.field.name'|trans }}</th><th>{{ 'poste_backup.field.type'|trans }}</th>
         <th>{{ 'poste_backup.field.location'|trans }}</th><th>{{ 'poste_backup.destinations.last_test'|trans }}</th>
-        <th>{{ 'poste_backup.destinations.used_by'|trans }}</th><th></th></tr></thead>
+        <th>{{ 'poste_backup.destinations.used_by'|trans }}</th><th>{{ 'poste_backup.destinations.space'|trans }}</th><th></th></tr></thead>
     <tbody>
     {% for id, d in destinations %}
         {% set t = tests[id] ?? null %}
@@ -21,6 +21,9 @@
                 {% elseif t.status == 'error' %}<span class="text-danger"><i class="fa fa-times-circle"></i> {{ t.lines|last }}</span>
                 {% else %}<span class="text-success"><i class="fa fa-check"></i> {{ t.t|date('Y-m-d H:i') }}</span>{% endif %}</td>
             <td>{{ (used[id] ?? [])|join(', ') }}</td>
+            <td>{% set sp = space[id] ?? null %}{% if sp is null %}<span class="bk-muted">{{ 'poste_backup.dashboard.space_unknown'|trans }}</span>
+                {% else %}{% if sp.used is not null %}{{ 'poste_backup.dashboard.space_used'|trans({'{used}': sp.used}) }}{% endif %}
+                {% if sp.free is not null %}<br><span class="bk-muted">{{ sp.total is not null ? 'poste_backup.dashboard.disk_free'|trans({'{free}': sp.free, '{total}': sp.total}) : 'poste_backup.dashboard.space_free'|trans({'{free}': sp.free}) }}</span>{% endif %}{% endif %}</td>
             <td class="text-right" style="white-space:nowrap">
                 <a class="btn btn-default btn-xs" href="{{ path('poste_backup_destination_edit', {id: id}) }}">{{ 'poste_backup.action.edit'|trans }}</a>
                 {% if used[id] is not defined %}
@@ -33,7 +36,7 @@
             </td>
         </tr>
     {% else %}
-        <tr><td colspan="6" class="text-center"><em>{{ 'poste_backup.destinations.none'|trans }}</em></td></tr>
+        <tr><td colspan="7" class="text-center"><em>{{ 'poste_backup.destinations.none'|trans }}</em></td></tr>
     {% endfor %}
     </tbody>
 </table>

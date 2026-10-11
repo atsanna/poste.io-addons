@@ -31,7 +31,7 @@ final class Config
     /** An empty configuration. */
     public static function empty(): array
     {
-        return ['version' => 1, 'destinations' => [], 'jobs' => []];
+        return ['version' => 1, 'settings' => ['timezone' => ''], 'destinations' => [], 'jobs' => []];
     }
 
     public static function isId($id): bool
@@ -56,6 +56,14 @@ final class Config
         if (!is_array($raw)) {
             return [$out, ['the settings file is not a JSON object']];
         }
+
+        // the time zone of the schedules: '' = the container's (Schedule::zone)
+        $tz = $raw['settings']['timezone'] ?? '';
+        if ($tz !== '' && !Schedule::isZone($tz)) {
+            $errors[] = 'time zone: not valid';
+            $tz = '';
+        }
+        $out['settings']['timezone'] = $tz;
 
         $dests = is_array($raw['destinations'] ?? null) ? $raw['destinations'] : [];
         foreach ($dests as $id => $d) {

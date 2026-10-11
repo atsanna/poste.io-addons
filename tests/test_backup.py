@@ -184,6 +184,8 @@ check("the password is never sent back to the browser", B["DEST_PASSWORD"] not i
 
 SMBBAD, html = new_destination({"name": "Samba, wrong password", "type": "smb", "host": B["DEST_HOST"], "share": "backup",
                                 "folder": "other", "user": "bkuser", "password": "wrong-" + B["DEST_PASSWORD"], "domain": ""})
+check("SMB with a wrong password: saved (only the password is wrong)", SMBBAD is not None,
+      (ADMIN.status, re.findall(r"<li>([^<]*)</li>", html)[:4], re.sub(r"\s+", " ", html)[:300] if SMBBAD is None else ""))
 html = test_destination(SMBBAD)
 check("SMB with a wrong password: test fails", "not reachable" in html and "text-danger" in html, re.findall(r"<li>([^<]*)</li>", html)[:2])
 
@@ -398,8 +400,8 @@ open(unreadable, "w").write("cached map\n")
 os.chmod(unreadable, 0o600)
 
 # one bad destination does not stop the others
-MIXED = new_job("Mixed", [SMBBAD, NOTMOUNTED, S3], {"config": "1", "mail": "none"})
-MIXED = MIXED[0] if MIXED else None
+MIXED = new_job("Mixed", [d for d in (SMBBAD, NOTMOUNTED, S3) if d], {"config": "1", "mail": "none"})
+MIXED = MIXED[0] if MIXED else "000000000000"
 run_job(MIXED)
 s = state()["jobs"].get(MIXED, {})
 res = {d: (r["status"], r["error"]) for d, r in s.get("destinations", {}).items()}
@@ -500,6 +502,133 @@ r = run_job(BOB)
 s = state()["jobs"].get(BOB, {})
 check("engine: a key that is a symbolic link is refused", "key is missing" in json.dumps(s.get("destinations", {})), s.get("status"))
 sh(["sh", "-c", "rm %s && mv %s.real %s" % (k, k, k)], user="mail")
+
+# ===================================================================== space, logs, live pages, languages
+print("--- backup: space, logs, live pages, languages")
+sp = state().get("destinations", {})
+check("space measured after the backups, on every destination",
+      all(isinstance(sp.get(d, {}).get("used"), int) and sp[d]["used"] > 0 for d in (LOCAL, SMB, S3, SFTP, SFTPKEY)),
+      {k: v.get("used") for k, v in sp.items()})
+check("free space where the server reports it, not on S3",
+      all(isinstance(sp.get(d, {}).get("free"), int) for d in (LOCAL, SMB, SFTP)) and sp.get(S3, {}).get("free") is None,
+      {k: v.get("free") for k, v in sp.items()})
+url, html = ADMIN.get(BASE + "/")
+check("dashboard: the space on the destinations", "Space on the destinations" in html and "used by the backups" in html, url)
+url, html = ADMIN.get(BASE + "/destinations")
+check("destinations page: the space used by the backups", "used by the backups" in html, url)
+
+url, html = ADMIN.get(BASE + "/logs")
+names = re.findall(r"/admin/backup/logs/(\d{8}-\d{6}-[a-f0-9]{12}\.log)", html)
+check("logs page: the runs, with a link to the log of each", len(set(names)) >= 2 and "Whole server" in html and "Bob only" in html, len(names))
+url, page = ADMIN.get(BASE + "/logs/" + names[0]) if names else ("", "")
+check("a log opens, with what the engine wrote", ADMIN.status == 200 and "job finished" in page, url)
+url, html = ADMIN.get(BASE + "/jobs")
+check("jobs page: a link to the log of the last run", "/admin/backup/logs/" in html, url)
+codes = []
+for bad in ("../../etc/passwd", "passwd", "20261011-142901-0a1b2c3d4e5f.log"):
+    url, page = ADMIN.get(BASE + "/logs/" + bad)
+    codes.append((bad, ADMIN.status, "root:x:" in page))
+link = "/data/var/backup/engine/logs/20990101-000000-0a1b2c3d4e5f.log"
+os.symlink("/etc/passwd", link)
+url, page = ADMIN.get(BASE + "/logs/" + os.path.basename(link))
+codes.append(("a link to /etc/passwd", ADMIN.status, "root:x:" in page))
+os.remove(link)
+check("a log name that is not a log, does not exist or is a link: not found, nothing shown",
+      all(c == 404 and not shown for _, c, shown in codes), codes)
+
+# a mail file the backup may not read (root's, 0600): the run says so, as a warning
+bob_cur = "%s/%s/Maildir/cur" % (dom, bob_local)
+locked = bob_cur + "/1700000000.M1P1.mail.example.test,S=12:2,S"
+open(locked, "w").write("locked file\n")
+os.chmod(locked, 0o600)
+run_job(BOB)
+r = state()["jobs"].get(BOB, {}).get("destinations", {}).get(LOCAL, {})
+check("a file the backup cannot read: warning, with how many (from restic's error lines)",
+      r.get("status") == "warning" and r.get("error") == "1 file(s) could not be read (see the log)", r)
+os.remove(locked)
+
+# while a job runs, the open pages read its progress
+big = bob_cur + "/1700000001.M2P2.mail.example.test,S=209715200:2,S"
+with open(big, "wb") as f:
+    for _ in range(200):
+        f.write(os.urandom(1048576))
+shutil.chown(big, "mail", "mail")
+url, body = ADMIN.get(BASE + "/status")
+sig_before = json.loads(body).get("signature")
+seen = []
+for _ in range(3):
+    engine_idle()
+    p = subprocess.Popen(["poste-backup", "run", BOB], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    while p.poll() is None:
+        url, body = ADMIN.get(BASE + "/status")
+        try:
+            j = json.loads(body)
+        except ValueError:
+            j = {}
+        if j.get("running"):
+            seen.append(j["running"]["detail"])
+        time.sleep(0.2)
+    if "busy" not in p.stdout.read():
+        break
+os.remove(big)
+url, body = ADMIN.get(BASE + "/status")
+check("while a job runs, the status of the open pages has its progress (percent, sizes, files)",
+      any(re.search(r"\d+(\.\d)?% · .* of .* · \d+ of \d+ files", d) for d in seen), (len(seen), seen[:2], seen[-2:]))
+check("when the job ends, the status changes (the open pages reload)", json.loads(body).get("signature") != sig_before and not json.loads(body).get("running"), body[:120])
+
+# the same messages in Czech (the admin follows the browser's language)
+CS = Panel(E["ALICE"], E["PA"], lang="cs")
+url, html = CS.get(BASE + "/destinations/new")
+f = [x for x in Panel.parse(html).forms if x["method"].lower() == "post"][0]
+data = {n: (v or "") for n, v, t in f["fields"] if n and not t.endswith(":off") and t not in ("submit", "button")}
+data.update({"name": "x", "type": "smb", "host": "h;id", "share": "s", "user": "u", "password": "p"})
+url, body = CS.post(BASE + "/destinations/check", data)
+try:
+    lines = json.loads(body).get("lines", [])
+except ValueError:
+    lines = [body[:100]]
+check("in Czech: a message of the validation is translated", lines == ["server: název hostitele nebo adresa IP"], lines)
+url, html = CS.get(BASE + "/logs")
+check("in Czech: the logs page", "Záznamy záloh" in html, url)
+url, html = CS.get(BASE + "/jobs")
+check("in Czech: the jobs page", "Úlohy zálohování" in html, url)
+
+# SFTP with a key: the command to run on the server, ready to copy
+url, html = ADMIN.get(BASE + "/destinations/%s/edit" % SFTPKEY)
+check("SFTP with a key: the command for the server, with the key in it",
+      pub is not None and html.count(pub.group(1)) >= 2 and "chmod 600 ~/.ssh/authorized_keys" in html, url)
+
+# the time zone of the container (its TZ, kept by s6): the admin shows the times
+# of the jobs in it, not in UTC (Poste.io's admin has no time zone of its own).
+# A zone far from UTC: if the page used UTC, the hour would be another one.
+TZF = "/var/run/s6/container_environment/TZ"
+old_tz = open(TZF).read() if os.path.exists(TZF) else None
+open(TZF, "w").write("Pacific/Kiritimati")
+url, html = ADMIN.get(BASE + "/jobs")
+nexts = re.findall(r"next: (\d{4}-\d{2}-\d{2} \d{2}:\d{2})", html)
+if old_tz is None:
+    os.remove(TZF)
+else:
+    open(TZF, "w").write(old_tz)
+check("the times of the jobs are shown in the container's time zone (the hour set, 03:17)",
+      "Pacific/Kiritimati" in html and nexts and all(n.endswith("03:17") for n in nexts), nexts)
+
+# the time zone chosen in the admin wins, and is refused when it does not exist
+before = json.dumps(config())
+post_form(BASE + "/jobs", {"timezone": "Pacific/Kiritimati"}, suffix="/settings/timezone", drop=("_token",))
+check("time zone without the CSRF token: refused (nothing saved)", json.dumps(config()) == before, "config unchanged")
+url, html = post_form(BASE + "/jobs", {"timezone": "Mars/Olympus"}, suffix="/settings/timezone")
+check("a time zone that does not exist: refused with a message", config()["settings"]["timezone"] == "" and "time zone: not valid" in html, config().get("settings"))
+url, html = post_form(BASE + "/jobs", {"timezone": "Pacific/Kiritimati"}, suffix="/settings/timezone")
+nexts = re.findall(r"next: (\d{4}-\d{2}-\d{2} \d{2}:\d{2})", html)
+check("time zone chosen in the admin: saved, and the times of the jobs shown in it (the hour set, 03:17)",
+      config()["settings"]["timezone"] == "Pacific/Kiritimati" and "Pacific/Kiritimati" in html and nexts and all(n.endswith("03:17") for n in nexts), nexts)
+z = sh(["php", "-r", 'require "/usr/local/lib/poste-backup/lib/Store.php"; foreach (["Config","Schedule","Proc","Destination","Engine"] as $c) require "/usr/local/lib/poste-backup/lib/$c.php"; '
+        '$r = new ReflectionProperty("PosteBackup\\Engine", "tz"); $r->setAccessible(true); $e = new PosteBackup\\Engine(); '
+        '$m = new ReflectionMethod("PosteBackup\\Engine", "load"); $m->setAccessible(true); $m->invoke($e); echo $r->getValue($e)->getName();'], user="mail")
+check("the engine uses the time zone chosen in the admin", z.stdout.strip() == "Pacific/Kiritimati", (z.stdout.strip(), z.stderr.strip()[-200:]))
+post_form(BASE + "/jobs", {"timezone": ""}, suffix="/settings/timezone")
+check("time zone back to the container's", config()["settings"]["timezone"] == "", config().get("settings"))
 
 # one run at a time
 with open("/run/poste-backup.lock") as f:

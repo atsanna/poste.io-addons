@@ -1,0 +1,43 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.logs.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
+{% if live.running %}
+<p class="text-info"><i class="fa fa-spinner fa-spin"></i> <span class="bk-live-text">{{ live.running.text }}</span></p>
+{% endif %}
+<table class="table table-striped table-hover bk">
+    <thead><tr><th></th><th>{{ 'poste_backup.logs.when'|trans }}</th><th>{{ 'poste_backup.logs.job'|trans }}</th>
+        <th>{{ 'poste_backup.logs.destination'|trans }}</th><th>{{ 'poste_backup.logs.result'|trans }}</th>
+        <th class="text-right">{{ 'poste_backup.logs.added'|trans }}</th><th class="text-right">{{ 'poste_backup.logs.duration'|trans }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+        <tr>
+            <td>{% if r.status == 'ok' %}<span class="glyphicon glyphicon-ok text-success"></span>
+                {% elseif r.status == 'warning' %}<span class="glyphicon glyphicon-warning-sign text-warning"></span>
+                {% else %}<span class="glyphicon glyphicon-remove text-danger"></span>{% endif %}</td>
+            <td style="white-space:nowrap">{{ (r.start ?? r.t)|date('Y-m-d H:i') }}
+                <br><span class="bk-muted">{{ ('poste_backup.logs.reason_' ~ (r.reason == 'schedule' ? 'schedule' : 'manual'))|trans }}</span></td>
+            <td>{{ jobs[r.job].name ?? r.job }}</td>
+            <td>{{ destinations[r.dest].name ?? r.dest }}</td>
+            <td>{% if r.status == 'ok' %}<span class="text-success">{{ 'poste_backup.status.ok'|trans }}</span>
+                {% else %}<span class="{{ r.status == 'warning' ? 'text-warning' : 'text-danger' }}">{{ r.error }}</span>{% endif %}
+                {% if r.note %}<br><span class="bk-muted">{{ r.note }}</span>{% endif %}</td>
+            <td class="text-right" style="white-space:nowrap">{% if r.status != 'error' %}{{ 'poste_backup.logs.size_mb'|trans({'{size}': ((r.added ?? 0) / 1048576)|round(1)}) }}
+                <br><span class="bk-muted">{{ 'poste_backup.logs.files'|trans({'{count}': r.files ?? 0}) }}</span>{% endif %}</td>
+            <td class="text-right" style="white-space:nowrap">{{ 'poste_backup.logs.seconds'|trans({'{seconds}': r.duration ?? 0}) }}</td>
+            <td class="text-right">{% if r.log %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_log', {name: r.log}) }}"><i class="fa fa-file-text-o"></i> {{ 'poste_backup.jobs.log'|trans }}</a>{% endif %}</td>
+        </tr>
+    {% else %}
+        <tr><td colspan="8" class="text-center"><em>{{ 'poste_backup.logs.none'|trans }}</em></td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+<p class="help-block">{{ 'poste_backup.logs.help'|trans }}</p>
+{% endblock %}
+
+{% block javascripts %}
+{% include 'Base/PosteBackup/_live.html.twig' %}
+{% endblock %}

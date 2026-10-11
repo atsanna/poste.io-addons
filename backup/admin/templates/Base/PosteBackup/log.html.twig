@@ -1,0 +1,12 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ 'poste_backup.logs.title'|trans }}{% endblock %}
+
+{% block body -%}
+{% include 'Base/PosteBackup/_common.html.twig' %}
+<p><a href="{{ path('poste_backup_logs') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.logs.title'|trans }}</a></p>
+<h4>{% if job %}{{ job }} &middot; {% endif %}<code>{{ name }}</code></h4>
+{% if cut %}<p class="bk-muted">{{ 'poste_backup.logs.cut'|trans }}</p>{% endif %}
+<pre class="bk-log">{{ text }}</pre>
+<p class="help-block">{{ 'poste_backup.logs.help_log'|trans }}</p>
+{% endblock %}

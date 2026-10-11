@@ -42,7 +42,7 @@
             <select class="form-control" id="bk-hour" name="hour">
                 {% for h in 0..23 %}<option value="{{ h }}"{% if values.schedule.hour == h %} selected{% endif %}>{{ '%02d'|format(h) }}</option>{% endfor %}
             </select></div>
-        <div class="form-group"><label class="control-label" for="bk-minute">{{ 'poste_backup.job.minute'|trans }}</label>
+        <div class="form-group"><label class="control-label" for="bk-minute">{{ 'poste_backup.job.minute'|trans }} <span class="bk-muted">({{ zone }})</span></label>
             <select class="form-control" id="bk-minute" name="minute">
                 {% for m in 0..59 %}<option value="{{ m }}"{% if values.schedule.minute == m %} selected{% endif %}>{{ '%02d'|format(m) }}</option>{% endfor %}
             </select></div>

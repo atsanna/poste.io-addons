@@ -23,8 +23,12 @@ machine, encrypted, frequent, with single mailboxes to restore.
 - [The encryption key](#the-encryption-key)
 - [Destinations](#destinations)
 - [Backup jobs](#backup-jobs)
+- [Watching the backups](#watching-the-backups)
 - [Restoring](#restoring)
+- [Good practice](#good-practice)
+- [A backup of a server that is running](#a-backup-of-a-server-that-is-running)
 - [Security](#security)
+- [If the mail server is compromised](#if-the-mail-server-is-compromised)
 - [Files and folders](#files-and-folders)
 - [Troubleshooting](#troubleshooting)
 - [Limits](#limits)
@@ -96,6 +100,17 @@ Each run of a job:
 A destination that fails does not stop the others. One run at a time: a long
 backup makes the next minutes wait (a lock), it is never started twice.
 
+The result of a run on a destination is **ok**, **warning** or **error**:
+
+- *ok*: the snapshot is complete. A message moved or deleted while the
+  backup was reading the mailboxes (a message moved to another folder, a flag
+  changed: Dovecot gives the file a new name) is not a problem: the run says
+  how many with a note, and the next backup has them where they are now.
+- *warning*: the snapshot was made, but a file could not be read (for example
+  a permission problem), or the old snapshots could not be removed. The run
+  says what; look at its log.
+- *error*: no snapshot on that destination.
+
 ## The encryption key
 
 Every backup is encrypted with a key made at the first start of the container
@@ -114,10 +129,15 @@ key back instead (same file, owner `mail`, mode `0600`).
 
 ## Destinations
 
-*Backup > Destinations > Add a destination.* Every destination can be tested
-from its page: the test checks that it can be reached, that the folder is
-empty or already a repository, the free space, and writes and removes a small
-file. Use **one folder per mail server**.
+*Backup > Destinations > Add a destination.* The **Test** button next to
+*Save* tries the values of the form **before** they are saved: it checks that
+the destination can be reached, that the folder is empty or already a
+repository, the free space, and writes and removes a small file. The page is
+not reloaded, so a password typed stays in its field. A saved destination
+can be tested again from its page. Use **one folder per mail server**.
+
+Give the backups an account of their own on the destination, with access to
+that folder only (see [Good practice](#good-practice)).
 
 ### SMB / Samba
 
@@ -129,9 +149,13 @@ newer). The free space is shown.
 
 Server, port, user, folder, and a login **with a password** or **with a key**:
 
-- *with a key*: the admin makes a key pair (ed25519) for this destination and
-  shows the public key; add it to `~/.ssh/authorized_keys` of that user on the
-  server;
+- *with a key*: nothing is pasted in the form. When the destination is
+  saved, the admin makes a key pair (ed25519) for it, keeps the private key
+  and shows the public key, with a ready command to run on the server as that
+  user (it creates `~/.ssh` with mode 700 and adds the key to
+  `~/.ssh/authorized_keys` with mode 600) and a button to copy it. On a NAS
+  the user needs a home folder and the SFTP service on, or the key is not
+  read. Then test the destination;
 - **the server's own SSH key must be confirmed** before anything is sent. The
   first test shows the fingerprints the server offers; compare them with the
   server's (`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server)
@@ -189,7 +213,8 @@ folder of the volume to that user (for an NFS export: a directory owned by
 - **What**: the server configuration, and no mail / all mail / only some
   mailboxes;
 - **When**: every hour (at a minute), every day, every week (a day) or every
-  month (day 1 to 28) at a time. Times are the server's time zone;
+  month (day 1 to 28) at a time, in the **time zone of the schedules** (see
+  below);
 - **Destinations**: one or more, each gets a full copy;
 - **Keep**: how many hourly, daily, weekly and monthly snapshots to keep. After
   each run the older snapshots of **that job** are removed: for each hour,
@@ -198,13 +223,55 @@ folder of the volume to that user (for an NFS export: a directory owned by
   Example: 24 hourly, 7 daily, 4 weekly, 12 monthly = every hour for a day,
   every day for a week, every week for a month, every month for a year.
 
+**Time zone of the schedules**, chosen under the list of jobs: the hours of
+the jobs and the times shown in the backup pages are in that zone. Without a
+choice it is the container's time zone (its `TZ`, otherwise
+`/etc/timezone`), which in Poste.io's image is UTC unless `TZ` is set. The
+choice changes only the backups: the server and its logs keep their own
+time (usually UTC, which is a good thing for logs: no hour missing or
+repeated when the clocks change). The backup's own logs write each time with
+its offset (`+02:00`), so they can be compared with the others. After a
+change of zone, a job whose time has already passed today in the new zone
+may run once, at the next minute.
+
 A job runs when its time comes; **Run now** (or *Save and run now*) starts it
 within a minute. A run missed because the server was off runs once, as soon
 as the server is back (not once per missed hour). A new job does not run for
 a time that was already past when it was created.
 
 The page shows, for each job, the last run on each destination: how much new
-data it stored, how long it took, or the error.
+data it stored, how long it took, or the error, with a link to its log.
+
+Deleting a job (or a destination) removes it from the settings only: the
+backups it made stay on the destinations, encrypted, and can still be
+restored. They are no longer thinned out by any keep rule. Removing them comes to
+the admin with the next stage; for now it is done by hand: list them with
+`poste-backup restic <destination id> snapshots --tag job:<job id>`, then
+`poste-backup restic <destination id> forget --prune <snapshot ids>`.
+
+## Watching the backups
+
+- **Dashboard**: the problems found (a failed run, a key never downloaded,
+  the engine not running), the job running now with its **progress**
+  (percentage, data and files done of the total, then removing old snapshots
+  and measuring the space), the disk of the server, the last backups and the
+  **space on each destination**: what the backups use there and, where the
+  server reports it, the free space (S3 does not). The space is measured
+  after each backup.
+- The dashboard, the jobs and the logs **update themselves**: every few
+  seconds while a job runs, every 15 seconds otherwise; the page reloads when
+  a job starts or ends.
+- **Logs**: one line per run and destination, the most recent first, with a
+  link to the log of the run (what the engine did, in English, with the
+  output of restic). The last 200 logs are kept.
+- The pages of the admin are in **English and Czech** (Poste.io's two
+  languages, chosen by the browser), including the messages of the tests,
+  of the validation and of the runs. The logs themselves stay in English.
+
+There are no notifications yet (e-mail, Telegram, a webhook, a status for
+monitoring): they are the next stages of this add-on. Until then a failed
+backup is seen only in the admin, so look at it from time to time, or watch
+`poste-backup status` (JSON) from your monitoring.
 
 ## Restoring
 
@@ -256,6 +323,55 @@ the server (for example the webmail's `roundcube.db`, owned by `www-data`)
 needs its owner set back by root after copying it into place
 (`chown www-data:www-data ...`).
 
+## Good practice
+
+- **3-2-1**: keep at least one copy **off the machine** and, better, one off
+  the premises (a NAS in another room is not off the premises; an S3 bucket
+  or a server elsewhere is). A job can write to several destinations at once.
+- **Two jobs** are usually enough: the **configuration** often (every hour:
+  it is small) and **all the mail** every day, at night. Example keep rules:
+  configuration 24 hourly, 7 daily; mail 7 daily, 4 weekly, 12 monthly.
+- **Download the encryption key** at once and keep it in **two places**
+  outside the server (a password manager and a printed copy, for example).
+  Without it no backup can be read.
+- **An account of its own** on each destination, with access to the backup
+  folder only. Not the NAS administrator: whoever controls the mail server
+  would control the whole NAS.
+- **Protect the backups from the server** itself: see
+  [If the mail server is compromised](#if-the-mail-server-is-compromised).
+- **Test a restore** now and then (a mailbox into a separate folder, see
+  [Restoring](#restoring)): a backup that was never restored is a hope, not
+  a backup.
+- **Look at the dashboard** after changes (a new destination, a new job, an
+  upgrade), and from time to time: until notifications arrive, a failing
+  backup does not tell anyone.
+- **Space**: the first backup stores everything; later ones store only what
+  changed (restic deduplicates: data already stored is never stored again).
+  Plan the destination for the mail plus the history kept, and watch the
+  space shown on the dashboard. As an order of magnitude, a first backup of
+  9.7 GB of mail took 8 and a half minutes over SMB to a NAS on the same
+  network.
+
+## A backup of a server that is running
+
+The backup runs while the server works; nothing is stopped.
+
+- **The databases** (accounts, calendars, webmail) are copied with SQLite's
+  own backup command, which gives a consistent copy of a database in use, and
+  each copy is checked before it is stored.
+- **The mail** is in the Maildir format, made to be copied while in use: each
+  message is a file that never changes. The only thing that can happen is a
+  message moved or deleted while the backup reads its folder: it is missed by
+  that backup (the run says how many, as a note) and taken by the next one.
+  Dovecot's index files are rebuilt by Dovecot if a copy of them is not up to
+  date.
+- **A snapshot of the disk** (one instant for everything) can only be made
+  by the host, with a file system that has snapshots (ZFS, LVM, btrfs) or by
+  backing up the whole virtual machine; a container cannot do it without
+  privileges this add-on does not ask for. If the host already makes them,
+  they are a good complement: this add-on adds copies of the mail server
+  alone, off the machine, encrypted, with single mailboxes to restore.
+
 ## Security
 
 - **No root.** The admin and the engine both run as `mail`. In Poste.io
@@ -286,6 +402,28 @@ needs its owner set back by root after copying it into place
 - **SFTP** only talks to a server whose SSH key was confirmed.
 - **Only super administrators** see the pages.
 
+## If the mail server is compromised
+
+To make backups and remove the old ones, the server holds the credentials of
+the destinations with the right to **write and delete** there. Someone who
+takes control of the mail server (with the admin password, or through a
+flaw) can therefore delete or encrypt the backups too, unless the
+destination protects them. Protect them **on the destination side**, where
+the mail server has no say:
+
+- a **NAS**: scheduled, read-only **snapshots** of the backup share (Btrfs or
+  ZFS snapshots on Synology, QNAP, TrueNAS...), kept longer than the time you
+  would need to notice a problem;
+- **S3**: **versioning** of the bucket, or better **Object Lock** with a
+  retention period, so that a deleted or overwritten object can be
+  recovered;
+- an **SFTP server**: snapshots of its file system, or a copy of the backup
+  folder made by that server to a place the mail server cannot reach.
+
+A destination where the mail server may only add (the old snapshots then
+removed by the destination's side) is planned for a next stage of this
+add-on.
+
 ## Files and folders
 
 ```
@@ -306,7 +444,7 @@ needs its owner set back by root after copying it into place
   engine/                                 (the engine)
     state.json                            last run of each job
     history.jsonl                         one line per run and destination
-    logs/                                 output of each run (the last 200)
+    logs/                                 log of each run (the last 200)
     staging/                              consistent copies of the databases, during a run
 /var/cache/poste-backup                   restic's cache (rebuilt when needed)
 /run/poste-backup.lock                    one run at a time
@@ -330,6 +468,8 @@ something that is not a folder owned by root.
 
 - **One repository per server**: do not point two mail servers to the same
   folder.
+- No notifications yet, and restores are made from the command line (see
+  [Restoring](#restoring)): both come with the next stages.
 - restic and rclone are the versions of the image's Debian release (restic
   0.14, rclone 1.60 on Poste.io 2.5.17).
 - The first backup of a large server takes a while (everything is new); later

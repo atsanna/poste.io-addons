@@ -13,9 +13,15 @@ poste_backup:
     test: Otestovat
     run_now: Spustit nyní
   status:
+    ok: "v pořádku"
     never: zatím nespuštěno
     failed: selhalo
   dashboard:
+    space: "Místo v cílech"
+    space_used: "zálohy zabírají {used}"
+    space_free: "volno {free}"
+    space_unknown: "změří se po další záloze"
+    logs_summary: "každý běh s jeho záznamem"
     problems: "{count, plural, one {1 problém} few {# problémy} other {# problémů}}"
     running: "Právě běží: {job} (od {since})"
     disk: Disk serveru (/data)
@@ -61,6 +67,7 @@ poste_backup:
     optional: volitelné
     unchanged: beze změny
   destinations:
+    space: "Místo"
     title: Cíle záloh
     add: Přidat cíl
     none: Zatím žádný cíl
@@ -70,6 +77,11 @@ poste_backup:
     delete_confirm: Smazat tento cíl? Zálohy, které už v něm jsou, se nesmažou.
     help: "Každá úloha zapisuje do každého svého cíle úplnou šifrovanou kopii. Cílem je složka na sdílení SMB, server SFTP, bucket S3 nebo svazek, který do kontejneru připojí hostitel (NFS, druhý disk)."
   destination:
+    key_help: "Pár klíčů vytvoří administrace při uložení cíle: jeho veřejný klíč se pak zobrazí na této stránce a přidá se na server."
+    pubkey_command: "Nebo na serveru {host} jako uživatel {user} spusťte tento příkaz: v případě potřeby vytvoří složku .ssh a přidá klíč se správnými oprávněními."
+    copy: "Zkopírovat příkaz"
+    copied: "zkopírováno"
+    pubkey_nas: "Na NAS musí mít uživatel domovskou složku a služba SFTP musí být zapnutá (v nastavení NAS: domovská složka uživatele, služba SSH/SFTP), jinak se klíč nenačte."
     new: Nový cíl
     edit: Upravit cíl
     saved: "Cíl uložen. Před první zálohou ho otestujte."
@@ -102,6 +114,7 @@ poste_backup:
     check_trust: "Jsou to klíče serveru, důvěřovat jim a otestovat"
     check_failed: "Test nelze spustit: načtěte stránku znovu a zkuste to znovu."
   jobs:
+    log: "záznam"
     title: Úlohy zálohování
     add: Přidat úlohu zálohování
     none: Zatím žádná úloha zálohování
@@ -112,6 +125,7 @@ poste_backup:
     keep: Uchovávat
     last_run: Poslední běh
     disabled: vypnuto
+    zone: "Časy jsou v časovém pásmu {zone}."
     running: právě běží
     queued: "ve frontě: spustí se do minuty"
     added: "+{size} MB za {seconds} s"
@@ -182,3 +196,129 @@ poste_backup:
     never: nikdy nestaženo
     created: "vytvořeno {time}"
     missing: "Klíč chybí: restartujte kontejner (vytváří se při startu) nebo vraťte starý klíč, pokud ho máte."
+  live:
+    prepare: "příprava: kopírují se databáze, sestavuje se seznam souborů"
+    starting: "{destination}: začíná"
+    progress: "{destination}: {percent} % · {done} z {total} · souborů {files} z {total_files}"
+    prune: "{destination}: odstraňují se staré snímky"
+    space: "{destination}: měří se zabrané místo"
+  logs:
+    title: "Záznamy záloh"
+    when: "Kdy"
+    job: "Úloha"
+    destination: "Cíl"
+    result: "Výsledek"
+    added: "Přidáno"
+    duration: "Doba"
+    reason_schedule: "podle plánu"
+    reason_manual: "na vyžádání"
+    size_mb: "{size} MB"
+    files: "{count, plural, one {1 soubor} few {# soubory} other {# souborů}}"
+    seconds: "{seconds} s"
+    none: "Zatím žádný běh zálohy"
+    help: "Jeden řádek pro každou úlohu a cíl, nejnovější nahoře (posledních 300). Záznam každého běhu obsahuje všechny podrobnosti."
+    cut: "Dlouhý záznam: zobrazuje se jen jeho poslední část."
+    help_log: "Záznam píše zálohovací modul v angličtině; uchovává se posledních 200 záznamů."
+  fieldname:
+    port: "port"
+    password: "heslo"
+    share: "sdílená složka"
+    domain: "doména"
+    region: "region"
+    bucket: "bucket"
+    access_key: "přístupový klíč"
+    secret_key: "tajný klíč"
+    user: "uživatel"
+    enabled: "zapnuto"
+    configuration: "konfigurace"
+    minute: "minuta"
+    hour: "hodina"
+    weekday: "den v týdnu"
+    monthday: "den v měsíci"
+    keep_hourly: "uchovávat hodinových"
+    keep_daily: "uchovávat denních"
+    keep_weekly: "uchovávat týdenních"
+    keep_monthly: "uchovávat měsíčních"
+    notify_success: "oznámit úspěch"
+    created: "vytvořeno"
+  msg:
+    not_object: "není to objekt"
+    settings_not_object: "soubor nastavení není objekt JSON"
+    too_many_destinations: "příliš mnoho cílů"
+    destination_bad_id: "cíl s neplatným id byl vynechán"
+    destination_errors: "cíl {id}: {list}"
+    too_many_jobs: "příliš mnoho úloh"
+    job_bad_id: "úloha s neplatným id byla vynechána"
+    job_errors: "úloha {id}: {list}"
+    unknown_type: "neznámý typ"
+    login: "přihlášení: heslo nebo klíč"
+    folder_required: "složka: pro SFTP je povinná"
+    mail_choice: "pošta: neznámá volba"
+    no_mailbox: "není vybrána žádná schránka"
+    too_many_mailboxes: "příliš mnoho schránek"
+    invalid_mailbox: "neplatná adresa schránky"
+    nothing: "není co zálohovat"
+    frequency: "plán: neznámá četnost"
+    no_destination: "žádný cíl"
+    unknown_destination: "neznámý cíl"
+    keep_zero: "uchovávat: alespoň jedna hodnota musí být větší než 0 (jinak by se nikdy nic neodstranilo, nebo všechno)"
+    name: "název: 1 až 60 znaků, bez řídicích znaků"
+    host: "server: název hostitele nebo adresa IP"
+    folder_chars: "složka: písmena, číslice, . _ - a /"
+    folder_dots: "složka: bez částí \".\" nebo \"..\""
+    local_roots: "složka: absolutní cesta pod {roots}"
+    endpoint: "koncový bod: https://hostitel[:port]"
+    hostkeys: "klíče serveru: nejsou platné"
+    timezone: "časové pásmo: není platné"
+    field_bool: "{field}: není ano/ne"
+    field_int: "{field}: celé číslo od {min} do {max}"
+    field_invalid: "{field}: není platné"
+    field_secret: "{field}: 1 až 256 znaků, bez řídicích znaků"
+    ssh_key_missing: "klíč SSH tohoto cíle chybí (vytvořte ho znovu v administraci)"
+    hostkey_not_confirmed: "klíč SSH serveru zatím nebyl potvrzen (otestujte cíl v administraci)"
+    tmp_file: "nelze zapsat dočasný soubor"
+    tmp_folder: "nelze vytvořit dočasnou složku"
+    obscure: "rclone obscure selhal"
+    local_missing: "{path} v kontejneru neexistuje: připojte tam svazek"
+    local_not_mounted: "{path} není připojený svazek: záloha by zůstala uvnitř kontejneru"
+    local_same_disk: "{path} je na stejném disku jako /data: záloha tam nepřežije ztrátu tohoto disku"
+    local_not_writable: "do {path} nemůže zapisovat uživatel mail (uid 8, gid 8): přidělte svazek tomuto uživateli"
+    lock_settings: "nastavení nelze uzamknout"
+    server_port: "neplatný server nebo port"
+    no_ssh_key: "server neodpověděl klíčem SSH ({detail})"
+    invalid_id: "neplatné id"
+    keygen: "ssh-keygen selhal: {detail}"
+    changed_meanwhile: "cíl se mezitím změnil"
+    test_mounted: "připojený svazek, ne na disku /data"
+    test_free_s3: "volné místo: S3 ho neuvádí"
+    test_free_unknown: "volné místo: server ho neuvádí"
+    test_free_total: "volné místo: {free} z {total}"
+    test_free: "volné místo: {free}"
+    test_repository: "už obsahuje úložiště záloh"
+    test_no_repository: "zatím bez úložiště: vytvoří se při prvním běhu"
+    test_reachable_repository: "dostupné; už obsahuje úložiště záloh"
+    test_not_empty: "dostupné, ale složka není prázdná a není úložištěm záloh: zvolte prázdnou složku"
+    test_reachable_empty: "dostupné; prázdná složka, úložiště se vytvoří při prvním běhu"
+    test_reachable_new: "dostupné; složka zatím neexistuje, vytvoří se při prvním běhu"
+    not_reachable: "nedostupné: {detail}"
+    test_cannot_write: "nelze zapisovat: {detail}"
+    test_write_ok: "zkouška zápisu: v pořádku"
+    test_write_left: "zkouška zápisu: zapsáno, ale zkušební soubor nešlo odstranit"
+    mailbox_not_found: "schránka {address} nebyla nalezena"
+    no_selected_mailbox: "žádná z vybraných schránek neexistuje"
+    staging: "nelze vytvořit pracovní složku"
+    copy_failed: "kopie {path} selhala nebo je poškozená"
+    key_missing: "chybí šifrovací klíč ({path})"
+    init_failed: "úložiště nelze vytvořit: {detail}"
+    backup_failed: "záloha selhala: {detail}"
+    unreadable: "souborů, které nešlo přečíst: {count} (viz záznam)"
+    unreadable_some: "některé soubory nešlo přečíst (viz záznam)"
+    vanished: "souborů přesunutých nebo smazaných během zálohy: {count}; další záloha je obsahuje"
+    forget_failed: "záloha hotová, ale staré snímky nebyly odstraněny: {detail}"
+    folder_not_empty: "složka není prázdná a není úložištěm záloh: nic do ní nebylo zapsáno"
+    local_not_empty: "{path} není prázdná a není úložištěm záloh: nic do ní nebylo zapsáno"
+  settings:
+    timezone: "Časové pásmo plánů"
+    timezone_container: "pásmo kontejneru ({zone})"
+    timezone_saved: "Časové pásmo uloženo"
+    timezone_help: "Určuje, kdy se úlohy spouštějí, a časy zobrazené na těchto stránkách; záznamy serveru se nemění. Úloha, jejíž čas v novém pásmu dnes už uplynul, se může jednou spustit v příští minutě."

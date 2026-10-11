@@ -22,11 +22,12 @@ final class Proc
      * @param int           $timeout seconds, 0 = none
      * @param callable|null $onLine  called with each line of standard output
      * @param resource|null $log     standard error is copied here as it comes
+     * @param callable|null $onErrLine called with each line of standard error
      * @return array{exit:int, out:string, err:string, timeout:bool}
      *         out/err keep only the last 64 KB
      */
     public static function run(array $cmd, array $env, ?string $stdin = null, int $timeout = 0,
-                               ?callable $onLine = null, $log = null): array
+                               ?callable $onLine = null, $log = null, ?callable $onErrLine = null): array
     {
         $env += ['PATH' => self::PATH, 'LANG' => 'C.UTF-8', 'LC_ALL' => 'C.UTF-8'];
         $spec = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
@@ -43,7 +44,7 @@ final class Proc
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);
 
-        $out = $err = $partial = '';
+        $out = $err = $partial = $errPartial = '';
         $start = time();
         $timedOut = false;
         $open = [1 => $pipes[1], 2 => $pipes[2]];
@@ -87,6 +88,16 @@ final class Proc
                     if ($log) {
                         fwrite($log, $chunk);
                     }
+                    if ($onErrLine !== null) {
+                        $errPartial .= $chunk;
+                        while (($pos = strpos($errPartial, "\n")) !== false) {
+                            $onErrLine(substr($errPartial, 0, $pos));
+                            $errPartial = substr($errPartial, $pos + 1);
+                        }
+                        if (strlen($errPartial) > 1048576) {
+                            $errPartial = '';
+                        }
+                    }
                 }
             }
             if ($timeout > 0 && time() - $start > $timeout) {
@@ -99,6 +110,9 @@ final class Proc
         }
         if ($onLine !== null && $partial !== '') {
             $onLine($partial);
+        }
+        if ($onErrLine !== null && $errPartial !== '') {
+            $onErrLine($errPartial);
         }
         fclose($pipes[1]);
         fclose($pipes[2]);

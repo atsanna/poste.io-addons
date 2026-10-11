@@ -1,0 +1,24 @@
+{# The page keeps itself up to date: every few seconds while a job runs (its
+   progress, in .bk-live-text and .bk-live-detail), every 15 seconds otherwise;
+   it reloads when a job starts, ends or is queued (the signature changes). #}
+<script>
+    (function () {
+        var sig = '{{ live.signature|e('js') }}', url = '{{ path('poste_backup_status')|e('js') }}';
+        function tick() {
+            $.ajax({url: url, dataType: 'json', cache: false})
+                .done(function (r) {
+                    if (r.signature !== sig) {
+                        window.location.reload();
+                        return;
+                    }
+                    if (r.running) {
+                        $('.bk-live-text').text(r.running.text);
+                        $('.bk-live-detail').text(r.running.detail);
+                    }
+                    setTimeout(tick, r.running ? 3000 : 15000);
+                })
+                .fail(function () { setTimeout(tick, 30000); });
+        }
+        setTimeout(tick, {{ live.running ? 3000 : 15000 }});
+    })();
+</script>

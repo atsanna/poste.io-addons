@@ -13,20 +13,42 @@ namespace PosteBackup;
 
 final class Schedule
 {
-    /** The server's time zone (Poste.io sets /etc/localtime from TZ). */
-    public static function zone(): \DateTimeZone
+    /**
+     * The time zone of the schedules: the one chosen in the admin (settings of
+     * the add-on), otherwise the container's TZ (docker run -e TZ=...), read
+     * where s6 keeps the container's environment (cron starts the engine with
+     * a minimal environment and the admin runs in php-fpm, so both read it from
+     * the same file), then /etc/timezone, otherwise UTC.
+     */
+    public static function zone(string $chosen = ''): \DateTimeZone
     {
-        $tz = getenv('TZ');
-        if (is_string($tz) && $tz !== '' && in_array($tz, \DateTimeZone::listIdentifiers(), true)) {
-            return new \DateTimeZone($tz);
+        if ($chosen !== '' && self::isZone($chosen)) {
+            return new \DateTimeZone($chosen);
         }
-        if (is_file('/etc/timezone')) {
-            $name = trim((string) file_get_contents('/etc/timezone'));
-            if (in_array($name, \DateTimeZone::listIdentifiers(), true)) {
+        return self::containerZone();
+    }
+
+    /** The container's time zone (TZ, then /etc/timezone), UTC otherwise. */
+    public static function containerZone(): \DateTimeZone
+    {
+        $candidates = [getenv('TZ')];
+        foreach (['/var/run/s6/container_environment/TZ', '/etc/timezone'] as $f) {
+            if (is_file($f) && !is_link($f) && filesize($f) < 100) {
+                $candidates[] = trim((string) file_get_contents($f));
+            }
+        }
+        foreach ($candidates as $name) {
+            if (is_string($name) && $name !== '' && self::isZone($name)) {
                 return new \DateTimeZone($name);
             }
         }
         return new \DateTimeZone('UTC');
+    }
+
+    /** A time zone name PHP knows (also the old ones, like Etc/UTC). */
+    public static function isZone($name): bool
+    {
+        return is_string($name) && in_array($name, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true);
     }
 
     /** Most recent scheduled time not after $now (a Unix time). */

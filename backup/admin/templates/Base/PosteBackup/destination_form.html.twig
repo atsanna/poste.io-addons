@@ -61,6 +61,9 @@
                     <option value="password"{% if (values.auth ?? 'password') == 'password' %} selected{% endif %}>{{ 'poste_backup.auth.password'|trans }}</option>
                     <option value="key"{% if (values.auth ?? '') == 'key' %} selected{% endif %}>{{ 'poste_backup.auth.key'|trans }}</option>
                 </select></div>
+        </div>
+        <p class="help-block bk-keyhelp">{{ 'poste_backup.destination.key_help'|trans }}</p>
+        <div class="bk-row">
             <div class="form-group bk-password"><label class="control-label" for="bk-password">{{ 'poste_backup.field.password'|trans }}</label>
                 <input class="form-control" id="bk-password" name="password" type="password" style="width:200px" autocomplete="new-password"
                        placeholder="{{ hasSecret ? 'poste_backup.field.unchanged'|trans : '' }}"></div>
@@ -122,6 +125,11 @@
     {% if publicKey %}
         <p>{{ 'poste_backup.destination.pubkey_help'|trans({'{user}': values.user, '{host}': values.host}) }}</p>
         <code class="bk-key">{{ publicKey }}</code>
+        <p style="margin-top:10px">{{ 'poste_backup.destination.pubkey_command'|trans({'{user}': values.user, '{host}': values.host}) }}</p>
+        <code class="bk-key" id="bk-key-command">mkdir -p ~/.ssh &amp;&amp; chmod 700 ~/.ssh &amp;&amp; echo '{{ publicKey }}' &gt;&gt; ~/.ssh/authorized_keys &amp;&amp; chmod 600 ~/.ssh/authorized_keys</code>
+        <button type="button" class="btn btn-default btn-xs" id="bk-copy" style="margin-top:6px"><i class="fa fa-clipboard"></i> {{ 'poste_backup.destination.copy'|trans }}</button>
+        <span class="bk-muted" id="bk-copied" style="display:none">&nbsp; {{ 'poste_backup.destination.copied'|trans }}</span>
+        <p class="help-block">{{ 'poste_backup.destination.pubkey_nas'|trans }}</p>
     {% endif %}
     <form method="post" action="{{ path('poste_backup_destination_keypair', {id: id}) }}" style="margin-top:8px"
           onsubmit="return confirm('{{ 'poste_backup.destination.keypair_confirm'|trans|e('js') }}')">
@@ -145,6 +153,7 @@
         $('#bk-auth').trigger('chosen:updated');
         var pw = type === 'smb' || (type === 'sftp' && $('#bk-auth').val() === 'password');
         $('.bk-password').toggle(pw).find('input').prop('disabled', !pw);
+        $('.bk-keyhelp').toggle(type === 'sftp' && $('#bk-auth').val() === 'key');
     }
     // Chosen like the rest of the admin (a plain select has no arrow there);
     // fixed widths: a select hidden at load would be measured 0 px wide
@@ -198,6 +207,24 @@
             .fail(function (x) { bkShow(x.responseJSON && x.responseJSON.lines ? x.responseJSON : {status: 'error', lines: [bkT.failed]}); })
             .always(function () { $b.prop('disabled', false); });
     });
+    // the command for the server, copied as it is shown
+    $('#bk-copy').on('click', function () {
+        var text = $('#bk-key-command').text();
+        var done = function () { $('#bk-copied').show().delay(3000).fadeOut(); };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done);
+        } else {
+            var r = document.createRange();
+            r.selectNodeContents(document.getElementById('bk-key-command'));
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(r);
+            if (document.execCommand('copy')) {
+                done();
+            }
+        }
+    });
+
     // keys confirmed for one server are not kept for another
     $('#bk-host, #bk-port').on('input', function () { $('#bk-hostkeys').val(''); });
 </script>

@@ -11,9 +11,8 @@
     <ul>{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
-{% if running %}
-<p class="text-info" style="margin-top:14px"><i class="fa fa-spinner fa-spin"></i>
-    {{ 'poste_backup.dashboard.running'|trans({'{job}': jobs[running.job].name ?? running.job, '{since}': running.since|date('H:i')}) }}</p>
+{% if live.running %}
+<p class="text-info" style="margin-top:14px"><i class="fa fa-spinner fa-spin"></i> <span class="bk-live-text">{{ live.running.text }}</span></p>
 {% endif %}
 
 <div class="bk-status">
@@ -36,6 +35,23 @@
             <span class="bk-muted">{{ 'poste_backup.dashboard.no_jobs'|trans }}</span>
         {% endfor %}
     </div>
+    {% if destinations %}
+    <div class="bk-card"><h4><i class="fa fa-folder-open-o"></i> {{ 'poste_backup.dashboard.space'|trans }}</h4>
+        {% for did, d in destinations %}
+            {% set sp = space[did] ?? null %}
+            <div class="bk-space"><strong>{{ d.name }}</strong>
+            {% if sp is null %}
+                <span class="bk-muted">{{ 'poste_backup.dashboard.space_unknown'|trans }}</span>
+            {% else %}
+                {% if sp.usedPercent is not null %}<div class="bk-bar"><span style="width: {{ sp.usedPercent }}%"></span></div>{% endif %}
+                {% if sp.used is not null %}{{ 'poste_backup.dashboard.space_used'|trans({'{used}': sp.used}) }}{% endif %}
+                {% if sp.free is not null and sp.total is not null %} &middot; {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': sp.free, '{total}': sp.total}) }}
+                {% elseif sp.free is not null %} &middot; {{ 'poste_backup.dashboard.space_free'|trans({'{free}': sp.free}) }}{% endif %}
+            {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    {% endif %}
 </div>
 
 <div class="bk-nav">
@@ -43,7 +59,13 @@
         <span class="bk-muted">{{ 'poste_backup.dashboard.destinations_summary'|trans({'{count}': destinations|length, '{problems}': destProblems}) }}</span></a>
     <a href="{{ path('poste_backup_jobs') }}"><i class="fa fa-clock-o"></i><strong>{{ 'poste_backup.jobs.title'|trans }}</strong>
         <span class="bk-muted">{{ 'poste_backup.dashboard.jobs_summary'|trans({'{count}': jobs|length}) }}{% if next %} &middot; {{ 'poste_backup.dashboard.next'|trans({'{time}': next|date('Y-m-d H:i')}) }}{% endif %}</span></a>
+    <a href="{{ path('poste_backup_logs') }}"><i class="fa fa-file-text-o"></i><strong>{{ 'poste_backup.logs.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.logs_summary'|trans }}</span></a>
     <a href="{{ path('poste_backup_key') }}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>
         <span class="bk-muted">{% if keyDownloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': keyDownloaded|date('Y-m-d')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}</span></a>
 </div>
+{% endblock %}
+
+{% block javascripts %}
+{% include 'Base/PosteBackup/_live.html.twig' %}
 {% endblock %}

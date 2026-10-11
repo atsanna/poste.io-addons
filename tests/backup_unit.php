@@ -7,6 +7,8 @@
 require '/usr/local/lib/poste-backup/lib/Config.php';
 require '/usr/local/lib/poste-backup/lib/Schedule.php';
 require '/usr/local/lib/poste-backup/lib/Store.php';
+require '/usr/local/lib/poste-backup/lib/Engine.php';
+require '/usr/local/lib/poste-backup/lib/Messages.php';
 
 use PosteBackup\Config;
 use PosteBackup\Schedule;
@@ -153,6 +155,145 @@ $ok = PosteBackup\Store::writeJson($tmp, ['error' => "bad \xC3\x28 bytes"], 0600
 $back = json_decode((string) @file_get_contents($tmp), true);
 check('state with invalid UTF-8 in a message: still written, as valid JSON', $ok && is_array($back) && strpos($back['error'], 'bad') === 0, $back);
 @unlink($tmp);
+
+// --- time zone of the schedules
+$saved = getenv('TZ');
+putenv('TZ=Europe/Rome');
+check('time zone: the TZ of the container', Schedule::zone()->getName() === 'Europe/Rome', Schedule::zone()->getName());
+putenv('TZ=Mars/Olympus');
+check('time zone: an unknown TZ is not used (the next source, or UTC)', Schedule::zone()->getName() !== 'Mars/Olympus', Schedule::zone()->getName());
+$saved === false ? putenv('TZ') : putenv("TZ=$saved");
+check('time zone: the one chosen in the admin wins over the container\'s', Schedule::zone('Asia/Tokyo')->getName() === 'Asia/Tokyo', Schedule::zone('Asia/Tokyo')->getName());
+check('time zone: a chosen zone that does not exist is not used', Schedule::zone('Mars/Olympus')->getName() === Schedule::containerZone()->getName(), Schedule::zone('Mars/Olympus')->getName());
+[$c, $e] = Config::validate(['settings' => ['timezone' => 'Europe/Rome'], 'destinations' => [], 'jobs' => []]);
+check('settings: a valid time zone is kept', $c['settings']['timezone'] === 'Europe/Rome' && !$e, [$c['settings'], $e]);
+[$c, $e] = Config::validate(['settings' => ['timezone' => '../../etc/passwd'], 'destinations' => [], 'jobs' => []]);
+check('settings: an invalid time zone is refused (the container\'s is used)', $c['settings']['timezone'] === '' && $e === ['time zone: not valid'], [$c['settings'], $e]);
+[$c, $e] = Config::validate(['destinations' => [], 'jobs' => []]);
+check('settings: none saved yet = the container\'s time zone', $c['settings']['timezone'] === '' && !$e, $c['settings']);
+
+// --- restic's file errors and the result of a backup
+// the line restic wrote on a mail server in use (a message moved to another
+// folder while the backup ran), and one for a file it may not read
+$vanishedLine = '{"message_type":"error","error":{"Op":"lstat","Path":"/data/domains/example.com/alice/Maildir/cur/1791727871.M663620P2102.mail.example.com,S=2026,W=2085:2,i","Err":2},"during":"archival","item":"/data/domains/example.com/alice/Maildir/cur/1791727871.M663620P2102.mail.example.com,S=2026,W=2085:2,i"}';
+$deniedLine = '{"message_type":"error","error":{"Op":"open","Path":"/data/var/rspamd/x.map","Err":13},"during":"archival","item":"/data/var/rspamd/x.map"}';
+check('restic error: a file that vanished', PosteBackup\Engine::fileError($vanishedLine) === 'vanished', PosteBackup\Engine::fileError($vanishedLine));
+check('restic error: a file that could not be read', PosteBackup\Engine::fileError($deniedLine) === 'unreadable', PosteBackup\Engine::fileError($deniedLine));
+check('restic: a progress line is not a file error', PosteBackup\Engine::fileError('{"message_type":"status","percent_done":0.5}') === null, 'null');
+check('restic: a plain text line is not a file error', PosteBackup\Engine::fileError('Warning: at least one source file could not be read') === null, 'null');
+$o = PosteBackup\Engine::outcome(3, 1, 0);
+check('only vanished files: ok, with a note', $o['status'] === 'ok' && $o['error'] === null && strpos((string) $o['note'], '1 file(s) moved or deleted') === 0, $o);
+$o = PosteBackup\Engine::outcome(3, 2, 1);
+check('a file that could not be read: warning (and the note for the vanished ones)', $o['status'] === 'warning' && $o['error'] === '1 file(s) could not be read (see the log)' && $o['note'] !== null, $o);
+$o = PosteBackup\Engine::outcome(3, 0, 0);
+check('exit 3 with no file error understood: warning, never guessed fine', $o['status'] === 'warning' && $o['error'] === 'some files could not be read (see the log)', $o);
+$o = PosteBackup\Engine::outcome(0, 0, 0);
+check('exit 0: ok, no note', $o['status'] === 'ok' && $o['error'] === null && $o['note'] === null, $o);
+
+// --- the messages shown in the admin: recognised, and translated in both languages
+require_once '/opt/admin/vendor/autoload.php';
+$tr = [];
+foreach (['en', 'cs'] as $l) {
+    $all = Symfony\Component\Yaml\Yaml::parseFile("/opt/admin/translations/Base/messages+intl-icu.$l.yml");
+    $tr[$l] = $all['poste_backup'] ?? [];
+}
+$keys = array_column(PosteBackup\Messages::patterns(), 0);
+foreach (['en', 'cs'] as $l) {
+    $missing = array_diff($keys, array_keys($tr[$l]['msg'] ?? []));
+    check("every message has a translation ($l)", !$missing, array_values($missing));
+    $missing = array_diff(array_values(PosteBackup\Messages::FIELDS), array_keys($tr[$l]['fieldname'] ?? []));
+    check("every field name has a translation ($l)", !$missing, array_values($missing));
+}
+// the English translation, filled in, must give back the message exactly as the
+// code writes it: the admin in English shows what the logs say
+$en = function (string $m) use (&$en, $tr): ?string {
+    $hit = PosteBackup\Messages::match($m);
+    if ($hit === null) {
+        return strpos($m, '; ') !== false ? implode('; ', array_map($en, explode('; ', $m))) : null;
+    }
+    [$key, $params] = $hit;
+    foreach ($params as $n => $v) {
+        if ($n === 'list') {
+            $params[$n] = $en($v);
+        } elseif ($n === 'field') {
+            $params[$n] = $tr['en']['fieldname'][PosteBackup\Messages::FIELDS[$v]];
+        }
+    }
+    return MessageFormatter::formatMessage('en', $tr['en']['msg'][$key], $params);
+};
+$samples = [
+    // Config
+    'not an object', 'the settings file is not a JSON object', 'too many destinations', 'destination with an invalid id left out',
+    'destination 0a1b2c3d4e5f: server: a host name or an IP address; port: a whole number from 1 to 65535',
+    'too many jobs', 'job with an invalid id left out', 'job 0a1b2c3d4e5f: nothing to back up', 'unknown type',
+    'login: password or key', 'folder: required for SFTP', 'mail: unknown choice', 'no mailbox selected', 'too many mailboxes',
+    'invalid mailbox address', 'nothing to back up', 'schedule: unknown frequency', 'no destination', 'unknown destination',
+    'keep: at least one value must be above 0 (otherwise nothing would ever be removed, or everything)',
+    'name: 1 to 60 characters, no control characters', 'server: a host name or an IP address', 'folder: letters, digits, . _ - and /',
+    'folder: no "." or ".." parts', 'folder: an absolute path under /' . implode(', /', Config::LOCAL_ROOTS), 'endpoint: https://host[:port]',
+    'host keys: not valid', 'enabled: not true/false', 'day of the month: a whole number from 1 to 28', 'keep daily: a whole number from 0 to 1000',
+    'access key: not valid', 'secret key: 1 to 256 characters, no control characters', 'password: 1 to 256 characters, no control characters',
+    'time zone: not valid',
+    // destinations and the test
+    'the SSH key of this destination is missing (create it again in the admin)',
+    "the server's SSH key has not been confirmed yet (Test the destination in the admin)", 'cannot write a temporary file',
+    'cannot create a temporary folder', 'rclone obscure failed', '/backup/nfs does not exist in the container: mount a volume there',
+    '/backup/nfs is not a mounted volume: the backup would stay inside the container',
+    '/backup/nfs is on the same disk as /data: a backup there does not survive the loss of that disk',
+    '/backup/nfs is not writable by the user mail (uid 8, gid 8): give the volume to that user', 'cannot lock the settings',
+    'invalid server or port', 'the server did not answer with an SSH key (connection refused)', 'invalid id', 'ssh-keygen failed: no space',
+    'the destination changed meanwhile', 'mounted volume, not on the disk of /data', 'free space: 2.2 TB of 18.9 TB', 'free space: 341.1 GB',
+    'free space: not reported by S3', 'free space: not reported by the server', 'it already holds a backup repository',
+    'no repository yet: it is created at the first run', 'reachable; it already holds a backup repository',
+    'reachable, but the folder is not empty and is not a backup repository: choose an empty folder',
+    'reachable; empty folder, the repository is created at the first run', 'reachable; the folder does not exist yet, it is created at the first run',
+    'not reachable: couldn\'t connect SMB: response error: The attempted logon is invalid.', 'cannot write: permission denied',
+    'write test: ok', 'write test: written, but the test file could not be removed',
+    // a run
+    'mailbox bob@example.com not found', 'none of the selected mailboxes exists', 'cannot create the staging folder',
+    'copy of /data/users.db failed or is damaged', 'the encryption key is missing (/data/var/backup/settings/restic.key)',
+    'cannot create the repository: Fatal: wrong password', 'backup failed: Fatal: unable to open repository',
+    '3 file(s) could not be read (see the log)', 'some files could not be read (see the log)',
+    '1 file(s) moved or deleted while the backup ran: the next backup has them',
+    'backup done, but the old snapshots were not removed: repository is already locked',
+    '/backup/nfs is not empty and is not a backup repository: nothing written there',
+    'the folder is not empty and is not a backup repository: nothing written there',
+    // what the code writes, read from the code itself
+    PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
+];
+foreach ([array_merge($destOk['local'], ['path' => '/data/x']), ['type' => 'sftp', 'host' => 'a;b', 'port' => 0, 'user' => 'a b', 'auth' => 'password', 'password' => "\n", 'folder' => '..', 'hostkeys' => ['x']],
+          ['type' => 's3', 'endpoint' => 'ftp://x', 'region' => 'X', 'bucket' => 'B', 'folder' => '-x', 'access_key' => ' ', 'secret_key' => '']] as $d) {
+    $samples = array_merge($samples, Config::destination(['name' => ''] + $d)[1]);
+}
+$samples = array_merge($samples, Config::job(['name' => 'x', 'enabled' => 'yes', 'config' => 1, 'mail' => 'x', 'schedule' => ['every' => 'x'],
+    'destinations' => ['bbbbbbbbbbbb'], 'keep' => ['hourly' => -1], 'notify_success' => 'no', 'created' => 'x'], [])[1]);
+$bad = [];
+foreach (array_unique($samples) as $m) {
+    $back = $en($m);
+    if ($back !== $m) {
+        $bad[] = [$m, $back];
+    }
+}
+check('every message of the code is recognised and its English translation gives it back exactly (' . count(array_unique($samples)) . ' messages)', !$bad, $bad);
+$cs = PosteBackup\Messages::match('free space: 2.2 TB of 18.9 TB');
+check('a message is recognised with its parameters', $cs === ['test_free_total', ['free' => '2.2 TB', 'total' => '18.9 TB']], $cs);
+check('a message that is not known is not recognised (shown as it is)', PosteBackup\Messages::match('something new') === null, 'null');
+// every text of the add-on, in both languages, is a valid ICU message (a broken
+// one would make the page fail): formatted with example values
+$broken = [];
+$walk = function (array $t, string $at, string $l) use (&$walk, &$broken) {
+    foreach ($t as $k => $v) {
+        if (is_array($v)) {
+            $walk($v, "$at.$k", $l);
+        } elseif (MessageFormatter::formatMessage($l, (string) $v, ['count' => 2, 'n' => 2]) === false) {
+            $broken[] = "$l $at.$k";
+        }
+    }
+};
+foreach (['en', 'cs'] as $l) {
+    $walk($tr[$l], 'poste_backup', $l);
+}
+check('every text of the add-on is a valid ICU message, in English and in Czech', !$broken, $broken);
 
 echo "FAILURES: $fails\n";
 exit($fails);

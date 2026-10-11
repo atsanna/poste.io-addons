@@ -13,9 +13,15 @@ poste_backup:
     test: Test
     run_now: Run now
   status:
+    ok: "ok"
     never: never run
     failed: failed
   dashboard:
+    space: "Space on the destinations"
+    space_used: "{used} used by the backups"
+    space_free: "{free} free"
+    space_unknown: "measured after the next backup"
+    logs_summary: "every run, with its log"
     problems: "{count, plural, one {1 problem} other {# problems}}"
     running: "Running now: {job} (since {since})"
     disk: Server disk (/data)
@@ -61,6 +67,7 @@ poste_backup:
     optional: optional
     unchanged: unchanged
   destinations:
+    space: "Space"
     title: Destinations
     add: Add a destination
     none: No destination yet
@@ -70,6 +77,11 @@ poste_backup:
     delete_confirm: Delete this destination? The backups already there are not deleted.
     help: "Every job writes a full, encrypted copy to each of its destinations. A destination is a folder on an SMB share, an SFTP server or an S3 bucket, or a volume mounted into the container by the host (NFS, a second disk)."
   destination:
+    key_help: "The key pair is made by the admin when the destination is saved: its public key is then shown on this page, to be added on the server."
+    pubkey_command: "Or run this command on {host}, logged in as {user}: it creates the folder .ssh if needed and adds the key with the right permissions."
+    copy: "Copy the command"
+    copied: "copied"
+    pubkey_nas: "On a NAS, the user needs a home folder and the SFTP service must be on (in the NAS settings: user home, SSH/SFTP service), otherwise the key is not read."
     new: New destination
     edit: Edit destination
     saved: "Destination saved. Test it before the first backup."
@@ -102,6 +114,7 @@ poste_backup:
     check_trust: "These are the server's keys: trust them and test"
     check_failed: "The test could not be run: reload the page and try again."
   jobs:
+    log: "log"
     title: Backup jobs
     add: Add a backup job
     none: No backup job yet
@@ -112,6 +125,7 @@ poste_backup:
     keep: Keep
     last_run: Last run
     disabled: disabled
+    zone: "Times are in the time zone {zone}."
     running: running now
     queued: "queued: starts within a minute"
     added: "+{size} MB in {seconds} s"
@@ -182,3 +196,129 @@ poste_backup:
     never: never downloaded
     created: "created {time}"
     missing: "The key is missing: restart the container (it is created at start) or put the old key back if you have one."
+  live:
+    prepare: "preparing: copying the databases, listing the files"
+    starting: "{destination}: starting"
+    progress: "{destination}: {percent}% · {done} of {total} · {files} of {total_files} files"
+    prune: "{destination}: removing the old snapshots"
+    space: "{destination}: measuring the space used"
+  logs:
+    title: "Backup logs"
+    when: "When"
+    job: "Job"
+    destination: "Destination"
+    result: "Result"
+    added: "Added"
+    duration: "Time"
+    reason_schedule: "scheduled"
+    reason_manual: "requested"
+    size_mb: "{size} MB"
+    files: "{count, plural, one {1 file} other {# files}}"
+    seconds: "{seconds} s"
+    none: "No backup run yet"
+    help: "One line per job and destination, the most recent first (the last 300). The log of each run has every detail."
+    cut: "A long log: only its last part is shown."
+    help_log: "The log is written by the backup engine in English; the last 200 logs are kept."
+  fieldname:
+    port: "port"
+    password: "password"
+    share: "share"
+    domain: "domain"
+    region: "region"
+    bucket: "bucket"
+    access_key: "access key"
+    secret_key: "secret key"
+    user: "user"
+    enabled: "enabled"
+    configuration: "configuration"
+    minute: "minute"
+    hour: "hour"
+    weekday: "weekday"
+    monthday: "day of the month"
+    keep_hourly: "keep hourly"
+    keep_daily: "keep daily"
+    keep_weekly: "keep weekly"
+    keep_monthly: "keep monthly"
+    notify_success: "notify on success"
+    created: "created"
+  msg:
+    not_object: "not an object"
+    settings_not_object: "the settings file is not a JSON object"
+    too_many_destinations: "too many destinations"
+    destination_bad_id: "destination with an invalid id left out"
+    destination_errors: "destination {id}: {list}"
+    too_many_jobs: "too many jobs"
+    job_bad_id: "job with an invalid id left out"
+    job_errors: "job {id}: {list}"
+    unknown_type: "unknown type"
+    login: "login: password or key"
+    folder_required: "folder: required for SFTP"
+    mail_choice: "mail: unknown choice"
+    no_mailbox: "no mailbox selected"
+    too_many_mailboxes: "too many mailboxes"
+    invalid_mailbox: "invalid mailbox address"
+    nothing: "nothing to back up"
+    frequency: "schedule: unknown frequency"
+    no_destination: "no destination"
+    unknown_destination: "unknown destination"
+    keep_zero: "keep: at least one value must be above 0 (otherwise nothing would ever be removed, or everything)"
+    name: "name: 1 to 60 characters, no control characters"
+    host: "server: a host name or an IP address"
+    folder_chars: "folder: letters, digits, . _ - and /"
+    folder_dots: "folder: no \".\" or \"..\" parts"
+    local_roots: "folder: an absolute path under {roots}"
+    endpoint: "endpoint: https://host[:port]"
+    hostkeys: "host keys: not valid"
+    timezone: "time zone: not valid"
+    field_bool: "{field}: not true/false"
+    field_int: "{field}: a whole number from {min} to {max}"
+    field_invalid: "{field}: not valid"
+    field_secret: "{field}: 1 to 256 characters, no control characters"
+    ssh_key_missing: "the SSH key of this destination is missing (create it again in the admin)"
+    hostkey_not_confirmed: "the server's SSH key has not been confirmed yet (Test the destination in the admin)"
+    tmp_file: "cannot write a temporary file"
+    tmp_folder: "cannot create a temporary folder"
+    obscure: "rclone obscure failed"
+    local_missing: "{path} does not exist in the container: mount a volume there"
+    local_not_mounted: "{path} is not a mounted volume: the backup would stay inside the container"
+    local_same_disk: "{path} is on the same disk as /data: a backup there does not survive the loss of that disk"
+    local_not_writable: "{path} is not writable by the user mail (uid 8, gid 8): give the volume to that user"
+    lock_settings: "cannot lock the settings"
+    server_port: "invalid server or port"
+    no_ssh_key: "the server did not answer with an SSH key ({detail})"
+    invalid_id: "invalid id"
+    keygen: "ssh-keygen failed: {detail}"
+    changed_meanwhile: "the destination changed meanwhile"
+    test_mounted: "mounted volume, not on the disk of /data"
+    test_free_s3: "free space: not reported by S3"
+    test_free_unknown: "free space: not reported by the server"
+    test_free_total: "free space: {free} of {total}"
+    test_free: "free space: {free}"
+    test_repository: "it already holds a backup repository"
+    test_no_repository: "no repository yet: it is created at the first run"
+    test_reachable_repository: "reachable; it already holds a backup repository"
+    test_not_empty: "reachable, but the folder is not empty and is not a backup repository: choose an empty folder"
+    test_reachable_empty: "reachable; empty folder, the repository is created at the first run"
+    test_reachable_new: "reachable; the folder does not exist yet, it is created at the first run"
+    not_reachable: "not reachable: {detail}"
+    test_cannot_write: "cannot write: {detail}"
+    test_write_ok: "write test: ok"
+    test_write_left: "write test: written, but the test file could not be removed"
+    mailbox_not_found: "mailbox {address} not found"
+    no_selected_mailbox: "none of the selected mailboxes exists"
+    staging: "cannot create the staging folder"
+    copy_failed: "copy of {path} failed or is damaged"
+    key_missing: "the encryption key is missing ({path})"
+    init_failed: "cannot create the repository: {detail}"
+    backup_failed: "backup failed: {detail}"
+    unreadable: "{count} file(s) could not be read (see the log)"
+    unreadable_some: "some files could not be read (see the log)"
+    vanished: "{count} file(s) moved or deleted while the backup ran: the next backup has them"
+    forget_failed: "backup done, but the old snapshots were not removed: {detail}"
+    folder_not_empty: "the folder is not empty and is not a backup repository: nothing written there"
+    local_not_empty: "{path} is not empty and is not a backup repository: nothing written there"
+  settings:
+    timezone: "Time zone of the schedules"
+    timezone_container: "the container's ({zone})"
+    timezone_saved: "Time zone saved"
+    timezone_help: "It decides when the jobs run and the times shown in these pages; the logs of the server are not changed. A job whose time in the new zone has already passed today may run once, at the next minute."

@@ -56,7 +56,7 @@ final class Panel
 
     public static function state(): array
     {
-        return (Store::readJson(Store::STATE) ?? []) + ['jobs' => [], 'running' => null, 'config_errors' => []];
+        return (Store::readJson(Store::STATE) ?? []) + ['jobs' => [], 'running' => null, 'config_errors' => [], 'destinations' => []];
     }
 
     /** Is the engine working right now? (its lock is taken) */

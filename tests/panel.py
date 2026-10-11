@@ -61,9 +61,12 @@ class Forms(HTMLParser):
 
 
 class Panel:
-    def __init__(self, user, password):
+    def __init__(self, user, password, lang=None):
         self.op = urllib.request.build_opener(urllib.request.HTTPSHandler(context=CTX),
                                               urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        if lang:
+            # the admin picks its language from the browser's (en or cs)
+            self.op.addheaders = [("Accept-Language", lang)]
         self.login(user, password)
 
     def _open(self, path, body=None):

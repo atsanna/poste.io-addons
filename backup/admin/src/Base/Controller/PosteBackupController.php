@@ -3,6 +3,7 @@
 namespace App\Base\Controller;
 
 use PosteBackup\Config;
+use PosteBackup\Messages;
 use PosteBackup\Panel;
 use PosteBackup\Schedule;
 use PosteBackup\Store;
@@ -14,16 +15,17 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Symfony\Component\Routing\Annotation\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 
-// the backup engine's library (outside src/: shared with the root engine, which
+// the backup engine's library (outside src/: shared with the engine, which
 // validates the same settings again before using them)
-foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Panel'] as $poste_backup_class) {
+foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Panel', 'Messages'] as $poste_backup_class) {
     require_once '/usr/local/lib/poste-backup/lib/' . $poste_backup_class . '.php';
 }
 
 /**
  * Backup add-on: the admin's pages. The admin only writes the settings and the
- * requests; backups are made by the engine (root, cron), see
- * /usr/local/lib/poste-backup.
+ * requests; backups are made by the engine (cron, as the user mail like the
+ * admin), see /usr/local/lib/poste-backup. The engine's messages are in
+ * English; msg() shows them in the user's language (Messages).
  *
  * @Route("/backup")
  * @Security("is_granted('ROLE_SUPER_ADMIN')")
@@ -35,11 +37,143 @@ class PosteBackupController extends AbstractController
     public function __construct(TranslatorInterface $translator)
     {
         $this->translator = $translator;
+        // the times of these pages (next run, last run, logs) in the time zone of
+        // the schedules: Poste.io's admin runs in UTC (no date.timezone), so a job
+        // at 02:00 in another zone would show at another hour (this request only)
+        date_default_timezone_set($this->zone()->getName());
+    }
+
+    /** The time zone of the schedules (the one chosen here, or the container's). */
+    private function zone(): \DateTimeZone
+    {
+        return Schedule::zone(Panel::config()['settings']['timezone'] ?? '');
     }
 
     private function t(string $key, array $params = []): string
     {
         return $this->translator->trans($key, $params);
+    }
+
+    /**
+     * A message of the engine or of the validation (English) in the user's
+     * language; one that is not known is shown as it is. Several messages
+     * joined by "; " are translated one by one.
+     */
+    private function msg(?string $m): string
+    {
+        if ($m === null || $m === '') {
+            return '';
+        }
+        $hit = Messages::match($m);
+        if ($hit === null) {
+            return strpos($m, '; ') !== false ? implode('; ', array_map([$this, 'msg'], explode('; ', $m))) : $m;
+        }
+        [$key, $found] = $hit;
+        $params = [];
+        foreach ($found as $name => $value) {
+            if ($name === 'list') {
+                $value = $this->msg($value);
+            } elseif ($name === 'field') {
+                $value = $this->t('poste_backup.fieldname.' . Messages::FIELDS[$value]);
+            }
+            $params['{' . $name . '}'] = $value;
+        }
+        return $this->t('poste_backup.msg.' . $key, $params);
+    }
+
+    /** msg() of each message of a list. */
+    private function msgs(array $list): array
+    {
+        return array_values(array_map(function ($m) {
+            return $this->msg(is_string($m) ? $m : '');
+        }, $list));
+    }
+
+    /** A test result (Panel::tests) with its lines in the user's language. */
+    private function testShown(?array $test): ?array
+    {
+        if ($test !== null) {
+            $test['lines'] = $this->msgs($test['lines'] ?? []);
+        }
+        return $test;
+    }
+
+    /** The state of the engine with the messages of the results in the user's language. */
+    private function stateShown(array $state): array
+    {
+        foreach ($state['jobs'] ?? [] as $id => $job) {
+            foreach ($job['destinations'] ?? [] as $did => $r) {
+                $state['jobs'][$id]['destinations'][$did]['error'] = $this->msg($r['error'] ?? null);
+                $state['jobs'][$id]['destinations'][$did]['note'] = $this->msg($r['note'] ?? null);
+            }
+        }
+        return $state;
+    }
+
+    /**
+     * What the pages show while they stay open: the running job, in words, and
+     * a signature of the results (the page reloads itself when it changes: a
+     * job started, finished or was queued).
+     */
+    private function live(array $cfg, array $state): array
+    {
+        $run = $state['running'] && Panel::engineBusy() ? $state['running'] : null;
+        $sig = [];
+        foreach ($state['jobs'] as $id => $j) {
+            $sig[$id] = [$j['last_end'] ?? 0, $j['status'] ?? ''];
+        }
+        $live = ['signature' => md5(json_encode([$sig, $run['job'] ?? null, array_keys(Panel::pendingRuns())])), 'running' => null];
+        if ($run) {
+            $dest = $run['dest'] ?? null;
+            $destName = $dest !== null ? ($cfg['destinations'][$dest]['name'] ?? $dest) : '';
+            $p = $run['progress'] ?? null;
+            switch ($run['phase'] ?? 'prepare') {
+                case 'backup':
+                    $detail = $p ? $this->t('poste_backup.live.progress', [
+                        '{destination}' => $destName, '{percent}' => (string) $p['percent'],
+                        '{done}' => Panel::size((int) $p['bytes_done']), '{total}' => Panel::size((int) $p['total_bytes']),
+                        '{files}' => (string) $p['files_done'], '{total_files}' => (string) $p['total_files'],
+                    ]) : $this->t('poste_backup.live.starting', ['{destination}' => $destName]);
+                    break;
+                case 'prune':
+                    $detail = $this->t('poste_backup.live.prune', ['{destination}' => $destName]);
+                    break;
+                case 'space':
+                    $detail = $this->t('poste_backup.live.space', ['{destination}' => $destName]);
+                    break;
+                default:
+                    $detail = $this->t('poste_backup.live.prepare');
+            }
+            $name = $cfg['jobs'][$run['job']]['name'] ?? $run['job'];
+            $live['running'] = [
+                'job' => $run['job'],
+                'detail' => $detail,
+                'text' => $this->t('poste_backup.dashboard.running', ['{job}' => $name, '{since}' => date('H:i', (int) $run['since'])]) . ' — ' . $detail,
+            ];
+        }
+        return $live;
+    }
+
+    /** Space measured on each destination after its last backup, in words. */
+    private function space(array $cfg, array $state): array
+    {
+        $out = [];
+        foreach ($cfg['destinations'] as $did => $d) {
+            $s = $state['destinations'][$did] ?? null;
+            if (!is_array($s)) {
+                $out[$did] = null;
+                continue;
+            }
+            $out[$did] = [
+                'used' => isset($s['used']) ? Panel::size((int) $s['used']) : null,
+                'free' => isset($s['free']) ? Panel::size((int) $s['free']) : null,
+                'total' => isset($s['total']) ? Panel::size((int) $s['total']) : null,
+                'usedPercent' => !empty($s['total']) && isset($s['free'])
+                    ? (int) round(100 * ((int) $s['total'] - (int) $s['free']) / (int) $s['total']) : null,
+                't' => (int) ($s['t'] ?? 0),
+            ];
+        }
+        return $out;
     }
 
     private function csrf(Request $request, string $id): bool
@@ -61,7 +195,7 @@ class PosteBackupController extends AbstractController
         $cfg = Panel::config();
         $state = Panel::state();
         $tests = Panel::tests();
-        $tz = Schedule::zone();
+        $tz = $this->zone();
         $now = time();
 
         $problems = [];
@@ -70,7 +204,7 @@ class PosteBackupController extends AbstractController
             $problems[] = $this->t('poste_backup.problem.start', ['{error}' => trim((string) file_get_contents(Store::START_ERROR))]);
         }
         foreach ($state['config_errors'] as $e) {
-            $problems[] = $this->t('poste_backup.problem.config', ['{error}' => $e]);
+            $problems[] = $this->t('poste_backup.problem.config', ['{error}' => $this->msg(is_string($e) ? $e : '')]);
         }
         $busy = Panel::engineBusy();
         // a long backup holds the lock and the engine does not tick meanwhile: not a problem
@@ -88,7 +222,7 @@ class PosteBackupController extends AbstractController
                         $problems[] = $this->t('poste_backup.problem.job', [
                             '{job}' => $job['name'],
                             '{destination}' => $cfg['destinations'][$did]['name'] ?? $did,
-                            '{error}' => (string) $r['error'],
+                            '{error}' => $this->msg((string) $r['error']),
                         ]);
                     }
                 }
@@ -123,10 +257,79 @@ class PosteBackupController extends AbstractController
             'disk' => ['total' => $total ?: 0, 'free' => $free ?: 0,
                        'freeText' => Panel::size((int) $free), 'totalText' => Panel::size((int) $total),
                        'usedPercent' => $total ? (int) round(100 * ($total - $free) / $total) : 0],
-            'running' => $state['running'] && $busy ? $state['running'] : null,
+            'live' => $this->live($cfg, $state),
+            'space' => $this->space($cfg, $state),
             'next' => $next,
             'keyDownloaded' => $downloaded,
         ]);
+    }
+
+    /**
+     * The open pages ask this every few seconds (JSON).
+     *
+     * @Route("/status", name="poste_backup_status", methods={"GET"})
+     */
+    public function statusAction(): JsonResponse
+    {
+        return new JsonResponse($this->live(Panel::config(), Panel::state()));
+    }
+
+    // ================================================================ logs
+
+    /**
+     * @Route("/logs", name="poste_backup_logs", methods={"GET"})
+     */
+    public function logsAction()
+    {
+        $cfg = Panel::config();
+        $runs = array_reverse(Store::tailJsonLines(Store::HISTORY, 300));
+        foreach ($runs as $i => $r) {
+            $log = (string) ($r['log'] ?? '');
+            $runs[$i]['error'] = $this->msg(isset($r['error']) && is_string($r['error']) ? $r['error'] : null);
+            $runs[$i]['note'] = $this->msg(isset($r['note']) && is_string($r['note']) ? $r['note'] : null);
+            $runs[$i]['log'] = self::isLogName($log) && is_file(Store::LOGS . '/' . $log) ? $log : null;
+        }
+        $state = Panel::state();
+        return $this->render('Base/PosteBackup/logs.html.twig', [
+            'runs' => $runs,
+            'jobs' => $cfg['jobs'],
+            'destinations' => $cfg['destinations'],
+            'live' => $this->live($cfg, $state),
+        ]);
+    }
+
+    /**
+     * @Route("/logs/{name}", name="poste_backup_log", methods={"GET"}, requirements={"name"="[0-9]{8}-[0-9]{6}-[a-f0-9]{12}[.]log"})
+     */
+    public function logAction(string $name)
+    {
+        $path = Store::LOGS . '/' . $name;
+        // the name is checked by the route and again here; never a link
+        if (!self::isLogName($name) || is_link($path) || !is_file($path)) {
+            throw $this->createNotFoundException();
+        }
+        $size = (int) filesize($path);
+        $f = @fopen($path, 'r');
+        if (!$f) {
+            throw $this->createNotFoundException();
+        }
+        $max = 524288;                       // the last 512 KB of a long log
+        if ($size > $max) {
+            fseek($f, $size - $max);
+        }
+        $text = (string) stream_get_contents($f);
+        fclose($f);
+        return $this->render('Base/PosteBackup/log.html.twig', [
+            'name' => $name,
+            'text' => mb_scrub($text, 'UTF-8'),
+            'cut' => $size > $max,
+            'job' => Panel::config()['jobs'][substr($name, 16, 12)]['name'] ?? null,
+        ]);
+    }
+
+    private static function isLogName(string $name): bool
+    {
+        return preg_match('/^\d{8}-\d{6}-[a-f0-9]{12}\.log$/', $name) === 1;
     }
 
     // ================================================================ destinations
@@ -138,8 +341,9 @@ class PosteBackupController extends AbstractController
     {
         return $this->render('Base/PosteBackup/destinations.html.twig', [
             'destinations' => Panel::config()['destinations'],
-            'tests' => Panel::tests(),
+            'tests' => array_map([$this, 'testShown'], Panel::tests()),
             'used' => $this->destinationsInUse(Panel::config()),
+            'space' => $this->space(Panel::config(), Panel::state()),
         ]);
     }
 
@@ -184,7 +388,7 @@ class PosteBackupController extends AbstractController
                     if ($valid['type'] === 'sftp' && $valid['auth'] === 'key' && Panel::publicKey($newId) === null) {
                         $kerr = Panel::makeKeyPair($newId);
                         if ($kerr) {
-                            $this->addFlash('error', $kerr);
+                            $this->addFlash('error', $this->msg($kerr));
                         }
                     }
                     Panel::forgetTest($newId);
@@ -199,9 +403,9 @@ class PosteBackupController extends AbstractController
         return $this->render('Base/PosteBackup/destination_form.html.twig', [
             'id' => $id,
             'values' => $values,
-            'errors' => $errors,
+            'errors' => $this->msgs($errors),
             'hasSecret' => $old !== null,
-            'test' => $id ? (Panel::tests()[$id] ?? null) : null,
+            'test' => $id ? $this->testShown(Panel::tests()[$id] ?? null) : null,
             'scan' => $id ? $session->get('poste_backup_scan_' . $id) : null,
             'publicKey' => $id ? Panel::publicKey($id) : null,
             'localRoots' => Config::LOCAL_ROOTS,
@@ -232,7 +436,7 @@ class PosteBackupController extends AbstractController
         }
         [$d, $errors] = Config::destination($this->destinationFromRequest($request, $old));
         if ($errors) {
-            return new JsonResponse(['status' => 'error', 'lines' => array_values($errors)]);
+            return new JsonResponse(['status' => 'error', 'lines' => $this->msgs($errors)]);
         }
         if ($d['type'] === 'sftp' && $d['auth'] === 'key' && ($id === null || Panel::publicKey($id) === null)) {
             return new JsonResponse(['status' => 'save_first', 'lines' => [$this->t('poste_backup.destination.check_save_first')]]);
@@ -240,7 +444,7 @@ class PosteBackupController extends AbstractController
         if ($d['type'] === 'sftp' && !$d['hostkeys']) {
             [$keys, $err] = Panel::scanHostKeys($d['host'], $d['port']);
             if ($err) {
-                return new JsonResponse(['status' => 'error', 'lines' => [$err]]);
+                return new JsonResponse(['status' => 'error', 'lines' => [$this->msg($err)]]);
             }
             $shown = [];
             foreach ($keys as $k) {
@@ -248,7 +452,9 @@ class PosteBackupController extends AbstractController
             }
             return new JsonResponse(['status' => 'keys', 'host' => $d['host'], 'keys' => $shown]);
         }
-        return new JsonResponse(Panel::check($id ?? Config::newId(), $d));
+        $r = Panel::check($id ?? Config::newId(), $d);
+        $r['lines'] = $this->msgs($r['lines']);
+        return new JsonResponse($r);
     }
 
     /** The destination from the form; secrets left empty keep the saved ones. */
@@ -334,7 +540,7 @@ class PosteBackupController extends AbstractController
                 return $c;
             });
             if ($err) {
-                $this->addFlash('error', $err);
+                $this->addFlash('error', $this->msg($err));
             } else {
                 foreach ([Store::SSH . "/$id", Store::SSH . "/$id.pub"] as $f) {
                     if (is_file($f) && !is_link($f)) {
@@ -362,7 +568,7 @@ class PosteBackupController extends AbstractController
                 // first contact: show the server's keys, to be confirmed
                 [$keys, $err] = Panel::scanHostKeys($d['host'], $d['port']);
                 if ($err) {
-                    $this->addFlash('error', $err);
+                    $this->addFlash('error', $this->msg($err));
                 } else {
                     $request->getSession()->set('poste_backup_scan_' . $id, $keys);
                 }
@@ -399,7 +605,7 @@ class PosteBackupController extends AbstractController
                     return $c;
                 });
                 if ($err) {
-                    $this->addFlash('error', $err);
+                    $this->addFlash('error', $this->msg($err));
                 } else {
                     $this->addFlash('notice', $this->t('poste_backup.destination.trusted'));
                 }
@@ -420,7 +626,7 @@ class PosteBackupController extends AbstractController
         }
         if ($this->csrf($request, 'poste_backup_destination_keypair')) {
             $err = Panel::makeKeyPair($id);
-            $this->addFlash($err ? 'error' : 'notice', $err ?: $this->t('poste_backup.destination.keypair_made'));
+            $this->addFlash($err ? 'error' : 'notice', $err ? $this->msg($err) : $this->t('poste_backup.destination.keypair_made'));
         }
         return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
     }
@@ -433,7 +639,7 @@ class PosteBackupController extends AbstractController
     public function jobsAction()
     {
         $cfg = Panel::config();
-        $tz = Schedule::zone();
+        $tz = $this->zone();
         $jobs = [];
         foreach ($cfg['jobs'] as $id => $job) {
             $jobs[$id] = $job + ['next' => $job['enabled'] ? Schedule::nextSlot($job['schedule'], time(), $tz) : null];
@@ -441,7 +647,12 @@ class PosteBackupController extends AbstractController
         return $this->render('Base/PosteBackup/jobs.html.twig', [
             'jobs' => $jobs,
             'destinations' => $cfg['destinations'],
-            'state' => Panel::state(),
+            'state' => $this->stateShown(Panel::state()),
+            'live' => $this->live($cfg, Panel::state()),
+            'zone' => $tz->getName(),
+            'chosenZone' => $cfg['settings']['timezone'],
+            'containerZone' => Schedule::containerZone()->getName(),
+            'zones' => \DateTimeZone::listIdentifiers(),
             'pending' => Panel::pendingRuns(),
             'busy' => Panel::engineBusy(),
         ]);
@@ -514,12 +725,35 @@ class PosteBackupController extends AbstractController
         return $this->render('Base/PosteBackup/job_form.html.twig', [
             'id' => $id,
             'values' => $values,
-            'errors' => $errors,
+            'errors' => $this->msgs($errors),
             'destinations' => $cfg['destinations'],
             // the server's mailboxes, plus selected ones that no longer exist (shown, to be removed)
             'mailboxes' => array_values(array_unique(array_merge(Panel::mailboxes(), $values['mailboxes']))),
             'weekdays' => [1, 2, 3, 4, 5, 6, 7],
+            'zone' => $this->zone()->getName(),
         ]);
+    }
+
+    /**
+     * The time zone of the schedules ('' = the container's).
+     *
+     * @Route("/settings/timezone", name="poste_backup_timezone", methods={"POST"})
+     */
+    public function timezoneAction(Request $request)
+    {
+        if ($this->csrf($request, 'poste_backup_timezone')) {
+            $tz = trim((string) $request->request->get('timezone', ''));
+            if ($tz !== '' && !Schedule::isZone($tz)) {
+                $this->addFlash('error', $this->msg('time zone: not valid'));
+            } else {
+                $err = Panel::update(function (array $c) use ($tz) {
+                    $c['settings']['timezone'] = $tz;
+                    return $c;
+                });
+                $this->addFlash($err ? 'error' : 'notice', $err ? $this->msg($err) : $this->t('poste_backup.settings.timezone_saved'));
+            }
+        }
+        return $this->redirectToRoute('poste_backup_jobs');
     }
 
     /**
@@ -532,7 +766,7 @@ class PosteBackupController extends AbstractController
                 unset($c['jobs'][$id]);
                 return $c;
             });
-            $this->addFlash($err ? 'error' : 'notice', $err ?: $this->t('poste_backup.job.deleted'));
+            $this->addFlash($err ? 'error' : 'notice', $err ? $this->msg($err) : $this->t('poste_backup.job.deleted'));
         }
         return $this->redirectToRoute('poste_backup_jobs');
     }
