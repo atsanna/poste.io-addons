@@ -23,6 +23,7 @@ final class Engine
 {
     public const HOST = 'poste';             // restic --host: fixed, the container name may change
     public const MAX_LIST = 16777216;        // restic prints a list of snapshots as one line: up to 16 MB
+    public const MAX_FOLDERS = 2000;         // folders of a mailbox chosen for a restore
     private const TAG = 'poste-backup';
 
     private array $cfg;
@@ -246,14 +247,110 @@ final class Engine
         $raw = $raw ?? [];
         $dest = $raw['dest'] ?? null;
         if ($type === 'restore') {
+            [$opt, $errors] = self::restoreOptions($raw);
             $ok = Config::isId($dest) && self::isSnapshotId($raw['snapshot'] ?? null)
-                && Config::isAddress($raw['source'] ?? null) && Config::isAddress($raw['target'] ?? null);
+                && Config::isAddress($raw['source'] ?? null) && Config::isAddress($raw['target'] ?? null) && !$errors;
             return $ok ? ['type' => 'restore', 'dest' => $dest, 'snapshot' => $raw['snapshot'],
-                          'source' => $raw['source'], 'target' => strtolower($raw['target'])]
+                          'source' => $raw['source'], 'target' => strtolower($raw['target'])] + $opt
                        : ['type' => 'restore', 'invalid' => true];
         }
         $ok = Config::isId($dest) && Config::isId($raw['job'] ?? null);
         return $ok ? ['type' => 'forget', 'dest' => $dest, 'job' => $raw['job']] : ['type' => 'forget', 'invalid' => true];
+    }
+
+    /**
+     * The choices of a mailbox restore, checked the same way by the admin's
+     * form and by the engine: the folders of the snapshot's mailbox ('' is its
+     * inbox, '.Name' a folder as Dovecot names it on disk), the name of the new
+     * folder and the existing folder it goes into ('' = at the top), and an
+     * optional filter (received from/to, sender, subject). Returns [options, errors].
+     */
+    public static function restoreOptions(array $raw): array
+    {
+        $e = [];
+        $o = ['folders' => [], 'name' => '', 'parent' => '', 'since' => '', 'until' => '', 'from' => '', 'subject' => ''];
+        $folders = $raw['folders'] ?? null;
+        if (!is_array($folders) || !$folders) {
+            $e[] = 'choose at least one folder';
+        } elseif (count($folders) > self::MAX_FOLDERS) {
+            $e[] = 'too many folders';
+        } else {
+            foreach ($folders as $f) {
+                // a folder of the snapshot, never a path: no "/" and never "." or ".."
+                if (!is_string($f) || ($f !== '' && ($f === '..' || preg_match('/^\.[^\/\x00-\x1f\x7f]{1,255}$/', $f) !== 1))) {
+                    $e[] = 'folder: not valid';
+                    break;
+                }
+                $o['folders'][] = $f;
+            }
+            $o['folders'] = array_values(array_unique($o['folders']));
+        }
+        // the folder made for the restore: "." is Dovecot's separator, * and % are IMAP wildcards
+        $name = $raw['name'] ?? null;
+        if (!is_string($name) || !mb_check_encoding($name, 'UTF-8') || $name !== trim($name) || $name === ''
+            || mb_strlen($name) > 100 || preg_match('/[.\/\\\\*%\x00-\x1f\x7f]/', $name)) {
+            $e[] = 'folder name: 1 to 100 characters, without dots, slashes, * or %';
+        } elseif (strtoupper($name) === 'INBOX') {
+            $e[] = 'folder name: INBOX is the inbox itself';
+        } else {
+            $o['name'] = $name;
+        }
+        $parent = $raw['parent'] ?? '';
+        if (!is_string($parent) || !mb_check_encoding($parent, 'UTF-8') || strlen($parent) > 500
+            || preg_match('/[*%\x00-\x1f\x7f]/', $parent) || ($parent !== '' && ($parent[0] === '.' || substr($parent, -1) === '.'))) {
+            $e[] = 'parent folder: not valid';
+        } else {
+            $o['parent'] = $parent;
+        }
+        foreach (['since', 'until'] as $k) {
+            $v = $raw[$k] ?? '';
+            if ($v === '' || $v === null) {
+                continue;
+            }
+            if (!is_string($v) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $v, $m) !== 1 || !checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+                $e[] = 'date: YYYY-MM-DD';
+                continue;
+            }
+            $o[$k] = $v;
+        }
+        if ($o['since'] !== '' && $o['until'] !== '' && $o['since'] > $o['until']) {
+            $e[] = 'dates: the first one is after the second';
+        }
+        foreach (['from' => 'sender', 'subject' => 'subject'] as $k => $what) {
+            $v = $raw[$k] ?? '';
+            if (!is_string($v) || !mb_check_encoding($v, 'UTF-8') || mb_strlen($v) > 100 || preg_match('/[\x00-\x1f\x7f]/', $v)) {
+                $e[] = "$what: up to 100 characters";
+                continue;
+            }
+            $o[$k] = trim($v);
+        }
+        return [$o, $e];
+    }
+
+    /** doveadm's search query for the filter of a restore ("all" without one). */
+    public static function restoreQuery(array $o): array
+    {
+        $q = [];
+        if ($o['since'] !== '') {
+            array_push($q, 'SINCE', $o['since']);
+        }
+        if ($o['until'] !== '') {
+            // BEFORE leaves its own day out: the day after, so that "until" includes its day
+            array_push($q, 'BEFORE', (new \DateTimeImmutable($o['until'], new \DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d'));
+        }
+        if ($o['from'] !== '') {
+            array_push($q, 'FROM', $o['from']);
+        }
+        if ($o['subject'] !== '') {
+            array_push($q, 'SUBJECT', $o['subject']);
+        }
+        return $q ?: ['all'];
+    }
+
+    /** A path as a restic --include pattern: its glob characters taken literally. */
+    public static function globEscape(string $path): string
+    {
+        return preg_replace('/([\\\\*?\[\]])/', '\\\\$1', $path);
     }
 
     /** Runs a request of the admin and records its result (state.json, last 20). */
@@ -264,7 +361,8 @@ final class Engine
         $did = $t['dest'] ?? null;
         $d = $did !== null ? ($this->cfg['destinations'][$did] ?? null) : null;
         $this->logLine($log, $t['type'] === 'restore'
-            ? 'restore of a mailbox' . (empty($t['invalid']) ? " ({$t['source']} from snapshot {$t['snapshot']} into {$t['target']})" : '')
+            ? 'restore of a mailbox' . (empty($t['invalid']) ? " ({$t['source']} from snapshot {$t['snapshot']} into {$t['target']}, "
+                . count($t['folders']) . ' folder(s), new folder "' . ($t['parent'] !== '' ? $t['parent'] . '.' : '') . $t['name'] . '")' : '')
             : 'removal of the backups of a job' . (empty($t['invalid']) ? " ({$t['job']})" : ''));
         $this->state['running'] = ['task' => $id, 'type' => $t['type'], 'since' => $start, 'dest' => $did, 'phase' => $t['type'],
                                    'source' => $t['source'] ?? null, 'target' => $t['target'] ?? null, 'job' => null, 'progress' => null];
@@ -355,31 +453,59 @@ final class Engine
             if (!$found) {
                 return ['status' => 'error', 'error' => "{$t['source']} is not in this snapshot"];
             }
-            // the mailbox is written twice on /data (restored, then imported): enough room for both?
+            // the folders chosen, as the snapshot has them, and their size: the mailbox is
+            // written twice on /data (restored, then imported), so is there room for both?
+            $present = [];
             $size = 0;
+            $chosen = array_flip($t['folders']);
+            $maildir = $src . '/Maildir';
             $sz = $this->restic($repo, ['ls', '--json', '--recursive', $t['snapshot'], $src], $env, $log, 0,
-                function (string $line) use (&$size) {
+                function (string $line) use (&$present, &$size, $chosen, $maildir) {
                     $j = json_decode($line, true);
-                    if (is_array($j) && ($j['type'] ?? '') === 'file') {
-                        $size += (int) ($j['size'] ?? 0);
+                    if (!is_array($j) || !is_string($j['path'] ?? null)) {
+                        return;
+                    }
+                    $rel = substr($j['path'], strlen($maildir));
+                    if (strpos($j['path'], $maildir . '/') !== 0) {
+                        return;
+                    }
+                    // "/cur/x" or "/new/x" is the inbox, "/.Name/cur/x" a folder
+                    if (preg_match('#^(?:/(\.[^/]+))?/(cur|new)(/|$)#', $rel, $m) === 1) {
+                        $f = $m[1] ?? '';
+                        $present[$f] = true;
+                        if (($j['type'] ?? '') === 'file' && isset($chosen[$f])) {
+                            $size += (int) ($j['size'] ?? 0);
+                        }
                     }
                 });
             if ($sz['exit'] !== 0) {
                 return ['status' => 'error', 'error' => 'cannot read the snapshot: ' . self::lastLine($sz['err'])];
+            }
+            foreach ($t['folders'] as $f) {
+                if (!isset($present[$f])) {
+                    return ['status' => 'error', 'error' => 'a chosen folder is not in this snapshot'];
+                }
             }
             $free = @disk_free_space('/data');
             if ($free !== false && !self::enoughSpace($size, (int) $free)) {
                 return ['status' => 'error', 'error' => 'not enough free space on /data: the restore needs about '
                     . self::size(self::spaceNeeded($size)) . ', ' . self::size((int) $free) . ' are free'];
             }
-            $this->logLine($log, "the mailbox holds $size bytes; " . (int) $free . ' bytes free on /data');
+            $this->logLine($log, count($t['folders']) . " folder(s) chosen, $size bytes; " . (int) $free . ' bytes free on /data');
 
             if (!$this->emptyRestoreFolder()) {
                 return ['status' => 'error', 'error' => 'cannot prepare the restore folder'];
             }
             $this->state['running']['phase'] = 'restore';
             $this->saveState();
-            $r = $this->restic($repo, ['restore', $t['snapshot'], '--target', Store::RESTORE, '--include', $src], $env, $log, 0);
+            // only the folders chosen (the inbox is the Maildir's own cur and new)
+            $args = ['restore', $t['snapshot'], '--target', Store::RESTORE];
+            foreach ($t['folders'] as $f) {
+                foreach ($f === '' ? ['/cur', '/new'] : ['/' . $f] as $part) {
+                    array_push($args, '--include', self::globEscape($maildir . $part));
+                }
+            }
+            $r = $this->restic($repo, $args, $env, $log, 0);
             if ($r['exit'] !== 0) {
                 return ['status' => 'error', 'error' => 'restore failed: ' . self::lastLine($r['err'])];
             }
@@ -396,9 +522,8 @@ final class Engine
                 $this->logLine($log, "$links symbolic link(s) in the restored Maildir removed (never followed)");
             }
 
-            // the folder: "Restored <time>", or "Restored <time> (2)" if that one exists
-            $dt = new \DateTimeImmutable($time);
-            $base = 'Restored ' . $dt->setTimezone($this->tz)->format('Y-m-d H:i');
+            // the folder: the name chosen (by default "Restored <time>"), at the top or
+            // inside an existing folder of the mailbox; " (2)" if it exists already
             $dov = ['HOME' => Store::CACHE];
             // read line by line: Proc keeps only the end of a long output
             $existing = [];
@@ -410,27 +535,37 @@ final class Engine
             if ($list['exit'] !== 0) {
                 return ['status' => 'error', 'error' => 'import failed: ' . self::lastLine($list['err'])];
             }
+            if ($t['parent'] !== '' && !in_array($t['parent'], $existing, true)) {
+                return ['status' => 'error', 'error' => "the folder {$t['parent']} is not in {$t['target']}"];
+            }
+            $base = ($t['parent'] !== '' ? $t['parent'] . '.' : '') . $t['name'];
             $folder = $base;
             for ($n = 2; $this->folderTaken($existing, $folder); $n++) {
                 $folder = "$base ($n)";
             }
+            $query = self::restoreQuery($t);
             $this->state['running']['phase'] = 'import';
             $this->saveState();
-            $this->logLine($log, "import into the folder \"$folder\" of {$t['target']}");
-            $imp = Proc::run(['doveadm', 'import', '-u', $t['target'], '-s', 'maildir:' . $box . '/Maildir', $folder, 'all'],
+            $this->logLine($log, "import into the folder \"$folder\" of {$t['target']}, messages: " . implode(' ', $query));
+            // "--": a value of the filter that starts with "-" is never read as an option
+            $imp = Proc::run(array_merge(['doveadm', 'import', '-u', $t['target'], '-s', '--', 'maildir:' . $box . '/Maildir', $folder], $query),
                 $dov, null, 0, null, $log);
             if ($imp['exit'] !== 0) {
                 return ['status' => 'error', 'error' => 'import failed: ' . self::lastLine($imp['err'])];
             }
             // the messages are in its subfolders ("<folder>.INBOX", ...); "<folder>*" would also count a "<folder> (2)"
             $n = 0;
-            Proc::run(['doveadm', 'search', '-u', $t['target'], 'mailbox', $folder . '.*', 'all'], $dov, null, 600,
+            Proc::run(['doveadm', 'search', '-u', $t['target'], '--', 'mailbox', $folder . '.*', 'all'], $dov, null, 600,
                 function (string $line) use (&$n) {
                     if (trim($line) !== '') {
                         $n++;
                     }
                 }, $log);
-            return ['status' => 'ok', 'note' => "$n message(s) restored into the folder \"$folder\" of {$t['target']}"];
+            if ($n === 0) {
+                return ['status' => 'ok', 'note' => 'no message matched the choice: nothing restored'];
+            }
+            $shown = str_replace('.', ' / ', $folder);
+            return ['status' => 'ok', 'note' => "$n message(s) restored into the folder \"$shown\" of {$t['target']}"];
         } finally {
             $this->emptyRestoreFolder();
             @rmdir(Store::RESTORE);

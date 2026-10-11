@@ -138,6 +138,21 @@ final class Messages
             '/^(\d+) backup\(s\) of the job removed$/' => ['forget_job_done', ['count']],
             '/^removing the backups failed: (.*)$/s' => ['forget_job_failed', ['detail']],
             '/^not enough free space on \/data: the restore needs about (.+), (.+) are free$/' => ['restore_space', ['need', 'free']],
+            // the choices of a restore (Engine::restoreOptions, the admin's form)
+            '/^choose at least one folder$/' => ['choose_folder', []],
+            '/^too many folders$/' => ['too_many_folders', []],
+            '/^folder: not valid$/' => ['folder_invalid', []],
+            '/^folder name: 1 to 100 characters, without dots, slashes, \* or %$/' => ['folder_name', []],
+            '/^folder name: INBOX is the inbox itself$/' => ['folder_name_inbox', []],
+            '/^parent folder: not valid$/' => ['parent_invalid', []],
+            '/^date: YYYY-MM-DD$/' => ['date_format', []],
+            '/^dates: the first one is after the second$/' => ['date_order', []],
+            '/^sender: up to 100 characters$/' => ['sender_long', []],
+            '/^subject: up to 100 characters$/' => ['subject_long', []],
+            '/^a chosen folder is not in this snapshot$/' => ['folder_not_in_snapshot', []],
+            '/^the folder (.+) is not in (.+)$/' => ['parent_missing', ['folder', 'mailbox']],
+            '/^no message matched the choice: nothing restored$/' => ['nothing_matched', []],
+            '/^choose the mailbox to restore into$/' => ['choose_target', []],
         ];
     }
 

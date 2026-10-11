@@ -43,7 +43,8 @@ class Forms(HTMLParser):
             self.cur["fields"].append((self.sel, None, "select"))
         elif self.sel is not None and tag == "option":
             n, v, t = self.cur["fields"][-1]
-            if v is None or a.get("selected") is not None:
+            # "selected" has no value in HTML: present or not (a.get() would be None both ways)
+            if v is None or "selected" in a:
                 self.cur["fields"][-1] = (n, a.get("value"), t)
 
     def handle_data(self, data):

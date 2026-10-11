@@ -189,14 +189,26 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   the pages in Czech, the time zone of the container and the one chosen in
   the admin, the days the logs are kept, one run at a time;
 - snapshots and restore: the snapshots of a destination with their job and
-  content, the error of a destination that cannot be read; a mailbox
+  content, the error of a destination that cannot be read; the restore page:
+  step 1 lists the mailboxes of the snapshot that hold messages with how
+  many and the time of the snapshot, marks one no longer on the server, and
+  only counts the empty folders and the redirects; step 2 ticks the folders
+  with messages and chooses the same mailbox, or none for a mailbox no longer
+  on the server, and says when an address is not in the snapshot; a mailbox
   restored from the admin into another mailbox and twice into the same one:
   a new folder *Restored <time>* (then *(2)*) with the same number of
   messages, subscribed, the message identical to the original, nothing of
-  the mailbox's own mail changed, the engine's work folder removed; refused
-  without the CSRF token, for a mailbox not in the snapshot, a target that is
-  not a mailbox, a snapshot id that is not one; requests changed behind the
-  admin refused by the engine, a snapshot that does not exist an error; the
+  the mailbox's own mail changed, the engine's work folder removed; only the
+  Sent folder into a new folder inside an existing one; a filter by subject,
+  by the date received (a message of January 2020 sent with its date over
+  IMAP), a date range with no message and a text that starts with "-":
+  nothing restored, no error; refused with their message: no mailbox chosen,
+  a target that is not a mailbox, no folder, a folder not in the snapshot, a
+  folder name with a dot, a parent folder that does not exist, dates the
+  wrong way round, no CSRF token, a snapshot id that is not one; requests
+  changed behind the admin (a path as address or as folder) refused by the
+  engine, a snapshot that does not exist an error; a symbolic link in a
+  folder restored removed, never followed; the
   page of commands to restore the server (values quoted, no password, for
   SFTP with a key a key of one's own and the confirmed server keys), offered
   only for snapshots with the configuration; the backups of a deleted job

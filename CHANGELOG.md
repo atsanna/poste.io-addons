@@ -68,9 +68,11 @@ All notable changes to this project are documented here. The format follows
   encryption key is made at the first start and downloaded from the admin.
   The engine runs as `mail`, never as root, and validates the settings again
   before using them. **Snapshots and restore** in the admin: the snapshots
-  of each destination, a mailbox restored into a new folder *Restored <time>*
-  of the same or another mailbox (nothing already there is changed; refused
-  if `/data` has no room for it), the backups of a job removed (also of a
+  of each destination, a mailbox restored into a new folder of the same or
+  another mailbox (named *Restored <time>* or as you choose, at the top or
+  inside an existing folder): the whole mailbox, some of its folders, or the
+  messages of a filter (dates received, sender, subject); nothing already
+  there is changed, and it is refused if `/data` has no room for it; the backups of a job removed (also of a
   deleted job), and the commands to rebuild the whole server filled in for a
   snapshot. The backups can also be read from another machine with only the
   key file, and a whole server is rebuilt on a new installation: both

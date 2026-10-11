@@ -208,46 +208,69 @@ final class Panel
     }
 
     /**
-     * The mailboxes in a snapshot (the folders two levels under /data/domains),
-     * sorted: [[addresses], error]. A snapshot of the configuration only has none.
+     * What a snapshot holds under $root (/data/domains, or one mailbox's folder):
+     * for each mailbox (the folders two levels under /data/domains) its messages,
+     * and for each of its folders ('' = the inbox, '.Name' as Dovecot names it on
+     * disk) its messages. One read of the snapshot. Returns
+     * [['time' => unix time, 'boxes' => [address => ['messages' => n, 'folders' => [key => n]]]], error].
      */
-    public static function snapshotMailboxes(string $did, array $d, string $snap): array
+    public static function snapshotContents(string $did, array $d, string $snap, string $root = '/data/domains'): array
     {
         if (!Engine::isSnapshotId($snap)) {
             return [null, 'invalid id'];
         }
-        $domains = [];
-        [$r, $err] = self::resticRead($did, $d, ['ls', '--json', $snap, '/data/domains'], function (string $line) use (&$domains) {
-            $j = json_decode($line, true);
-            if (is_array($j) && ($j['type'] ?? '') === 'dir' && preg_match('#^/data/domains/([^/]+)$#', (string) ($j['path'] ?? ''), $m)) {
-                $domains[] = $m[1];
-            }
-        });
-        if ($err) {
-            return [null, $err];
-        }
-        if (!$domains) {
-            return [[], null];
-        }
+        $time = null;
         $boxes = [];
-        $dirs = array_map(function ($dom) {
-            return '/data/domains/' . $dom;
-        }, $domains);
-        [$r, $err] = self::resticRead($did, $d, array_merge(['ls', '--json', $snap], $dirs), function (string $line) use (&$boxes) {
+        [$r, $err] = self::resticRead($did, $d, ['ls', '--json', '--recursive', $snap, $root], function (string $line) use (&$time, &$boxes) {
             $j = json_decode($line, true);
-            if (is_array($j) && ($j['type'] ?? '') === 'dir' && preg_match('#^/data/domains/([^/]+)/([^/]+)$#', (string) ($j['path'] ?? ''), $m)) {
-                $a = $m[2] . '@' . $m[1];
-                if (Config::isAddress($a)) {
-                    $boxes[$a] = true;
+            if (!is_array($j)) {
+                return;
+            }
+            if (($j['struct_type'] ?? '') === 'snapshot' && is_string($j['time'] ?? null)) {
+                try {
+                    $time = (new \DateTimeImmutable($j['time']))->getTimestamp();
+                } catch (\Exception $e) {
+                }
+                return;
+            }
+            $path = (string) ($j['path'] ?? '');
+            if (preg_match('#^/data/domains/([^/]+)/([^/]+)(/.*)?$#', $path, $m) !== 1) {
+                return;
+            }
+            $a = $m[2] . '@' . $m[1];
+            if (!Config::isAddress($a)) {
+                return;
+            }
+            $boxes[$a] = $boxes[$a] ?? ['messages' => 0, 'folders' => []];
+            // the inbox is Maildir/cur and Maildir/new, a folder Maildir/.Name/cur and /new
+            if (preg_match('#^/Maildir(?:/(\.[^/]+))?/(cur|new)(/[^/]+)?$#', $m[3] ?? '', $f) === 1) {
+                $key = $f[1] ?? '';
+                $boxes[$a]['folders'][$key] = $boxes[$a]['folders'][$key] ?? 0;
+                if (($j['type'] ?? '') === 'file' && ($f[3] ?? '') !== '') {
+                    $boxes[$a]['folders'][$key]++;
+                    $boxes[$a]['messages']++;
                 }
             }
         });
         if ($err) {
             return [null, $err];
         }
-        $boxes = array_keys($boxes);
-        sort($boxes);
-        return [$boxes, null];
+        if ($time === null) {
+            return [null, 'cannot read the snapshot: ' . Engine::lastLine($r['err'] ?: 'no snapshot')];
+        }
+        ksort($boxes);
+        return [['time' => $time, 'boxes' => $boxes], null];
+    }
+
+    /** A folder of a Maildir as people read it: '' the inbox (null), '.Clients.2024' "Clients / 2024". */
+    public static function folderName(string $key): ?string
+    {
+        if ($key === '') {
+            return null;
+        }
+        // Dovecot keeps non-ASCII names in modified UTF-7, and "." between levels
+        $name = @mb_convert_encoding(substr($key, 1), 'UTF-8', 'UTF7-IMAP');
+        return str_replace('.', ' / ', is_string($name) && $name !== '' ? $name : substr($key, 1));
     }
 
     // ------------------------------------------------------------- mailboxes
@@ -270,6 +293,46 @@ final class Panel
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    /** Every address of the server: address => mailbox | redirect, from Poste.io's database. */
+    public static function addresses(): array
+    {
+        try {
+            $db = new \SQLite3('/data/users.db', SQLITE3_OPEN_READONLY);
+            $db->busyTimeout(10000);
+            $res = $db->query('SELECT address, redirectOnly FROM users');
+            $out = [];
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+                if (Config::isAddress($row['address'])) {
+                    $out[strtolower($row['address'])] = $row['redirectOnly'] ? 'redirect' : 'mailbox';
+                }
+            }
+            $db->close();
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** The folders of a mailbox of this server, as Dovecot names them ("." between levels), or null. */
+    public static function mailboxFolders(string $address): ?array
+    {
+        if (!in_array(strtolower($address), self::mailboxes(), true)) {
+            return null;
+        }
+        $out = [];
+        $r = Proc::run(['doveadm', 'mailbox', 'list', '-u', strtolower($address)], ['HOME' => Store::CACHE], null, 60,
+            function (string $line) use (&$out) {
+                if (trim($line) !== '') {
+                    $out[] = trim($line);
+                }
+            });
+        if ($r['exit'] !== 0) {
+            return null;
+        }
+        sort($out);
+        return $out;
     }
 
     // ------------------------------------------------------------- the key

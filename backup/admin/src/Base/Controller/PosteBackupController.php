@@ -898,8 +898,12 @@ class PosteBackupController extends AbstractController
     }
 
     /**
-     * A mailbox of a snapshot into a mailbox of this server, in a new folder
-     * "Restored <time>": the form, then the request to the engine.
+     * Restoring a mailbox, in two steps on one page. Without ?source: the
+     * mailboxes of the snapshot that hold messages, with how many (the empty
+     * ones and the redirects summed up in a line). With ?source: its folders
+     * and their messages, an optional filter, the mailbox and folder to restore
+     * into (never a mailbox chosen for the user, unless it is the same one).
+     * POST: the request to the engine, checked again there.
      *
      * @Route("/snapshots/{dest}/{snap}/restore", name="poste_backup_snapshot_restore", methods={"GET", "POST"},
      *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
@@ -911,34 +915,121 @@ class PosteBackupController extends AbstractController
         if ($d === null) {
             throw $this->createNotFoundException();
         }
-        [$boxes, $error] = Panel::snapshotMailboxes($dest, $d, $snap);
+        $source = (string) ($request->isMethod('POST') ? $request->request->get('source', '') : $request->query->get('source', ''));
         $mailboxes = Panel::mailboxes();
+        $addresses = Panel::addresses();
+        // what every step shows; each step's own values come first ([...] + $view: the left side wins)
+        $view = ['dest' => $dest, 'destination' => $d, 'snap' => $snap, 'time' => null, 'error' => null];
+
+        if ($source === '') {
+            [$c, $error] = Panel::snapshotContents($dest, $d, $snap);
+            $withMail = [];
+            $empty = $emptyRedirects = 0;
+            foreach ($c['boxes'] ?? [] as $a => $b) {
+                $state = $addresses[strtolower($a)] ?? 'gone';
+                if ($b['messages'] > 0) {
+                    $withMail[$a] = ['messages' => $b['messages'], 'state' => $state];
+                } else {
+                    $empty++;
+                    $emptyRedirects += $state === 'redirect' ? 1 : 0;
+                }
+            }
+            return $this->render('Base/PosteBackup/snapshot_restore.html.twig', [
+                'step' => 1, 'time' => $c['time'] ?? null, 'error' => $error !== null ? $this->msg($error) : null,
+                'boxes' => $withMail, 'empty' => $empty, 'emptyRedirects' => $emptyRedirects,
+            ] + $view);
+        }
+
+        // step 2: one mailbox of the snapshot (an address: its folder is /data/domains/<domain>/<local>)
+        $folders = [];
+        $time = null;
+        $error = null;
+        if (!Config::isAddress($source)) {
+            $error = $this->msg("$source is not in this snapshot");
+        } else {
+            [$local, $domain] = explode('@', $source, 2);
+            [$c, $err] = Panel::snapshotContents($dest, $d, $snap, '/data/domains/' . $domain . '/' . $local);
+            $box = $c['boxes'][$source] ?? null;
+            $time = $c['time'] ?? null;
+            if ($err !== null) {
+                $error = $this->msg($err);
+            } elseif ($box === null) {
+                $error = $this->msg("$source is not in this snapshot");
+            } elseif ($box['messages'] === 0) {
+                $error = $this->msg("$source has no mail in this snapshot");
+            } else {
+                foreach ($box['folders'] as $key => $n) {
+                    $folders[$key] = ['name' => Panel::folderName((string) $key), 'messages' => $n];
+                }
+                // the inbox first, then by name
+                uksort($folders, function ($a, $b) use ($folders) {
+                    return $a === '' ? -1 : ($b === '' ? 1 : strcasecmp((string) $folders[$a]['name'], (string) $folders[$b]['name']));
+                });
+            }
+        }
+
         if ($request->isMethod('POST') && $error === null) {
             if ($this->csrf($request, 'poste_backup_restore')) {
-                $source = (string) $request->request->get('source', '');
-                $target = strtolower((string) $request->request->get('target', ''));
-                if (!in_array($source, $boxes, true)) {
-                    $this->addFlash('error', $this->msg("$source is not in this snapshot"));
-                } elseif (!in_array($target, $mailboxes, true)) {
-                    $this->addFlash('error', $this->msg("mailbox $target not found"));
+                $p = $request->request;
+                $target = strtolower((string) $p->get('target', ''));
+                $chosen = array_values(array_filter($p->all('folders'), 'is_string'));
+                $fields = ['folders' => $chosen, 'name' => (string) $p->get('name', ''), 'parent' => (string) $p->get('parent', ''),
+                           'since' => (string) $p->get('since', ''), 'until' => (string) $p->get('until', ''),
+                           'from' => (string) $p->get('from', ''), 'subject' => (string) $p->get('subject', '')];
+                [, $errors] = \PosteBackup\Engine::restoreOptions($fields);
+                foreach ($chosen as $f) {
+                    if (($folders[$f]['messages'] ?? 0) === 0) {
+                        $errors[] = 'a chosen folder is not in this snapshot';
+                        break;
+                    }
+                }
+                if (!in_array($target, $mailboxes, true)) {
+                    $errors[] = $target === '' ? 'choose the mailbox to restore into' : "mailbox $target not found";
+                } elseif ($fields['parent'] !== '' && !in_array($fields['parent'], Panel::mailboxFolders($target) ?? [], true)) {
+                    $errors[] = "the folder {$fields['parent']} is not in $target";
+                }
+                if ($errors) {
+                    foreach ($errors as $e) {
+                        $this->addFlash('error', $this->msg($e));
+                    }
                 } else {
-                    $id = Panel::requestTask('restore', ['dest' => $dest, 'snapshot' => $snap, 'source' => $source, 'target' => $target]);
+                    $id = Panel::requestTask('restore', ['dest' => $dest, 'snapshot' => $snap, 'source' => $source, 'target' => $target] + $fields);
                     $this->addFlash($id ? 'notice' : 'error', $this->t($id ? 'poste_backup.snapshots.restore_queued' : 'poste_backup.job.queue_error'));
                     if ($id) {
                         return $this->redirectToRoute('poste_backup_snapshots', ['dest' => $dest]);
                     }
                 }
             }
-            return $this->redirectToRoute('poste_backup_snapshot_restore', ['dest' => $dest, 'snap' => $snap]);
+            return $this->redirectToRoute('poste_backup_snapshot_restore', ['dest' => $dest, 'snap' => $snap, 'source' => $source]);
         }
+
+        // the same mailbox when it exists here; otherwise none: the user chooses
+        $target = in_array(strtolower($source), $mailboxes, true) ? strtolower($source) : null;
         return $this->render('Base/PosteBackup/snapshot_restore.html.twig', [
-            'dest' => $dest,
-            'destination' => $d,
-            'snap' => $snap,
-            'boxes' => $boxes ?? [],
-            'mailboxes' => $mailboxes,
-            'error' => $error !== null ? $this->msg($error) : null,
-        ]);
+            'step' => 2, 'time' => $time, 'error' => $error, 'source' => $source,
+            'sourceState' => $addresses[strtolower($source)] ?? 'gone',
+            'messages' => array_sum(array_column($folders, 'messages')), 'folders' => $folders,
+            'mailboxes' => $mailboxes, 'target' => $target,
+            'targetFolders' => $target !== null ? (Panel::mailboxFolders($target) ?? []) : [],
+            'defaultName' => $time !== null ? 'Restored ' . date('Y-m-d H:i', $time) : 'Restored',
+        ] + $view);
+    }
+
+    /**
+     * The folders of a mailbox of this server, for the "restore into" choice
+     * (JSON, read only).
+     *
+     * @Route("/mailbox-folders", name="poste_backup_mailbox_folders", methods={"GET"})
+     */
+    public function mailboxFoldersAction(Request $request): JsonResponse
+    {
+        $f = Panel::mailboxFolders((string) $request->query->get('mailbox', ''));
+        if ($f === null) {
+            return new JsonResponse(['folders' => []], 404);
+        }
+        return new JsonResponse(['folders' => array_map(function ($n) {
+            return ['value' => $n, 'name' => str_replace('.', ' / ', $n)];
+        }, $f)]);
     }
 
     /**

@@ -285,20 +285,40 @@ backup is seen only in the admin, so look at it from time to time, or watch
 from it when the page opens), newest first: when, which job, what it holds
 (configuration, all mail, some mailboxes). From there:
 
-- **Restore a mailbox…** (a snapshot with mail): choose the mailbox in the
-  snapshot and the mailbox of this server to restore it into, the same one or
-  another. Its messages go into a **new folder** *Restored <time of the
-  snapshot>* of that mailbox, with the snapshot's folders under it (*INBOX*,
-  *Sent*, …), the messages' flags (read, …), and subscribed, so that mail
-  programs show them: **nothing already in the mailbox is changed**. Restoring the same snapshot again makes *Restored … (2)*. The
-  restore runs in the background (the engine takes it within a minute: the
-  page shows it, then its result and its log). The snapshot's mailbox is
-  first restored into a work folder on `/data`, then imported by Dovecot, so
-  it is written twice: the engine adds up its size first and refuses the
-  restore unless `/data` has room for twice the mailbox plus 256 MB (a full
-  disk would stop the mail). The messages count towards the quota of the
-  mailbox. A mailbox deleted from the server since the backup can be
-  restored into another one. Symbolic links in the restored Maildir are
+- **Restore a mailbox…** (a snapshot with mail), in three steps on one page:
+  1. **the mailbox**: the mailboxes of the snapshot that hold messages, with
+     how many; one that is no longer on this server is marked. Empty
+     folders (Poste.io makes one for every address, redirects included) are
+     only counted, in a line under the list: there is nothing to restore
+     there;
+  2. **what**: the folders of that mailbox with their messages, all ticked
+     (the whole mailbox), or only some of them; and, if you want only some
+     messages, a filter: received from / to (the dates as the server counts
+     them, both days included), the sender contains, the subject contains
+     (case does not matter). Folders and filter go together, for example
+     *only Sent, sender customer.com, from 1 to 7 October*;
+  3. **where**: the mailbox of this server to restore into (the same one is
+     chosen when it exists; otherwise none is, and nothing starts until you
+     choose), the name of a **new folder** (*Restored <time of the
+     snapshot>* unless you change it) and where to make it: at the top of
+     the mailbox or inside one of its folders.
+
+  Before you confirm, the page says where the messages go. They go under the
+  new folder with the snapshot's folders (*… / INBOX*, *… / Sent*), their
+  flags (read, …), and subscribed, so that mail programs show them:
+  **nothing already in the mailbox is changed**. If the name is taken, the
+  folder gets *(2)*. Messages are never put back into their original folders:
+  Dovecot's import does not recognise a message that is still there, so
+  every one of them would appear twice. Move what you need from the restored
+  folder with your mail program, then delete it.
+
+  The restore runs in the background (the engine takes it within a minute:
+  the page shows it, then its result and its log). Only the folders chosen
+  are read from the destination, into a work folder on `/data`, then
+  imported by Dovecot, so they are written twice: the engine adds up their
+  size first and refuses the restore unless `/data` has room for twice that
+  plus 256 MB (a full disk would stop the mail). The messages count towards
+  the quota of the mailbox. Symbolic links in the restored folders are
   removed before the import, never followed.
 - **Restore the server…**: the whole server is restored on a **new
   installation**, not from a running server (its files would be replaced
@@ -712,9 +732,10 @@ something that is not a folder owned by root.
 - **One repository per server**: do not point two mail servers to the same
   folder.
 - No notifications yet: they come with the next stages.
-- A mailbox is restored into a new folder; single messages or folders are
-  not chosen from the admin (take what you need from the restored folder).
-  The whole server is restored from the command line, on a new installation.
+- A mailbox is restored into a new folder: whole, some of its folders, or
+  the messages of a filter (dates, sender, subject); single messages are not
+  picked from a list yet. The whole server is restored from the command
+  line, on a new installation.
 - restic and rclone are the versions of the image's Debian release (restic
   0.14, rclone 1.60 on Poste.io 2.5.17).
 - The first backup of a large server takes a while (everything is new); later

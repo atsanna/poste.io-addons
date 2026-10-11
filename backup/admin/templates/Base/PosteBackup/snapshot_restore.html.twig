@@ -4,42 +4,135 @@
 
 {% block body -%}
 {% include 'Base/PosteBackup/_common.html.twig' %}
+<style>
+.bk-step { display: inline-block; width: 22px; height: 22px; border-radius: 11px; background: #3DC7BE; color: #fff; text-align: center;
+           font-size: 13px; line-height: 22px; margin-right: 6px; }
+.bk-folders label { display: block; font-weight: normal; margin: 3px 0; }
+.bk-folders .bk-n { color: var(--bs-secondary-color, #777); margin-left: 6px; }
+.bk-folders .bk-all { font-weight: bold; border-bottom: 1px solid var(--bs-border-color, #eee); padding-bottom: 5px; margin-bottom: 6px; }
+.bk-note { border-left: 4px solid #3DC7BE; background: var(--bs-secondary-bg, #f4fbfa); padding: 8px 12px; margin: 12px 0; max-width: 900px; }
+.bk-tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: var(--bs-secondary-bg, #eee); margin-left: 6px; }
+</style>
 <p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
-<h4>{{ 'poste_backup.snapshots.restore_title'|trans }}</h4>
-<p class="bk-muted">{{ 'poste_backup.snapshots.snapshot_of'|trans({'{id}': snap|slice(0, 8), '{destination}': destination.name}) }}</p>
+<p class="bk-muted" style="font-size:13px">{{ 'poste_backup.snapshots.restore_of'|trans({'{time}': time ? time|date('Y-m-d H:i') : snap|slice(0, 8), '{destination}': destination.name}) }}</p>
 
 {% if error %}
     <div class="alert alert-danger">{{ error }}</div>
-{% elseif not boxes %}
-    <div class="alert alert-info">{{ 'poste_backup.snapshots.no_mail'|trans }}</div>
+    {% if step == 2 %}<p><a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}">{{ 'poste_backup.snapshots.another_mailbox'|trans }}</a></p>{% endif %}
+
+{% elseif step == 1 %}
+<div class="bk-box" style="max-width:900px">
+    <h4><span class="bk-step">1</span> {{ 'poste_backup.snapshots.step_mailbox'|trans }}</h4>
+    {% if boxes %}
+    <table class="table table-hover bk" style="margin-bottom:6px">
+        <thead><tr><th>{{ 'poste_backup.snapshots.source'|trans }}</th><th class="text-right">{{ 'poste_backup.snapshots.messages'|trans }}</th><th></th></tr></thead>
+        <tbody>
+        {% for a, b in boxes %}
+            <tr><td>{{ a }}{% if b.state == 'gone' %}<span class="bk-tag">{{ 'poste_backup.snapshots.gone'|trans }}</span>{% elseif b.state == 'redirect' %}<span class="bk-tag">{{ 'poste_backup.snapshots.redirect'|trans }}</span>{% endif %}</td>
+                <td class="text-right">{{ b.messages|number_format(0, '.', ',') }}</td>
+                <td class="text-right"><a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap, source: a}) }}">{{ 'poste_backup.snapshots.choose'|trans }} <i class="fa fa-chevron-right"></i></a></td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <p>{{ 'poste_backup.snapshots.no_mail'|trans }}</p>
+    {% endif %}
+    {% if empty %}<p class="bk-muted" style="margin:0">{{ 'poste_backup.snapshots.empty_boxes'|trans({'{count}': empty, '{redirects}': emptyRedirects}) }}</p>{% endif %}
+</div>
+
 {% else %}
-<form method="post" class="bk-form">
+<p style="font-size:15px">{{ 'poste_backup.snapshots.source'|trans }}: <strong>{{ source }}</strong> &middot; {{ 'poste_backup.snapshots.count_messages'|trans({'{count}': messages}) }}
+    {% if sourceState == 'gone' %}<span class="bk-tag">{{ 'poste_backup.snapshots.gone'|trans }}</span>{% endif %}
+    <a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}" style="font-size:12px">({{ 'poste_backup.snapshots.another_mailbox'|trans }})</a></p>
+<form method="post" class="bk-form" id="bk-restore">
     <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_restore') }}">
-    <div class="bk-row">
-        <div class="form-group"><label class="control-label" for="bk-source">{{ 'poste_backup.snapshots.source'|trans }}</label>
-            <select id="bk-source" name="source">
-                {% for b in boxes %}<option value="{{ b }}">{{ b }}</option>{% endfor %}
-            </select></div>
-        <div class="form-group"><label class="control-label" for="bk-target">{{ 'poste_backup.snapshots.target'|trans }}</label>
-            <select id="bk-target" name="target">
-                {% for m in mailboxes %}<option value="{{ m }}"{% if m == boxes|first|lower %} selected{% endif %}>{{ m }}</option>{% endfor %}
-            </select></div>
+    <input type="hidden" name="source" value="{{ source }}">
+
+    <div class="bk-box">
+        <h4><span class="bk-step">2</span> {{ 'poste_backup.snapshots.step_what'|trans }}</h4>
+        <div class="bk-folders">
+            <label class="bk-all"><input type="checkbox" id="bk-all" checked> {{ 'poste_backup.snapshots.all_folders'|trans }} <span class="bk-n">{{ messages|number_format(0, '.', ',') }}</span></label>
+            {% for key, f in folders %}
+                <label><input type="checkbox" class="bk-folder" name="folders[]" value="{{ key }}"{% if f.messages > 0 %} checked{% else %} disabled{% endif %}>
+                    {{ f.name ?? ('poste_backup.snapshots.inbox'|trans) }} <span class="bk-n">{{ f.messages|number_format(0, '.', ',') }}</span></label>
+            {% endfor %}
+        </div>
+        <p style="margin:12px 0 6px"><strong>{{ 'poste_backup.snapshots.filter'|trans }}</strong> <span class="bk-muted">{{ 'poste_backup.snapshots.filter_help'|trans }}</span></p>
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-since">{{ 'poste_backup.snapshots.since'|trans }}</label>
+                <input class="form-control" type="date" id="bk-since" name="since" style="width:170px"></div>
+            <div class="form-group"><label class="control-label" for="bk-until">{{ 'poste_backup.snapshots.until'|trans }}</label>
+                <input class="form-control" type="date" id="bk-until" name="until" style="width:170px"></div>
+            <div class="form-group"><label class="control-label" for="bk-from">{{ 'poste_backup.snapshots.from'|trans }}</label>
+                <input class="form-control" id="bk-from" name="from" maxlength="100" style="width:200px"></div>
+            <div class="form-group"><label class="control-label" for="bk-subject">{{ 'poste_backup.snapshots.subject'|trans }}</label>
+                <input class="form-control" id="bk-subject" name="subject" maxlength="100" style="width:200px"></div>
+        </div>
     </div>
-    <p class="help-block">{{ 'poste_backup.snapshots.restore_help'|trans }}</p>
-    <button type="submit" class="btn btn-primary"><i class="fa fa-undo"></i> {{ 'poste_backup.snapshots.restore_submit'|trans }}</button>
+
+    <div class="bk-box">
+        <h4><span class="bk-step">3</span> {{ 'poste_backup.snapshots.step_where'|trans }}</h4>
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-target">{{ 'poste_backup.snapshots.target'|trans }}</label>
+                <select id="bk-target" name="target" data-folders="{{ path('poste_backup_mailbox_folders') }}">
+                    <option value=""{% if target is null %} selected{% endif %}>{{ 'poste_backup.snapshots.choose_mailbox'|trans }}</option>
+                    {% for m in mailboxes %}<option value="{{ m }}"{% if m == target %} selected{% endif %}>{{ m }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group"><label class="control-label" for="bk-name">{{ 'poste_backup.snapshots.folder_name'|trans }}</label>
+                <input class="form-control" id="bk-name" name="name" value="{{ defaultName }}" maxlength="100" required style="width:240px"></div>
+            <div class="form-group"><label class="control-label" for="bk-parent">{{ 'poste_backup.snapshots.parent'|trans }}</label>
+                <select id="bk-parent" name="parent">
+                    <option value="">{{ 'poste_backup.snapshots.parent_top'|trans }}</option>
+                    {% for f in targetFolders %}<option value="{{ f }}">{{ f|replace({'.': ' / '}) }}</option>{% endfor %}
+                </select></div>
+        </div>
+        {% if target is null %}<p class="text-warning" style="margin:0"><i class="fa fa-exclamation-triangle"></i> {{ 'poste_backup.snapshots.target_choose_help'|trans({'{source}': source}) }}</p>
+        {% else %}<p class="bk-muted" style="margin:0">{{ 'poste_backup.snapshots.target_same_help'|trans }}</p>{% endif %}
+    </div>
+
+    <div class="bk-note"><i class="fa fa-info-circle"></i> <span id="bk-summary"></span></div>
+    <button type="submit" class="btn btn-primary" id="bk-submit"><i class="fa fa-undo"></i> {{ 'poste_backup.snapshots.restore_submit'|trans }}</button>
 </form>
 {% endif %}
 {% endblock %}
 
 {% block javascripts %}
+{% if step == 2 and not error %}
 <script>
-    $('#bk-source, #bk-target').chosen({width: '320px', search_contains: true});
-    // the same mailbox by default, when it exists on this server
-    $('#bk-source').on('change', function () {
-        var v = $(this).val().toLowerCase();
-        if ($('#bk-target option[value="' + v.replace(/["\\]/g, '') + '"]').length) {
-            $('#bk-target').val(v).trigger('chosen:updated');
-        }
+    var bkS = {
+        summary: '{{ 'poste_backup.snapshots.summary_where'|trans({'{folder}': '%folder%', '{mailbox}': '%mailbox%'})|e('js') }}',
+        noTarget: '{{ 'poste_backup.snapshots.summary_no_target'|trans|e('js') }}',
+        top: '{{ 'poste_backup.snapshots.parent_top'|trans|e('js') }}'
+    };
+    $('#bk-target, #bk-parent').chosen({width: '280px', search_contains: true});
+    // the folders: "all" ticks or unticks every folder that has messages
+    $('#bk-all').on('change', function () { $('.bk-folder:not(:disabled)').prop('checked', this.checked); bkUpdate(); });
+    $('.bk-folder').on('change', function () {
+        $('#bk-all').prop('checked', $('.bk-folder:not(:disabled):not(:checked)').length === 0);
+        bkUpdate();
     });
+    // where the messages go, said before they go there
+    function bkUpdate() {
+        var target = $('#bk-target').val(), parent = $('#bk-parent').val(), name = $.trim($('#bk-name').val());
+        var folder = (parent ? parent.split('.').join(' / ') + ' / ' : '') + name;
+        $('#bk-summary').text(target ? bkS.summary.replace('%folder%', folder).replace('%mailbox%', target) : bkS.noTarget);
+        $('#bk-submit').prop('disabled', !target || !name || $('.bk-folder:checked').length === 0);
+    }
+    // another mailbox: its own folders to restore into
+    $('#bk-target').on('change', function () {
+        var $p = $('#bk-parent').empty().append($('<option value="">').text(bkS.top));
+        if (this.value) {
+            $.getJSON($(this).data('folders'), {mailbox: this.value}).done(function (r) {
+                $.each(r.folders || [], function (i, f) { $p.append($('<option>').val(f.value).text(f.name)); });
+                $p.trigger('chosen:updated');
+            });
+        }
+        $p.trigger('chosen:updated');
+        bkUpdate();
+    });
+    $('#bk-parent').on('change', bkUpdate);
+    $('#bk-name').on('input', bkUpdate);
+    bkUpdate();
 </script>
+{% endif %}
 {% endblock %}

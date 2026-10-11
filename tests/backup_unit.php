@@ -197,14 +197,32 @@ check('exit 0: ok, no note', $o['status'] === 'ok' && $o['error'] === null && $o
 
 // --- requests of the admin to the engine, validated again by the engine
 $snap = str_repeat('ab', 32);
-$t = PosteBackup\Engine::task('restore', ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'Bob@Example.com']);
-check('restore request: valid, the target in lower case', $t === ['type' => 'restore', 'dest' => '0a1b2c3d4e5f', 'snapshot' => $snap,
-      'source' => 'alice@example.com', 'target' => 'bob@example.com'], $t);
+$choice = ['folders' => ['', '.Sent', '.A[1]*?'], 'name' => 'Restored 2026-10-11 02:00', 'parent' => 'Archive.2024',
+           'since' => '2026-10-01', 'until' => '2026-10-07', 'from' => 'customer.com', 'subject' => ' invoice '];
+$t = PosteBackup\Engine::task('restore', ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'Bob@Example.com'] + $choice);
+check('restore request: valid, the target in lower case, the choices kept (texts trimmed)', $t === ['type' => 'restore', 'dest' => '0a1b2c3d4e5f',
+      'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com', 'folders' => ['', '.Sent', '.A[1]*?'],
+      'name' => 'Restored 2026-10-11 02:00', 'parent' => 'Archive.2024', 'since' => '2026-10-01', 'until' => '2026-10-07',
+      'from' => 'customer.com', 'subject' => 'invoice'], $t);
 foreach ([['snapshot' => substr($snap, 0, 8)], ['snapshot' => strtoupper($snap)], ['source' => '../../etc@example.com'], ['source' => 'a/b@example.com'],
-          ['source' => 'alice@../..'], ['target' => 'x'], ['dest' => '../x'], ['source' => ['alice@example.com']]] as $bad) {
-    $t = PosteBackup\Engine::task('restore', $bad + ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com']);
+          ['source' => 'alice@../..'], ['target' => 'x'], ['dest' => '../x'], ['source' => ['alice@example.com']],
+          ['folders' => []], ['folders' => ['..']], ['folders' => ['../x']], ['folders' => ['.a/b']], ['folders' => ['Sent']], ['folders' => '.Sent'],
+          ['name' => 'a.b'], ['name' => 'a/b'], ['name' => 'a\\b'], ['name' => 'a*'], ['name' => 'a%'], ['name' => ' a'], ['name' => ''],
+          ['name' => str_repeat('x', 101)], ['name' => 'inbox'], ['parent' => '.x'], ['parent' => 'x.'], ['parent' => 'a*'],
+          ['since' => '2026-02-30'], ['until' => '10/07/2026'], ['since' => '2026-10-08', 'until' => '2026-10-07'],
+          ['from' => str_repeat('x', 101)], ['subject' => "a\nb"]] as $bad) {
+    $t = PosteBackup\Engine::task('restore', $bad + ['dest' => '0a1b2c3d4e5f', 'snapshot' => $snap, 'source' => 'alice@example.com', 'target' => 'bob@example.com'] + $choice);
     check('restore request refused: ' . json_encode($bad), !empty($t['invalid']) && count($t) === 2, $t);
 }
+$q = function (array $o) use ($choice) {
+    return PosteBackup\Engine::restoreQuery(array_merge(PosteBackup\Engine::restoreOptions($choice)[0], $o));
+};
+check('filter: "until" includes its day (BEFORE the next one), the end of a month too',
+      $q([]) === ['SINCE', '2026-10-01', 'BEFORE', '2026-10-08', 'FROM', 'customer.com', 'SUBJECT', 'invoice']
+      && $q(['since' => '', 'until' => '2026-10-31', 'from' => '', 'subject' => '']) === ['BEFORE', '2026-11-01'], $q([]));
+check('no filter: every message', $q(['since' => '', 'until' => '', 'from' => '', 'subject' => '']) === ['all'], 'all');
+check('a folder name with glob characters is taken literally by restic', PosteBackup\Engine::globEscape('/d/.A[1]*?\\x')
+      === '/d/.A\\[1\\]\\*\\?\\\\x', PosteBackup\Engine::globEscape('/d/.A[1]*?\\x'));
 check('removal request: valid', PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'])
       === ['type' => 'forget', 'dest' => '0a1b2c3d4e5f', 'job' => 'aaaaaaaaaaaa'], 'forget');
 check('removal request refused: an invalid job id', !empty(PosteBackup\Engine::task('forget', ['dest' => '0a1b2c3d4e5f', 'job' => 'job:x'])['invalid']), 'invalid');
@@ -288,6 +306,11 @@ $samples = [
     'there were no backups of this job on this destination', '4 backup(s) of the job removed',
     'removing the backups failed: Fatal: repository is already locked',
     'not enough free space on /data: the restore needs about 2.3 GB, 1.1 GB are free',
+    'choose at least one folder', 'too many folders', 'folder: not valid', 'folder name: 1 to 100 characters, without dots, slashes, * or %',
+    'folder name: INBOX is the inbox itself', 'parent folder: not valid', 'date: YYYY-MM-DD', 'dates: the first one is after the second',
+    'sender: up to 100 characters', 'subject: up to 100 characters', 'a chosen folder is not in this snapshot',
+    'the folder Archive.2024 is not in bob@example.com', 'no message matched the choice: nothing restored', 'choose the mailbox to restore into',
+    '7 message(s) restored into the folder "Archive / Restored 2026-10-11 02:00" of bob@example.com',
     // what the code writes, read from the code itself
     PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
 ];
