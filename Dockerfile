@@ -76,6 +76,11 @@ RUN mkdir -p /data/var/getmail/5min /data/var/getmail/10min /data/var/getmail/15
     find /data/var/getmail /data/log/getmail -type d -exec chmod 0750 {} +
 COPY external-mailboxes/cron.sh /data/var/getmail/cron.sh
 RUN chown mail:mail /data/var/getmail/cron.sh && chmod 0750 /data/var/getmail/cron.sh
+# getmail filter: every fetched message is scanned by rspamd before delivery
+# (Haraka's submission, where getmail delivers, does not scan local mail).
+# In the image, not on the volume: a new build updates it.
+COPY external-mailboxes/getmail-rspamd /usr/local/bin/getmail-rspamd
+RUN chmod 0755 /usr/local/bin/getmail-rspamd
 # Crontab of the "mail" user; the file lives OUTSIDE /etc/cron.d (cron would
 # reject it there: no user column) and the logs page reads it from here.
 COPY external-mailboxes/external-mailboxes.crontab /etc/external-mailboxes.crontab

@@ -17,6 +17,18 @@ All notable changes to this project are documented here. The format follows
   **Existing installations**: `cron.sh` lives on the `/data` volume, copy the
   new one there (see [installation](docs/installation.md#3-existing-installations-the-data-volume)).
 
+- **External Mailboxes: fetched mail is checked by rspamd.** Until now it was
+  not scanned at all: getmail delivers through Haraka's local submission
+  socket, where the rspamd plugin skips local connections. A getmail filter
+  (`getmail-rspamd`) now scans every fetched message before delivery: same
+  `X-Rspamd-*` headers as SMTP mail, spam subject prefix from Poste.io's own
+  threshold (filed into Junk by the mailbox's sieve rule), Bayes per domain of
+  the recipient. If rspamd does not answer, the message is delivered unchanged
+  and the reason goes to the Getmail Errors log. The connection-based checks do
+  not apply (no SMTP client): see [docs](docs/external-mailboxes.md).
+  **Existing mailboxes** get the filter when they are saved again from the
+  admin (the password field can stay empty).
+
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
   all" on and the messages left on the server, getmail warns at every run that

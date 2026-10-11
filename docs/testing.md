@@ -64,6 +64,10 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 - the password is never sent back to the browser;
 - end to end: a message put in bob's mailbox is fetched by `cron.sh` (run as
   `mail`, like cron) over IMAP and delivered to alice; the logs page shows it;
+- rspamd on fetched mail: the getmail file has the `[filter1]` section; the
+  fetched message arrives with `X-Rspamd-Score` (its report is printed); a
+  fetched GTUBE test message arrives in Junk with the `*****SPAM*****`
+  subject;
 - "Read all" only with "Delete message": off for a new mailbox; with "Delete
   message" off it is refused (HTTP 400, nothing saved), with it on it is
   saved; the comment above `read_all` in the generated file says what it does;

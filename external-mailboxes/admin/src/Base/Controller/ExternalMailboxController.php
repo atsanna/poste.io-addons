@@ -561,7 +561,12 @@ if($data['email_address'] !== '*') {
 [destination]
 " . $this->setupDestination($data) . "
 
-# rspamd filter checks are disabled
+# Every fetched message is scanned by rspamd before delivery (headers, spam
+# subject filed into Junk); if rspamd does not answer it is delivered as it is
+[filter1]
+type = Filter_external
+path = /usr/local/bin/getmail-rspamd
+arguments = (\"" . $data['deliveryto'] . "\",)
 
 [options]
 " . $this->setupOptions($data) . "

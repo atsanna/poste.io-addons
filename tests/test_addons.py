@@ -82,14 +82,60 @@ def external_mailboxes():
     read_all_rule(form)
 
     m = imap(E["BOB"], E["PB"])
-    m.append("INBOX", None, None, b"From: test@example.net\r\nTo: bob@example.test\r\nSubject: Fetched by getmail\r\n\r\nhello\r\n")
+    # a well-formed message: it is scanned by rspamd on the way (rspamd_filter)
+    m.append("INBOX", None, None, b"From: Test Sender <test@example.net>\r\nTo: Bob <bob@example.test>\r\n"
+             b"Subject: Fetched by getmail\r\nDate: Sun, 11 Oct 2026 09:00:00 +0000\r\n"
+             b"Message-ID: <fetched-by-getmail@example.net>\r\nMIME-Version: 1.0\r\n"
+             b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+             b"Hello Bob,\r\n\r\nthis message waits in your mailbox until getmail fetches it and delivers it to Alice.\r\n\r\nTest\r\n")
     m.logout()
     sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 5min")
     check("cron.sh as mail fetches the message and delivers it", wait_for(E["ALICE"], E["PA"], "Fetched by getmail"),
           sh("tail -n 1 /data/log/getmail/getmail.log").strip())
     url, html = ADMIN.get("/admin/external-mailbox-logs/")
     check("the logs page shows the getmail log", "retrieved" in html, url)
+    rspamd_filter()
     getmail_errors(form)
+
+
+def fetched_headers(subject, seconds=60):
+    """Folder and headers of alice's message with this subject, in Junk or INBOX."""
+    for _ in range(seconds // 3):
+        m = imap(E["ALICE"], E["PA"])
+        for folder in ("Junk", "INBOX"):
+            if m.select(folder)[0] != "OK":
+                continue
+            typ, d = m.search(None, '(SUBJECT "%s")' % subject)
+            if d[0]:
+                typ, h = m.fetch(d[0].split()[-1], "(BODY.PEEK[HEADER])")
+                m.logout()
+                return folder, h[0][1].decode(errors="replace")
+        m.logout()
+        time.sleep(3)
+    return None, ""
+
+
+def rspamd_filter():
+    """Fetched mail goes through rspamd before delivery (getmail filter):
+    Haraka's submission, where getmail delivers, does not scan local mail."""
+    cfg = "/data/var/getmail/5min/%s.cfg" % E["BOB"]
+    text = open(cfg).read() if os.path.exists(cfg) else ""
+    check("the getmail file has the rspamd filter",
+          "[filter1]" in text and "path = /usr/local/bin/getmail-rspamd" in text and 'arguments = ("%s",)' % E["ALICE"] in text,
+          re.findall(r"^\[filter1\]$|^path = .*getmail-rspamd$", text, re.M))
+    folder, h = fetched_headers("Fetched by getmail")
+    check("a fetched message is scanned by rspamd (X-Rspamd-Score)", re.search(r"^X-Rspamd-Score: -?[0-9.]+\r?$", h, re.M),
+          "%s: %s" % (folder, re.findall(r"^X-Rspamd-(?:Score|Report): .*$", h, re.M)))
+
+    m = imap(E["BOB"], E["PB"])
+    m.append("INBOX", None, None, b"From: test@example.net\r\nTo: bob@example.test\r\nSubject: Fetched spam\r\n\r\n"
+             b"XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X\r\n")
+    m.logout()
+    sh("cd /data/var/getmail && runuser -u mail -- /data/var/getmail/cron.sh 5min")
+    folder, h = fetched_headers("Fetched spam")
+    check("a fetched spam (GTUBE) is delivered with the spam subject",
+          re.search(r"^Subject: \*\*\*\*\*SPAM\*\*\*\*\* Fetched spam", h, re.M),
+          "%s: %s" % (folder, re.findall(r"^Subject: .*$", h, re.M)))
 
 
 def read_all_rule(form):

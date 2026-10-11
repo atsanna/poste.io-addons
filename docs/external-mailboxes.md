@@ -53,6 +53,27 @@ the Poste.io admin (super admins only): **External Mailboxes** and
   `/data/log/mail.log` (`root:adm`, `0640`), where they also go, and because
   some of them (a configuration getmail cannot read, a crash) never reach
   getmail's own log.
+- **Spam check (rspamd)**: every fetched message is scanned by rspamd before
+  delivery, by a getmail filter (`getmail-rspamd`, in the image). It gets the
+  same `X-Rspamd-Score`, `X-Rspamd-Bar` and `X-Rspamd-Report` headers as mail
+  received over SMTP (existing ones are replaced, so they cannot be forged),
+  and from the score at which Poste.io marks spam (`munge_subject` in
+  Haraka's `quarantine_decide.ini`, 6 by default) the `*****SPAM*****` subject
+  prefix that the mailbox's sieve rule files into **Junk**. Above Poste.io's
+  quarantine score the message goes to Junk too: nothing fetched is held back.
+  Without the filter fetched mail is not scanned at all: getmail delivers
+  through Haraka's local submission socket, where the rspamd plugin skips
+  local connections (`local_ip=false`). The Bayes classifier learns into the
+  bucket of the recipient's domain, like for SMTP mail.
+  **Limits**: the message comes from a mailbox, not from an SMTP client, so
+  the checks on the client's address and name do not apply (the one that would
+  fire on every message, unknown hostname, is switched off), SPF cannot be
+  checked, and DMARC relies on DKIM only (an unsigned message from a domain
+  with a `reject` policy gets `DMARC_POLICY_REJECT`, +2). The remote provider
+  checks SPF and DMARC with the real address when it receives the mail.
+  **If rspamd does not answer** the message is delivered unchanged and the
+  reason is written to the getmail errors (below): mail is never lost or
+  delayed because of the filter.
 - **Translations**: English and Czech, like the rest of the Poste.io admin
   (the browser chooses).
 
