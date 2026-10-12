@@ -82,6 +82,50 @@
         </div>
     </div>
 
+    {% set v = values.verify ?? {'every': 'week', 'weekday': 7, 'monthday': 1, 'hour': 4, 'minute': 0, 'parts': 4} %}
+    <div class="bk-box"><h4><i class="fa fa-check-square-o"></i> {{ 'poste_backup.verify.title'|trans }}</h4>
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-vevery">{{ 'poste_backup.verify.when'|trans }}</label>
+                <select class="form-control" id="bk-vevery" name="verify_every">
+                    {% for e in ['never', 'day', 'week', 'month'] %}<option value="{{ e }}"{% if v.every == e %} selected{% endif %}>{{ ('poste_backup.verify.every_' ~ e)|trans }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group bk-vsched" data-every="week"><label class="control-label" for="bk-vweekday">{{ 'poste_backup.job.weekday'|trans }}</label>
+                <select class="form-control" id="bk-vweekday" name="verify_weekday">
+                    {% for d in weekdays %}<option value="{{ d }}"{% if v.weekday == d %} selected{% endif %}>{{ ('poste_backup.weekday.' ~ d)|trans }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group bk-vsched" data-every="month"><label class="control-label" for="bk-vmonthday">{{ 'poste_backup.job.monthday'|trans }}</label>
+                <select class="form-control" id="bk-vmonthday" name="verify_monthday">
+                    {% for d in 1..28 %}<option value="{{ d }}"{% if v.monthday == d %} selected{% endif %}>{{ d }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group bk-vsched" data-every="day week month"><label class="control-label" for="bk-vhour">{{ 'poste_backup.job.hour'|trans }}</label>
+                <select class="form-control" id="bk-vhour" name="verify_hour">
+                    {% for h in 0..23 %}<option value="{{ h }}"{% if v.hour == h %} selected{% endif %}>{{ '%02d'|format(h) }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group bk-vsched" data-every="day week month"><label class="control-label" for="bk-vminute">{{ 'poste_backup.job.minute'|trans }} <span class="bk-muted">({{ zone }})</span></label>
+                <select class="form-control" id="bk-vminute" name="verify_minute">
+                    {% for m in 0..59 %}<option value="{{ m }}"{% if v.minute == m %} selected{% endif %}>{{ '%02d'|format(m) }}</option>{% endfor %}
+                </select></div>
+            <div class="form-group bk-vsched" data-every="day week month"><label class="control-label" for="bk-vparts">{{ 'poste_backup.verify.parts'|trans }}</label>
+                <select class="form-control" id="bk-vparts" name="verify_parts">
+                    {% for n in partsChoices|merge(v.parts in partsChoices ? [] : [v.parts]) %}<option value="{{ n }}"{% if v.parts == n %} selected{% endif %}>{{ n == 1 ? 'poste_backup.verify.parts_all'|trans : 'poste_backup.verify.parts_n'|trans({'{n}': n}) }}</option>{% endfor %}
+                </select></div>
+        </div>
+        <p class="bk-muted" style="margin:0 0 4px">{{ 'poste_backup.verify.help'|trans }}</p>
+        {% if verifications %}
+        <table class="table table-condensed bk" style="max-width:700px; font-size:13px; margin:6px 0 0">
+            <thead><tr><th>{{ 'poste_backup.verify.last'|trans }}</th><th>{{ 'poste_backup.verify.read'|trans }}</th><th>{{ 'poste_backup.logs.result'|trans }}</th><th class="text-right">{{ 'poste_backup.logs.duration'|trans }}</th></tr></thead>
+            <tbody>
+            {% for l in verifications %}
+                <tr><td>{{ (l.start ?? l.t)|date('Y-m-d H:i') }}</td>
+                    <td>{% if l.part is not null %}{{ l.parts == 1 ? 'poste_backup.verify.parts_all'|trans : 'poste_backup.verify.part'|trans({'{part}': l.part, '{parts}': l.parts}) }}{% endif %}</td>
+                    <td>{% if l.status == 'ok' %}<span class="text-success"><i class="fa fa-check"></i> {{ 'poste_backup.verify.no_errors'|trans }}</span>{% else %}<span class="text-danger"><i class="fa fa-times-circle"></i> {{ l.error }}</span>{% endif %}</td>
+                    <td class="text-right">{{ 'poste_backup.logs.seconds'|trans({'{seconds}': l.duration ?? 0}) }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+
     {# SFTP keys confirmed with the Test button below, saved with the destination #}
     <input type="hidden" name="hostkeys" id="bk-hostkeys" value="">
     <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
@@ -90,6 +134,13 @@
     <span class="bk-muted">&nbsp; {{ 'poste_backup.destination.check_help'|trans }}</span>
 </form>
 <div class="bk-box" id="bk-check-result" style="display:none"></div>
+{% if id %}
+<form method="post" action="{{ path('poste_backup_destination_verify', {id: id}) }}" style="margin:0 0 10px">
+    <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_verify') }}">
+    <button type="submit" class="btn btn-default btn-sm"{% if pendingVerify %} disabled{% endif %}><i class="fa fa-check-square-o"></i> {{ 'poste_backup.verify.now'|trans }}</button>
+    <span class="bk-muted">&nbsp; {{ pendingVerify ? 'poste_backup.verify.pending'|trans : 'poste_backup.verify.now_help'|trans }}</span>
+</form>
+{% endif %}
 
 {% if id %}
 <div class="bk-box"><h4><i class="fa fa-plug"></i> {{ 'poste_backup.destination.test_title'|trans }}</h4>
@@ -159,6 +210,19 @@
     // fixed widths: a select hidden at load would be measured 0 px wide
     $('#bk-type').chosen({width: '320px', disable_search_threshold: 10});
     $('#bk-auth').chosen({width: '160px', disable_search_threshold: 10});
+    // the verification: only the fields its frequency uses
+    $('#bk-vevery').chosen({width: '150px', disable_search_threshold: 10});
+    $('#bk-vweekday').chosen({width: '150px', disable_search_threshold: 10});
+    $('#bk-vmonthday, #bk-vhour, #bk-vminute').chosen({width: '90px', disable_search_threshold: 10});
+    $('#bk-vparts').chosen({width: '280px', disable_search_threshold: 10});
+    function bkVerifySched() {
+        var every = $('#bk-vevery').val();
+        $('.bk-vsched').each(function () {
+            $(this).toggle(($(this).data('every') + '').split(' ').indexOf(every) >= 0);
+        });
+    }
+    $('#bk-vevery').on('change', bkVerifySched);
+    bkVerifySched();
     $('#bk-type, #bk-auth').on('change', bkFields);
     bkFields();
 

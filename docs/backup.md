@@ -102,7 +102,8 @@ Each run of a job:
 3. records the result for the admin (state and history).
 
 A destination that fails does not stop the others. One run at a time: a long
-backup makes the next minutes wait (a lock), it is never started twice.
+backup makes the next minutes wait (a lock), it is never started twice. After
+the jobs due, the engine runs the [verifications](#verification) due.
 
 The result of a run on a destination is **ok**, **warning** or **error**:
 
@@ -213,6 +214,32 @@ write**: the backups are written by the user `mail`, **uid 8, gid 8**. Give the
 folder of the volume to that user (for an NFS export: a directory owned by
 8:8 on the server, and an export that does not squash that user).
 
+### Verification
+
+A backup that cannot be read is found only when it is needed, unless it is
+read before. Each destination is **verified** on a schedule of its own (on its
+page, *Verification*): restic checks the structure of the repository and
+**reads again a part of the stored data**, a different part each time, so
+that everything is read once in a number of verifications. By default:
+**every Sunday at 04:00, a quarter of the data** (all of it read in about four
+weeks). It can be every day, week or month, or never, and from all the data
+each time to 1/52 of it.
+
+A damaged or missing file on the destination is found that way: the check of
+the structure alone does not read the data, the reading does (the tests change
+one byte of a data file on a destination and expect the verification to find
+it). The result shows on the dashboard (*Last verification*, and among the
+problems when it found errors), on the destinations page and on the
+destination's page with the last verifications; *Verify now* runs one at the
+next minute. The first scheduled verification of a new destination is at its
+next slot, not at once. While a verification runs no backup runs: one that is
+due starts right after (restic locks the repository for the check); a
+verification stops after 6 hours at most. A part where errors were found is
+read again at the next verification, until it is clean: the error stays on
+the dashboard until then, it does not disappear because another part was
+fine. A verification that could not run to its end (the destination not
+reachable, for example) is shown as failed and tried again an hour later.
+
 ## Backup jobs
 
 *Mailserver backup > Backup jobs > Add a backup job:*
@@ -264,7 +291,17 @@ restored. They are no longer thinned out by any keep rule: remove them from
   **space on each destination**: what the backups use there and, where the
   server reports it, the free space (S3 does not). The space is measured
   after each backup. The bars of the disk and of the destinations turn
-  **yellow** from 80% used and **red** from 90%.
+  **yellow** from 80% used and **red** from 90%: *Space warnings*, on the
+  destinations page, sets these two limits (they are also the limits of the
+  warnings of the next stage).
+- **Last verification** of each destination, and when the next one is (see
+  [Verification](#verification)).
+- **Statistics**, for the last 30 days, 90 days or year, one value per day:
+  the space used on each destination and on the server's disk (the last
+  measure of the day), the data added by the runs of each job (a run writes
+  the same data to each of its destinations: it counts once) and how long they
+  took. They are drawn from the history of the runs (kept 400 days by default,
+  see below); the space values are there from this version on.
 - The dashboard, the jobs and the logs **update themselves**: every few
   seconds while a job runs, every 15 seconds otherwise; the page reloads when
   a job starts or ends.
@@ -758,7 +795,8 @@ add-on.
     ssh/<id>, <id>.pub                    key pairs of SFTP destinations
   engine/                                 (the engine)
     state.json                            last run of each job, last restores and removals
-    history.jsonl                         one line per run and destination
+    history.jsonl                         one line per run and destination (with the space
+                                          used there and on /data), and per verification
     logs/                                 log of each run (kept for the days set in the admin)
     index.db                              the list of the messages of the backups (0600)
     staging/                              consistent copies of the databases, during a run
@@ -787,6 +825,9 @@ something that is not a folder owned by root.
 - **One repository per server**: do not point two mail servers to the same
   folder.
 - No notifications yet: they come with the next stages.
+- The statistics are per day; a destination that the mail server may only
+  add to (old snapshots removed on the destination's side) comes with the
+  next stage.
 - A mailbox is restored into a new folder: whole, some of its folders, the
   messages of a filter (dates, sender, subject), or up to 1,000 single
   messages at a time chosen from a list. The whole server is restored from

@@ -96,14 +96,22 @@ final class Panel
     }
 
     /**
-     * Asks the engine to restore a mailbox or to remove the backups of a job
+     * Asks the engine to restore a mailbox, to remove the backups of a job or to verify a destination
      * (at its next minute). $fields are checked by the engine again. Returns the
      * id of the request (its log and its result have it), or null.
      */
     public static function requestTask(string $type, array $fields): ?string
     {
-        if (!in_array($type, ['restore', 'forget'], true) || !empty(Engine::task($type, $fields)['invalid'])) {
+        if (!in_array($type, ['restore', 'forget', 'verify'], true) || !empty(Engine::task($type, $fields)['invalid'])) {
             return null;
+        }
+        // a verification already waiting for the same destination is that request (a double click is one verification)
+        if ($type === 'verify') {
+            foreach (self::pendingTasks() as $id => $p) {
+                if ($p['type'] === 'verify' && ($p['dest'] ?? null) === $fields['dest']) {
+                    return $id;
+                }
+            }
         }
         $id = Config::newId();
         // the time first: the engine runs the requests in the order they were made
@@ -116,7 +124,7 @@ final class Panel
     {
         $out = [];
         foreach (@scandir(Store::QUEUE) ?: [] as $f) {
-            if (preg_match('/^\d{10}-(restore|forget)-([a-f0-9]{12})\.json$/', $f, $m)) {
+            if (preg_match('/^\d{10}-(restore|forget|verify)-([a-f0-9]{12})\.json$/', $f, $m)) {
                 $out[$m[2]] = (Store::readJson(Store::QUEUE . '/' . $f) ?? []) + ['type' => $m[1]];
             }
         }
@@ -311,6 +319,113 @@ final class Panel
         // Dovecot keeps non-ASCII names in modified UTF-7, and "." between levels
         $name = @mb_convert_encoding(substr($key, 1), 'UTF-8', 'UTF7-IMAP');
         return str_replace('.', ' / ', is_string($name) && $name !== '' ? $name : substr($key, 1));
+    }
+
+    // ------------------------------------------------------------- statistics
+
+    /**
+     * The four charts of the dashboard, one value per day of the last $days
+     * days (in the time zone of the backups), from the history lines of the
+     * backups: the space used on each destination and on /data (the last
+     * measure of the day), the data added by each job (a run writes the same
+     * data to each of its destinations: its largest number counts) and how
+     * long its runs took (from the start of the run to the end of its last
+     * destination; lines written before that was recorded: the sum of the
+     * destinations). $lines: an array or historyLines().
+     * Returns ['labels' => [...], 'used' => [[name, values], ...], 'added' => ...,
+     * 'duration' => ..., 'disk' => [values], 'diskTotal' => bytes or null].
+     */
+    public static function statistics(iterable $lines, array $cfg, \DateTimeZone $tz, int $days, int $now): array
+    {
+        $first = (new \DateTimeImmutable('@' . $now))->setTimezone($tz)->setTime(0, 0)->modify('-' . ($days - 1) . ' days');
+        $labels = $index = [];
+        for ($i = 0; $i < $days; $i++) {
+            $day = $first->modify("+$i days");
+            $index[$day->format('Y-m-d')] = $i;
+            $labels[] = $day->format($days > 90 ? 'Y-m-d' : 'm-d');
+        }
+        $used = $runs = [];
+        $disk = array_fill(0, $days, null);
+        $diskTotal = null;
+        foreach ($lines as $l) {
+            if (!is_array($l) || ($l['kind'] ?? 'backup') !== 'backup' || !is_string($l['job'] ?? null) || !is_string($l['dest'] ?? null)) {
+                continue;
+            }
+            $t = (int) ($l['start'] ?? $l['t'] ?? 0);
+            $day = (new \DateTimeImmutable('@' . $t))->setTimezone($tz)->format('Y-m-d');
+            if (!isset($index[$day])) {
+                continue;
+            }
+            $i = $index[$day];
+            if (is_int($l['dest_used'] ?? null)) {
+                $used[$l['dest']][$i] = $l['dest_used'];
+            }
+            if (is_int($l['disk_used'] ?? null)) {
+                $disk[$i] = $l['disk_used'];
+                $diskTotal = is_int($l['disk_total'] ?? null) ? $l['disk_total'] : $diskTotal;
+            }
+            // one run of a job: the lines of its destinations share its log
+            $run = $l['job'] . '|' . (is_string($l['log'] ?? null) ? $l['log'] : $t);
+            $runs[$run] = ['job' => $l['job'], 'i' => $runs[$run]['i'] ?? $i,
+                           'added' => max($runs[$run]['added'] ?? 0, (int) ($l['added'] ?? 0)),
+                           'sum' => ($runs[$run]['sum'] ?? 0) + (int) ($l['duration'] ?? 0),
+                           'start' => is_int($l['run_start'] ?? null) ? $l['run_start'] : ($runs[$run]['start'] ?? null),
+                           'end' => max($runs[$run]['end'] ?? 0, (int) ($l['t'] ?? 0))];
+        }
+        $added = $duration = [];
+        foreach ($runs as $r) {
+            $added[$r['job']][$r['i']] = ($added[$r['job']][$r['i']] ?? 0) + $r['added'];
+            $d = $r['start'] !== null && $r['end'] >= $r['start'] ? $r['end'] - $r['start'] : $r['sum'];
+            $duration[$r['job']][$r['i']] = ($duration[$r['job']][$r['i']] ?? 0) + $d;
+        }
+        $series = function (array $by, array $names, $empty) use ($days) {
+            $out = [];
+            foreach ($by as $key => $values) {
+                $data = array_fill(0, $days, $empty);
+                foreach ($values as $i => $v) {
+                    $data[$i] = $v;
+                }
+                $out[] = ['name' => $names[$key] ?? null, 'id' => (string) $key, 'data' => $data];
+            }
+            usort($out, function ($a, $b) {
+                return strcmp((string) $a['name'], (string) $b['name']);
+            });
+            return $out;
+        };
+        $destNames = array_map(function ($d) {
+            return $d['name'];
+        }, $cfg['destinations']);
+        $jobNames = array_map(function ($j) {
+            return $j['name'];
+        }, $cfg['jobs']);
+        return ['labels' => $labels, 'used' => $series($used, $destNames, null), 'added' => $series($added, $jobNames, 0),
+                'duration' => $series($duration, $jobNames, 0), 'disk' => $disk, 'diskTotal' => $diskTotal];
+    }
+
+    /**
+     * The lines of the history written since $since, read one at a time (a
+     * year of hourly jobs is tens of thousands of lines: only the ones in the
+     * period are decoded, and none is kept).
+     */
+    public static function historyLines(string $path, int $since): \Generator
+    {
+        $f = is_file($path) && !is_link($path) ? @fopen($path, 'r') : false;
+        if (!$f) {
+            return;
+        }
+        try {
+            while (($line = fgets($f)) !== false) {
+                if (preg_match('/"t":(\d+)/', $line, $m) === 1 && (int) $m[1] < $since) {
+                    continue;
+                }
+                $l = json_decode($line, true);
+                if (is_array($l)) {
+                    yield $l;
+                }
+            }
+        } finally {
+            fclose($f);
+        }
     }
 
     // ------------------------------------------------------------- mailboxes

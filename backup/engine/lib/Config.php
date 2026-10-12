@@ -17,6 +17,13 @@ final class Config
 {
     public const TYPES = ['local', 'sftp', 'smb', 's3'];
     public const EVERY = ['hour', 'day', 'week', 'month'];
+    public const VERIFY_EVERY = ['never', 'day', 'week', 'month'];
+    /** A verification of a destination when none is set: every Sunday at 04:00, a quarter of the data each time. */
+    public const VERIFY_DEFAULT = ['every' => 'week', 'weekday' => 7, 'monthday' => 1, 'hour' => 4, 'minute' => 0, 'parts' => 4];
+    public const MAX_PARTS = 52;
+    /** Used space from which the bars turn yellow and red (and, later, the warnings), in percent. */
+    public const SPACE_WARN = 80;
+    public const SPACE_FULL = 90;
     public const KEEP = ['hourly', 'daily', 'weekly', 'monthly'];
     public const MAIL = ['none', 'all', 'selected'];
 
@@ -35,7 +42,8 @@ final class Config
     /** An empty configuration. */
     public static function empty(): array
     {
-        return ['version' => 1, 'settings' => ['timezone' => '', 'log_days' => self::LOG_DAYS, 'history_days' => self::HISTORY_DAYS],
+        return ['version' => 1, 'settings' => ['timezone' => '', 'log_days' => self::LOG_DAYS, 'history_days' => self::HISTORY_DAYS,
+                                               'space_warn' => self::SPACE_WARN, 'space_full' => self::SPACE_FULL],
                 'destinations' => [], 'jobs' => []];
     }
 
@@ -81,6 +89,16 @@ final class Config
                 continue;
             }
             $out['settings'][$k] = $v;
+        }
+        // the space warnings: both or none (a missing pair is the default)
+        if (array_key_exists('space_warn', (array) ($raw['settings'] ?? [])) || array_key_exists('space_full', (array) ($raw['settings'] ?? []))) {
+            [$warn, $full, $e] = self::spaceWarnings($raw['settings']['space_warn'] ?? null, $raw['settings']['space_full'] ?? null);
+            if ($e) {
+                $errors = array_merge($errors, $e);
+            } else {
+                $out['settings']['space_warn'] = $warn;
+                $out['settings']['space_full'] = $full;
+            }
         }
 
         $dests = is_array($raw['destinations'] ?? null) ? $raw['destinations'] : [];
@@ -179,8 +197,41 @@ final class Config
                 $out['secret_key'] = self::secret($d['secret_key'] ?? null, 'secret key', $e);
                 break;
         }
+        $out['verify'] = self::verify($d['verify'] ?? null, $e);
 
         return [$e ? null : $out, $e];
+    }
+
+    /** When a destination is verified and how much of its data is read each time; missing = VERIFY_DEFAULT. */
+    public static function verify($v, array &$e): array
+    {
+        if ($v === null) {
+            return self::VERIFY_DEFAULT;
+        }
+        if (!is_array($v) || !in_array($v['every'] ?? null, self::VERIFY_EVERY, true)) {
+            $e[] = 'verification: unknown frequency';
+            return self::VERIFY_DEFAULT;
+        }
+        return [
+            'every' => $v['every'],
+            'weekday' => self::int($v['weekday'] ?? 7, 1, 7, 'weekday', $e),
+            'monthday' => self::int($v['monthday'] ?? 1, 1, 28, 'day of the month', $e),
+            'hour' => self::int($v['hour'] ?? 4, 0, 23, 'hour', $e),
+            'minute' => self::int($v['minute'] ?? 0, 0, 59, 'minute', $e),
+            'parts' => self::int($v['parts'] ?? 4, 1, self::MAX_PARTS, 'parts of the data', $e),
+        ];
+    }
+
+    /** The two space warnings, checked together. Returns [yellow, red, errors]. */
+    public static function spaceWarnings($warn, $full): array
+    {
+        $e = [];
+        $w = self::int($warn, 1, 99, 'yellow from', $e);
+        $f = self::int($full, 1, 99, 'red from', $e);
+        if (!$e && $w >= $f) {
+            $e[] = 'space warnings: yellow must start below red';
+        }
+        return [$w, $f, $e];
     }
 
     /**

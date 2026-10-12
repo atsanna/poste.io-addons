@@ -73,6 +73,9 @@ class PosteBackupController extends AbstractController
         foreach ($found as $name => $value) {
             if ($name === 'list') {
                 $value = $this->msg($value);
+            } elseif ($name === 'detail' && Messages::match($value) !== null) {
+                // a message of ours inside another one ("verification failed: not reachable: ...")
+                $value = $this->msg($value);
             } elseif ($name === 'field') {
                 $value = $this->t('poste_backup.fieldname.' . Messages::FIELDS[$value]);
             }
@@ -131,10 +134,14 @@ class PosteBackupController extends AbstractController
             // a request of the admin: a restore or a removal
             $dest = $run['dest'] ?? null;
             $destName = $dest !== null ? ($cfg['destinations'][$dest]['name'] ?? $dest) : '';
-            $detail = $run['type'] === 'restore'
-                ? $this->t('poste_backup.live.restore_' . (in_array($run['phase'] ?? '', ['restore', 'import'], true) ? $run['phase'] : 'prepare'),
-                    ['{source}' => (string) ($run['source'] ?? ''), '{target}' => (string) ($run['target'] ?? ''), '{destination}' => $destName])
-                : $this->t('poste_backup.live.forget', ['{destination}' => $destName]);
+            if ($run['type'] === 'restore') {
+                $detail = $this->t('poste_backup.live.restore_' . (in_array($run['phase'] ?? '', ['restore', 'import'], true) ? $run['phase'] : 'prepare'),
+                    ['{source}' => (string) ($run['source'] ?? ''), '{target}' => (string) ($run['target'] ?? ''), '{destination}' => $destName]);
+            } elseif ($run['type'] === 'verify') {
+                $detail = $this->t('poste_backup.live.verify', ['{destination}' => $destName]);
+            } else {
+                $detail = $this->t('poste_backup.live.forget', ['{destination}' => $destName]);
+            }
             $live['running'] = [
                 'job' => null,
                 'detail' => $detail,
@@ -196,6 +203,31 @@ class PosteBackupController extends AbstractController
         return $out;
     }
 
+    /** The last verification of each destination and the next one, for the pages. */
+    private function verifications(array $cfg, array $state): array
+    {
+        $out = [];
+        foreach ($cfg['destinations'] as $did => $d) {
+            $v = $state['verify'][$did] ?? null;
+            $v = is_array($v) && isset($v['t']) ? $v : null;
+            if ($v !== null) {
+                $v['error'] = $this->msg(is_string($v['error'] ?? null) ? $v['error'] : null);
+                $v['note'] = $this->msg(is_string($v['note'] ?? null) ? $v['note'] : null);
+            }
+            $out[$did] = ['last' => $v, 'next' => $d['verify']['every'] === 'never' ? null : Schedule::nextSlot($d['verify'], time(), $this->zone())];
+        }
+        return $out;
+    }
+
+    /** The class of a space bar: yellow or red from the thresholds set in the admin. */
+    private static function level(?int $percent, array $settings): string
+    {
+        if ($percent === null) {
+            return '';
+        }
+        return $percent >= $settings['space_full'] ? 'bk-full' : ($percent >= $settings['space_warn'] ? 'bk-warn' : '');
+    }
+
     private function csrf(Request $request, string $id): bool
     {
         if ($this->isCsrfTokenValid($id, $request->request->get('_token'))) {
@@ -210,7 +242,7 @@ class PosteBackupController extends AbstractController
     /**
      * @Route("/", name="poste_backup", methods={"GET"})
      */
-    public function dashboardAction()
+    public function dashboardAction(Request $request)
     {
         $cfg = Panel::config();
         $state = Panel::state();
@@ -259,6 +291,16 @@ class PosteBackupController extends AbstractController
         if ($downloaded === null) {
             $problems[] = $this->t('poste_backup.problem.key');
         }
+        $verify = $this->verifications($cfg, $state);
+        foreach ($verify as $did => $v) {
+            if (($v['last']['status'] ?? 'ok') === 'error') {
+                $problems[] = $this->t('poste_backup.problem.verify', ['{destination}' => $cfg['destinations'][$did]['name'],
+                                                                      '{error}' => $v['last']['error']]);
+            }
+        }
+        $days = (int) $request->query->get('days', '30');
+        $days = in_array($days, [30, 90, 365], true) ? $days : 30;
+        $stats = Panel::statistics(Panel::historyLines(Store::HISTORY, $now - ($days + 1) * 86400), $cfg, $tz, $days, $now);
 
         $total = @disk_total_space('/data');
         $free = @disk_free_space('/data');
@@ -276,9 +318,15 @@ class PosteBackupController extends AbstractController
             'destProblems' => $destProblems,
             'disk' => ['total' => $total ?: 0, 'free' => $free ?: 0,
                        'freeText' => Panel::size((int) $free), 'totalText' => Panel::size((int) $total),
-                       'usedPercent' => $total ? (int) round(100 * ($total - $free) / $total) : 0],
+                       'usedPercent' => $total ? (int) round(100 * ($total - $free) / $total) : 0,
+                       'level' => self::level($total ? (int) round(100 * ($total - $free) / $total) : 0, $cfg['settings'])],
             'live' => $this->live($cfg, $state),
-            'space' => $this->space($cfg, $state),
+            'space' => array_map(function ($sp) use ($cfg) {
+                return $sp === null ? null : $sp + ['level' => self::level($sp['usedPercent'], $cfg['settings'])];
+            }, $this->space($cfg, $state)),
+            'verify' => $verify,
+            'stats' => $stats,
+            'days' => $days,
             'next' => $next,
             'keyDownloaded' => $downloaded,
         ]);
@@ -361,12 +409,60 @@ class PosteBackupController extends AbstractController
      */
     public function destinationsAction()
     {
+        $cfg = Panel::config();
         return $this->render('Base/PosteBackup/destinations.html.twig', [
-            'destinations' => Panel::config()['destinations'],
+            'destinations' => $cfg['destinations'],
             'tests' => array_map([$this, 'testShown'], Panel::tests()),
-            'used' => $this->destinationsInUse(Panel::config()),
-            'space' => $this->space(Panel::config(), Panel::state()),
+            'used' => $this->destinationsInUse($cfg),
+            'space' => $this->space($cfg, Panel::state()),
+            'verify' => $this->verifications($cfg, Panel::state()),
+            'settings' => $cfg['settings'],
         ]);
+    }
+
+    /**
+     * The space warnings (yellow and red from a percentage of used space).
+     *
+     * @Route("/settings/space", name="poste_backup_space_settings", methods={"POST"})
+     */
+    public function spaceSettingsAction(Request $request)
+    {
+        if ($this->csrf($request, 'poste_backup_space')) {
+            $p = $request->request;
+            $int = function (string $k) use ($p) {
+                $v = trim((string) $p->get($k, ''));
+                return ctype_digit($v) ? (int) $v : -1;
+            };
+            [$warn, $full, $errors] = Config::spaceWarnings($int('space_warn'), $int('space_full'));
+            $err = $errors ? implode('; ', $errors) : Panel::update(function (array $c) use ($warn, $full) {
+                $c['settings']['space_warn'] = $warn;
+                $c['settings']['space_full'] = $full;
+                return $c;
+            });
+            if ($err !== null) {
+                $this->addFlash('error', $this->msg($err));
+            } else {
+                $this->addFlash('notice', $this->t('poste_backup.destinations.space_saved'));
+            }
+        }
+        return $this->redirectToRoute('poste_backup_destinations');
+    }
+
+    /**
+     * Verify now: a request to the engine (it starts within a minute).
+     *
+     * @Route("/destinations/{id}/verify", name="poste_backup_destination_verify", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
+     */
+    public function destinationVerifyAction(Request $request, string $id)
+    {
+        if (!isset(Panel::config()['destinations'][$id])) {
+            throw $this->createNotFoundException();
+        }
+        if ($this->csrf($request, 'poste_backup_verify')) {
+            $tid = Panel::requestTask('verify', ['dest' => $id]);
+            $this->addFlash($tid ? 'notice' : 'error', $this->t($tid ? 'poste_backup.destination.verify_queued' : 'poste_backup.job.queue_error'));
+        }
+        return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
     }
 
     private function destinationsInUse(array $cfg): array
@@ -391,7 +487,7 @@ class PosteBackupController extends AbstractController
         if ($id !== null && $old === null) {
             throw $this->createNotFoundException();
         }
-        $values = $old ?? ['type' => 'smb', 'port' => 22, 'auth' => 'password'];
+        $values = $old ?? ['type' => 'smb', 'port' => 22, 'auth' => 'password', 'verify' => Config::VERIFY_DEFAULT];
         $errors = [];
 
         if ($request->isMethod('POST')) {
@@ -431,7 +527,30 @@ class PosteBackupController extends AbstractController
             'scan' => $id ? $session->get('poste_backup_scan_' . $id) : null,
             'publicKey' => $id ? Panel::publicKey($id) : null,
             'localRoots' => Config::LOCAL_ROOTS,
+            'weekdays' => [1, 2, 3, 4, 5, 6, 7],
+            'partsChoices' => [1, 2, 4, 8, 12, 26, 52],
+            'zone' => $this->zone()->getName(),
+            'verifications' => $id ? $this->verificationsOf($id) : [],
+            'pendingVerify' => $id ? in_array($id, array_column(array_filter(Panel::pendingTasks(), function ($t) {
+                return $t['type'] === 'verify';
+            }), 'dest'), true) : false,
         ]);
+    }
+
+    /** The last verifications of a destination, newest first, from the history. */
+    private function verificationsOf(string $id): array
+    {
+        $out = [];
+        foreach (array_reverse(Store::tailJsonLines(Store::HISTORY, 5000)) as $l) {
+            if (($l['kind'] ?? '') === 'verify' && ($l['dest'] ?? '') === $id) {
+                $l['error'] = $this->msg(is_string($l['error'] ?? null) ? $l['error'] : null);
+                $out[] = $l;
+                if (count($out) >= 5) {
+                    break;
+                }
+            }
+        }
+        return $out;
     }
 
     /**
@@ -485,6 +604,14 @@ class PosteBackupController extends AbstractController
         $p = $request->request;
         $type = (string) $p->get('type', '');
         $d = ['name' => trim((string) $p->get('name', '')), 'type' => $type];
+        $int = function (string $k) use ($p) {
+            $v = trim((string) $p->get($k, ''));
+            return ctype_digit($v) ? (int) $v : -1;
+        };
+        // a form without the verification fields (an older page) keeps what is saved
+        $d['verify'] = $p->has('verify_every') ? ['every' => (string) $p->get('verify_every'), 'weekday' => $int('verify_weekday'),
+            'monthday' => $int('verify_monthday'), 'hour' => $int('verify_hour'), 'minute' => $int('verify_minute'),
+            'parts' => $int('verify_parts')] : ($old['verify'] ?? null);
         $str = function (string $k) use ($p) {
             return trim((string) $p->get($k, ''));
         };

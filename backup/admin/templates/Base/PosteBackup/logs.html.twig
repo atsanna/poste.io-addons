@@ -20,12 +20,12 @@
                 {% else %}<span class="glyphicon glyphicon-remove text-danger"></span>{% endif %}</td>
             <td style="white-space:nowrap">{{ (r.start ?? r.t)|date('Y-m-d H:i') }}
                 <br><span class="bk-muted">{{ ('poste_backup.logs.reason_' ~ (r.reason == 'schedule' ? 'schedule' : 'manual'))|trans }}</span></td>
-            <td>{{ jobs[r.job].name ?? r.job }}</td>
+            <td>{% if (r.kind ?? '') == 'verify' %}<i class="fa fa-check-square-o"></i> {{ 'poste_backup.verify.title'|trans }}{% else %}{{ jobs[r.job].name ?? r.job }}{% endif %}</td>
             <td>{{ destinations[r.dest].name ?? r.dest }}</td>
             <td>{% if r.status == 'ok' %}<span class="text-success">{{ 'poste_backup.status.ok'|trans }}</span>
                 {% else %}<span class="{{ r.status == 'warning' ? 'text-warning' : 'text-danger' }}">{{ r.error }}</span>{% endif %}
                 {% if r.note %}<br><span class="bk-muted">{{ r.note }}</span>{% endif %}</td>
-            <td class="text-right" style="white-space:nowrap">{% if r.status != 'error' %}{{ 'poste_backup.logs.size_mb'|trans({'{size}': ((r.added ?? 0) / 1048576)|round(1)}) }}
+            <td class="text-right" style="white-space:nowrap">{% if r.status != 'error' and (r.kind ?? '') != 'verify' %}{{ 'poste_backup.logs.size_mb'|trans({'{size}': ((r.added ?? 0) / 1048576)|round(1)}) }}
                 <br><span class="bk-muted">{{ 'poste_backup.logs.files'|trans({'{count}': r.files ?? 0}) }}</span>{% endif %}</td>
             <td class="text-right" style="white-space:nowrap">{{ 'poste_backup.logs.seconds'|trans({'{seconds}': r.duration ?? 0}) }}</td>
             <td class="text-right">{% if r.log %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_log', {name: r.log}) }}"><i class="fa fa-file-text-o"></i> {{ 'poste_backup.jobs.log'|trans }}</a>{% endif %}</td>

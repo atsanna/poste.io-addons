@@ -31,6 +31,7 @@ poste_backup:
     destinations_summary: "{count} destination(s), {problems} with problems at the last test"
     jobs_summary: "{count} job(s)"
     next: "next: {time}"
+    last_verification: "Last verification"
   problem:
     start: "At the last start of the container the backup folder could not be prepared: {error}"
     config: "A setting is not valid and is ignored: {error}"
@@ -38,6 +39,7 @@ poste_backup:
     engine_never: The backup engine has not run yet (it runs every minute, from cron)
     job: "{job} on {destination}: {error}"
     key: "The encryption key was never downloaded: without it no backup can be read if this server is lost"
+    verify: "Verification of {destination}: {error}"
   type:
     local: Folder (volume mounted by the host, e.g. NFS)
     sftp: SFTP
@@ -76,6 +78,11 @@ poste_backup:
     used_by: Used by
     delete_confirm: Delete this destination? The backups already there are not deleted.
     help: "Every job writes a full, encrypted copy to each of its destinations. A destination is a folder on an SMB share, an SFTP server or an S3 bucket, or a volume mounted into the container by the host (NFS, a second disk)."
+    space_title: "Space warnings"
+    space_warn: "Yellow from"
+    space_full: "Red from"
+    space_help: "Used space of the server disk (/data) and of every destination. The bars of the dashboard take these colours; with the notifications (next stage) they will also be the limits of the warnings."
+    space_saved: "Space warnings saved."
   destination:
     key_help: "The key pair is made by the admin when the destination is saved: its public key is then shown on this page, to be added on the server."
     pubkey_command: "Or run this command on {host}, logged in as {user}: it creates the folder .ssh if needed and adds the key with the right permissions."
@@ -113,6 +120,7 @@ poste_backup:
     check_save_first: "With a key login the key pair is made when the destination is saved: save it, add the public key on the server, then test."
     check_trust: "These are the server's keys: trust them and test"
     check_failed: "The test could not be run: reload the page and try again."
+    verify_queued: "Verification requested: the engine starts it within a minute (after a backup that is running)."
   jobs:
     log: "log"
     title: Backup jobs
@@ -208,6 +216,7 @@ poste_backup:
     restore_import: "importing into a new folder of {target}"
     forget: "removing the backups of a job from {destination}"
     task_since: "Request of the admin, since {since}"
+    verify: "verifying the backups on {destination}"
   snapshots:
     title: "Snapshots and restore"
     summary: "every backup, restore a mailbox"
@@ -305,6 +314,7 @@ poste_backup:
     restore_n_other: "Restore %n% messages"
     too_many_chosen: "Up to {max, number} messages at a time: choose fewer, or restore folders with a filter."
     summary_messages: "The messages chosen go into a new folder «{folder}» of {mailbox} (with \" (2)\" if that name is taken), in their folders and with their flags. Nothing already in the mailbox is changed."
+    task_verify: "Verification of {destination}"
   logs:
     keep_title: "Keeping the logs"
     keep_logs: "Logs of the runs, for"
@@ -352,6 +362,9 @@ poste_backup:
     keep_monthly: "keep monthly"
     notify_success: "notify on success"
     created: "created"
+    verify_parts: "parts of the data"
+    space_warn: "yellow from"
+    space_full: "red from"
   msg:
     not_object: "not an object"
     settings_not_object: "the settings file is not a JSON object"
@@ -461,8 +474,49 @@ poste_backup:
     message_invalid: "message: not valid"
     message_not_in_snapshot: "a chosen message is not in this snapshot"
     list_read: "cannot read the list of the messages: {detail}"
+    verify_failed: "verification failed: {detail}"
+    verify_errors: "the verification found errors: {detail}"
+    verify_nothing: "there are no backups on this destination yet: nothing to verify"
+    verify_ok_all: "the structure and all the data: no errors"
+    verify_ok_part: "the structure and part {part} of {parts} of the data: no errors"
+    verify_every: "verification: unknown frequency"
+    space_order: "space warnings: yellow must start below red"
   settings:
     timezone: "Time zone of the schedules"
     timezone_container: "the container's ({zone})"
     timezone_saved: "Time zone saved"
     timezone_help: "It decides when the jobs run and the times shown in these pages; the logs of the server are not changed. A job whose time in the new zone has already passed today may run once, at the next minute."
+  verify:
+    title: "Verification"
+    when: "Verify"
+    every_never: "never"
+    every_day: "every day"
+    every_week: "every week"
+    every_month: "every month"
+    parts: "Data read each time"
+    parts_all: "all of it, every time"
+    parts_n: "1/{n} – all of it every {n} verifications"
+    part: "part {part} of {parts}"
+    help: "Each verification checks the structure of the backups and reads again a part of the stored data, a different part each time: a damaged file on the destination is found. While it runs no backup runs; one that is due starts right after."
+    last: "Last verifications"
+    read: "Data read"
+    no_errors: "no errors"
+    now: "Verify now"
+    now_help: "with the saved settings; the result shows here and on the dashboard"
+    pending: "a verification is waiting for the engine"
+    never_yet: "not verified yet"
+    next: "next {time}"
+    off: "verification off"
+  stats:
+    title: "Statistics"
+    days_30: "30 days"
+    days_90: "90 days"
+    days_365: "1 year"
+    used: "Space used on each destination"
+    added: "Data added by the runs of each job"
+    duration: "Duration of the runs of each job"
+    disk: "Server disk (/data) used"
+    deleted_job: "deleted job ({id})"
+    deleted_dest: "deleted destination ({id})"
+    used_of: "used of {total}"
+    none: "no data yet"

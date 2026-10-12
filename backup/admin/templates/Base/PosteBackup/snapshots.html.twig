@@ -82,6 +82,7 @@
     {% for id, p in pending %}
         <p class="text-info"><i class="fa fa-hourglass-half"></i> {{ 'poste_backup.snapshots.pending'|trans }}:
             {% if p.type == 'restore' %}{{ 'poste_backup.snapshots.task_restore'|trans({'{source}': p.source ?? '', '{target}': p.target ?? ''}) }}
+            {% elseif p.type == 'verify' %}{{ 'poste_backup.snapshots.task_verify'|trans({'{destination}': destinations[p.dest ?? ''].name ?? (p.dest ?? '')}) }}
             {% else %}{{ 'poste_backup.snapshots.task_forget'|trans({'{job}': jobs[p.job ?? ''].name ?? (p.job ?? '')}) }}{% endif %}
             &middot; {{ destinations[p.dest ?? ''].name ?? (p.dest ?? '') }}</p>
     {% endfor %}
@@ -90,6 +91,7 @@
             {% if t.status == 'ok' %}<span class="glyphicon glyphicon-ok text-success"></span>{% else %}<span class="glyphicon glyphicon-remove text-danger"></span>{% endif %}
             {{ t.start|date('Y-m-d H:i') }} &middot;
             {% if t.type == 'restore' %}{{ 'poste_backup.snapshots.task_restore'|trans({'{source}': t.source ?? '?', '{target}': t.target ?? '?'}) }}
+            {% elseif t.type == 'verify' %}{{ 'poste_backup.snapshots.task_verify'|trans({'{destination}': destinations[t.dest ?? ''].name ?? (t.dest ?? '?')}) }}
             {% else %}{{ 'poste_backup.snapshots.task_forget'|trans({'{job}': jobs[t.job ?? ''].name ?? (t.job ?? '?')}) }}{% endif %}
             &middot; {{ destinations[t.dest ?? ''].name ?? (t.dest ?? '?') }}
             {% if t.log %}<a href="{{ path('poste_backup_log', {name: t.log}) }}" style="font-size:12px">{{ 'poste_backup.jobs.log'|trans }}</a>{% endif %}

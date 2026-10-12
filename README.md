@@ -117,7 +117,10 @@ devices must resync once)
 - Made with [restic](https://restic.net): encrypted before leaving the
   server, deduplicated and compressed, so frequent backups store only what
   changed; keep rules per job (hourly, daily, weekly, monthly).
-- Live progress, the log of every run, the space on each destination.
+- Live progress, the log of every run, the space on each destination (yellow
+  and red from limits you set), **statistics** over 30 days to a year, and a
+  scheduled **verification** of each destination that reads the stored data
+  again, a part at a time.
 - **Restore a mailbox from the admin** into a new folder of the same or
   another mailbox: whole, some folders, the messages of a filter (dates,
   sender, subject), or **single messages** found in a searchable list;

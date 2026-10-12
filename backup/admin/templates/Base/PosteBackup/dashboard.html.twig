@@ -17,7 +17,7 @@
 
 <div class="bk-status">
     <div class="bk-card"><h4><i class="fa fa-hdd-o"></i> {{ 'poste_backup.dashboard.disk'|trans }}</h4>
-        <div class="bk-bar"><span class="{{ disk.usedPercent >= 90 ? 'bk-full' : (disk.usedPercent >= 80 ? 'bk-warn' : '') }}" style="width: {{ disk.usedPercent }}%"></span></div>
+        <div class="bk-bar"><span class="{{ disk.level }}" style="width: {{ disk.usedPercent }}%"></span></div>
         {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': disk.freeText, '{total}': disk.totalText}) }}</div>
     <div class="bk-card"><h4><i class="fa fa-clock-o"></i> {{ 'poste_backup.dashboard.last_backups'|trans }}</h4>
         {% for job in jobs %}
@@ -36,6 +36,22 @@
         {% endfor %}
     </div>
     {% if destinations %}
+    <div class="bk-card" id="bk-verify-card"><h4><i class="fa fa-check-square-o"></i> {{ 'poste_backup.dashboard.last_verification'|trans }}</h4>
+        {% for did, d in destinations %}
+            {% set v = verify[did] ?? null %}{% set last = v.last ?? null %}
+            {% if last is null %}
+                <span class="bk-muted">{{ d.name }}: {{ 'poste_backup.verify.never_yet'|trans }}</span>
+            {% elseif last.status == 'ok' %}
+                <span class="text-success"><i class="fa fa-check"></i> {{ d.name }}: {{ last.t|date('Y-m-d H:i') }}</span>
+            {% else %}
+                <span class="text-danger"><i class="fa fa-times-circle"></i> {{ d.name }}: {{ last.t|date('Y-m-d H:i') }}</span>
+            {% endif %}
+            <br><span class="bk-muted">{% if last is not null %}{{ last.status == 'ok' ? last.note : last.error }}{% if v.next %} &middot; {% endif %}{% endif %}
+                {%- if v.next %}{{ 'poste_backup.verify.next'|trans({'{time}': v.next|date('Y-m-d H:i')}) }}{% elseif d.verify.every == 'never' %}{{ 'poste_backup.verify.off'|trans }}{% endif %}</span><br>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if destinations %}
     <div class="bk-card"><h4><i class="fa fa-folder-open-o"></i> {{ 'poste_backup.dashboard.space'|trans }}</h4>
         {% for did, d in destinations %}
             {% set sp = space[did] ?? null %}
@@ -43,7 +59,7 @@
             {% if sp is null %}
                 <span class="bk-muted">{{ 'poste_backup.dashboard.space_unknown'|trans }}</span>
             {% else %}
-                {% if sp.usedPercent is not null %}<div class="bk-bar"><span class="{{ sp.usedPercent >= 90 ? 'bk-full' : (sp.usedPercent >= 80 ? 'bk-warn' : '') }}" style="width: {{ sp.usedPercent }}%"></span></div>{% endif %}
+                {% if sp.usedPercent is not null %}<div class="bk-bar"><span class="{{ sp.level }}" style="width: {{ sp.usedPercent }}%"></span></div>{% endif %}
                 {% if sp.used is not null %}{{ 'poste_backup.dashboard.space_used'|trans({'{used}': sp.used}) }}{% endif %}
                 {% if sp.free is not null and sp.total is not null %} &middot; {{ 'poste_backup.dashboard.disk_free'|trans({'{free}': sp.free, '{total}': sp.total}) }}
                 {% elseif sp.free is not null %} &middot; {{ 'poste_backup.dashboard.space_free'|trans({'{free}': sp.free}) }}{% endif %}
@@ -66,8 +82,67 @@
     <a href="{{ path('poste_backup_key') }}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>
         <span class="bk-muted">{% if keyDownloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': keyDownloaded|date('Y-m-d')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}</span></a>
 </div>
+
+<h3 class="bk-stats-title">{{ 'poste_backup.stats.title'|trans }}
+    <small>{% for n in [30, 90, 365] %}{% if not loop.first %} &middot; {% endif %}{% if n == days %}<strong>{{ ('poste_backup.stats.days_' ~ n)|trans }}</strong>{% else %}<a href="{{ path('poste_backup', {days: n}) }}">{{ ('poste_backup.stats.days_' ~ n)|trans }}</a>{% endif %}{% endfor %}</small></h3>
+{# the data in an attribute: escaped like any text of the page (names of jobs are the user's) #}
+<div class="bk-charts" id="bk-stats" data-stats="{{ stats|json_encode }}"
+     data-texts="{{ {'deleted_job': 'poste_backup.stats.deleted_job'|trans, 'deleted_dest': 'poste_backup.stats.deleted_dest'|trans,
+                     'used_of': 'poste_backup.stats.used_of'|trans, 'none': 'poste_backup.stats.none'|trans}|json_encode }}">
+    {% for k in ['used', 'added', 'duration', 'disk'] %}
+        <div class="bk-card"><h4>{{ ('poste_backup.stats.' ~ k)|trans }}</h4><div class="bk-chart"><canvas id="bk-chart-{{ k }}"></canvas></div></div>
+    {% endfor %}
+</div>
 {% endblock %}
 
 {% block javascripts %}
 {% include 'Base/PosteBackup/_live.html.twig' %}
+<script src="{{ asset('resources/chart.min.js') }}?2"></script>
+<script>
+    (function () {
+        var box = document.getElementById('bk-stats');
+        if (!box || typeof Chart === 'undefined') {
+            return;
+        }
+        var st = JSON.parse(box.getAttribute('data-stats')), tx = JSON.parse(box.getAttribute('data-texts'));
+        var fg = getComputedStyle(document.body).color, grid = {color: 'rgba(128,128,128,0.2)'};
+        Chart.defaults.global.defaultFontColor = fg;
+        var colors = ['#3DC7BE', '#6c8ebf', '#f0ad4e', '#9b7fc6', '#d9534f', '#5cb85c', '#8a8a8a'];
+        // one unit for a whole chart: the one of its largest value
+        function unitOf(sets, kind) {
+            var max = 0;
+            sets.forEach(function (s) { s.forEach(function (v) { if (v !== null && v > max) { max = v; } }); });
+            if (kind === 'time') {
+                return max >= 7200 ? [3600, 'h'] : (max >= 300 ? [60, 'min'] : [1, 's']);
+            }
+            var u = [[1099511627776, 'TB'], [1073741824, 'GB'], [1048576, 'MB'], [1024, 'KB']];
+            for (var i = 0; i < u.length; i++) { if (max >= u[i][0]) { return u[i]; } }
+            return [1, 'B'];
+        }
+        function sizeText(bytes) {
+            var u = unitOf([[bytes]], 'size');
+            return (Math.round(bytes / u[0] * 10) / 10) + ' ' + u[1];
+        }
+        function draw(id, type, series, kind, fill) {
+            var unit = unitOf(series.map(function (s) { return s.data; }), kind);
+            var sets = series.map(function (s, i) {
+                var c = colors[i % colors.length];
+                return {label: s.name, data: s.data.map(function (v) { return v === null ? null : Math.round(v / unit[0] * 100) / 100; }),
+                        borderColor: c, backgroundColor: fill ? c + '26' : c, pointRadius: 0, spanGaps: true, fill: fill,
+                        lineTension: 0};      // straight lines: a curve would draw values that are not there
+            });
+            new Chart(document.getElementById(id), {type: type, data: {labels: st.labels, datasets: sets}, options: {
+                maintainAspectRatio: false, animation: false, legend: {position: 'bottom', labels: {boxWidth: 12}},
+                scales: {xAxes: [{gridLines: grid, ticks: {maxTicksLimit: 8}}],
+                         yAxes: [{gridLines: grid, ticks: {beginAtZero: type === 'bar', callback: function (v) { return v + ' ' + unit[1]; }}}]}}});
+        }
+        function named(series, deleted) {
+            return series.map(function (s) { return {name: s.name !== null ? s.name : deleted.replace('{id}', s.id), data: s.data}; });
+        }
+        draw('bk-chart-used', 'line', named(st.used, tx.deleted_dest), 'size', true);
+        draw('bk-chart-added', 'bar', named(st.added, tx.deleted_job), 'size', false);
+        draw('bk-chart-duration', 'bar', named(st.duration, tx.deleted_job), 'time', false);
+        draw('bk-chart-disk', 'line', [{name: st.diskTotal ? tx.used_of.replace('{total}', function () { return sizeText(st.diskTotal); }) : '/data', data: st.disk}], 'size', true);
+    })();
+</script>
 {% endblock %}

@@ -31,6 +31,7 @@ poste_backup:
     destinations_summary: "cílů: {count}, s problémem při posledním testu: {problems}"
     jobs_summary: "úloh: {count}"
     next: "další: {time}"
+    last_verification: "Poslední ověření"
   problem:
     start: "Při posledním startu kontejneru nebylo možné připravit složku záloh: {error}"
     config: "Nastavení není platné a je ignorováno: {error}"
@@ -38,6 +39,7 @@ poste_backup:
     engine_never: Zálohovací modul zatím neběžel (spouští ho cron každou minutu)
     job: "{job} na {destination}: {error}"
     key: "Šifrovací klíč nebyl nikdy stažen: bez něj nelze při ztrátě tohoto serveru žádnou zálohu přečíst"
+    verify: "Ověření cíle {destination}: {error}"
   type:
     local: Složka (svazek připojený hostitelem, např. NFS)
     sftp: SFTP
@@ -76,6 +78,11 @@ poste_backup:
     used_by: Používá
     delete_confirm: Smazat tento cíl? Zálohy, které už v něm jsou, se nesmažou.
     help: "Každá úloha zapisuje do každého svého cíle úplnou šifrovanou kopii. Cílem je složka na sdílení SMB, server SFTP, bucket S3 nebo svazek, který do kontejneru připojí hostitel (NFS, druhý disk)."
+    space_title: "Upozornění na místo"
+    space_warn: "Žlutá od"
+    space_full: "Červená od"
+    space_help: "Obsazené místo na disku serveru (/data) a na každém cíli. Pruhy na přehledu mají tyto barvy; s upozorněními (další etapa) to budou i jejich limity."
+    space_saved: "Upozornění na místo uložena."
   destination:
     key_help: "Pár klíčů vytvoří administrace při uložení cíle: jeho veřejný klíč se pak zobrazí na této stránce a přidá se na server."
     pubkey_command: "Nebo na serveru {host} jako uživatel {user} spusťte tento příkaz: v případě potřeby vytvoří složku .ssh a přidá klíč se správnými oprávněními."
@@ -113,6 +120,7 @@ poste_backup:
     check_save_first: "Při přihlášení klíčem se pár klíčů vytvoří při uložení cíle: uložte ho, přidejte veřejný klíč na server a pak cíl otestujte."
     check_trust: "Jsou to klíče serveru, důvěřovat jim a otestovat"
     check_failed: "Test nelze spustit: načtěte stránku znovu a zkuste to znovu."
+    verify_queued: "Ověření vyžádáno: modul ho spustí do minuty (po záloze, která právě běží)."
   jobs:
     log: "záznam"
     title: Úlohy zálohování
@@ -208,6 +216,7 @@ poste_backup:
     restore_import: "import do nové složky schránky {target}"
     forget: "odstraňují se zálohy úlohy z cíle {destination}"
     task_since: "Požadavek správce, od {since}"
+    verify: "ověřování záloh na cíli {destination}"
   snapshots:
     title: "Snímky a obnova"
     summary: "všechny zálohy, obnova schránky"
@@ -305,6 +314,7 @@ poste_backup:
     restore_n_other: "Obnovit %n% zpráv"
     too_many_chosen: "Nejvýše {max, number} zpráv najednou: vyberte méně, nebo obnovte složky s filtrem."
     summary_messages: "Vybrané zprávy se uloží do nové složky „{folder}“ schránky {mailbox} (s „ (2)“, pokud je název obsazený) ve svých složkách a s příznaky. Nic, co už ve schránce je, se nezmění."
+    task_verify: "Ověření cíle {destination}"
   logs:
     keep_title: "Uchovávání záznamů"
     keep_logs: "Záznamy běhů po dobu"
@@ -352,6 +362,9 @@ poste_backup:
     keep_monthly: "uchovávat měsíčních"
     notify_success: "oznámit úspěch"
     created: "vytvořeno"
+    verify_parts: "části dat"
+    space_warn: "žlutá od"
+    space_full: "červená od"
   msg:
     not_object: "není to objekt"
     settings_not_object: "soubor nastavení není objekt JSON"
@@ -461,8 +474,49 @@ poste_backup:
     message_invalid: "zpráva: neplatná"
     message_not_in_snapshot: "vybraná zpráva v tomto snímku není"
     list_read: "seznam zpráv nelze přečíst: {detail}"
+    verify_failed: "ověření selhalo: {detail}"
+    verify_errors: "ověření našlo chyby: {detail}"
+    verify_nothing: "na tomto cíli zatím nejsou žádné zálohy: není co ověřit"
+    verify_ok_all: "struktura a všechna data: bez chyb"
+    verify_ok_part: "struktura a část {part} z {parts} dat: bez chyb"
+    verify_every: "ověření: neznámá četnost"
+    space_order: "upozornění na místo: žlutá musí začínat pod červenou"
   settings:
     timezone: "Časové pásmo plánů"
     timezone_container: "pásmo kontejneru ({zone})"
     timezone_saved: "Časové pásmo uloženo"
     timezone_help: "Určuje, kdy se úlohy spouštějí, a časy zobrazené na těchto stránkách; záznamy serveru se nemění. Úloha, jejíž čas v novém pásmu dnes už uplynul, se může jednou spustit v příští minutě."
+  verify:
+    title: "Ověření"
+    when: "Ověřovat"
+    every_never: "nikdy"
+    every_day: "každý den"
+    every_week: "každý týden"
+    every_month: "každý měsíc"
+    parts: "Data přečtená pokaždé"
+    parts_all: "všechna, pokaždé"
+    parts_n: "1/{n} – všechna jednou za {n} ověření"
+    part: "část {part} z {parts}"
+    help: "Každé ověření zkontroluje strukturu záloh a znovu přečte část uložených dat, pokaždé jinou: poškozený soubor na cíli se najde. Během ověření neběží žádná záloha; ta, která je na řadě, se spustí hned potom."
+    last: "Poslední ověření"
+    read: "Přečtená data"
+    no_errors: "bez chyb"
+    now: "Ověřit nyní"
+    now_help: "s uloženým nastavením; výsledek se zobrazí zde a na přehledu"
+    pending: "ověření čeká na modul"
+    never_yet: "zatím neověřeno"
+    next: "další {time}"
+    off: "ověřování vypnuto"
+  stats:
+    title: "Statistiky"
+    days_30: "30 dní"
+    days_90: "90 dní"
+    days_365: "1 rok"
+    used: "Obsazené místo na každém cíli"
+    added: "Data přidaná běhy každé úlohy"
+    duration: "Doba běhů každé úlohy"
+    disk: "Obsazený disk serveru (/data)"
+    deleted_job: "smazaná úloha ({id})"
+    deleted_dest: "smazaný cíl ({id})"
+    used_of: "obsazeno z {total}"
+    none: "zatím žádná data"

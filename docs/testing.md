@@ -226,7 +226,21 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   page of commands to restore the server (values quoted, no password, for
   SFTP with a key a key of one's own and the confirmed server keys), offered
   only for snapshots with the configuration; the backups of a deleted job
-  removed after the confirmation, those of the other jobs untouched.
+  removed after the confirmation, those of the other jobs untouched;
+- verification, statistics, space warnings: a new destination is verified
+  every Sunday at 04:00, a quarter of the data; *Verify now* reads the first
+  quarter, then the second; the settings saved from the form; all the data
+  when set so; **one byte of a data file changed on the destination (through
+  rclone) is found** by the verification, shown among the problems of the
+  dashboard, on the destination's page and in the logs; a verification due by
+  its schedule is run by the engine's tick; a history line of a backup has
+  the space used on the destination and on `/data`; the statistics of 30
+  days, 90 days and a year (another value is 30), with the space, the data
+  added and the duration of the job; the space warnings refused without the
+  CSRF token and when yellow is not below red, then saved and taken by the
+  bars; in Czech. Unit checks: the verification settings and their limits,
+  when a verification is due, the request, the charts computed from history
+  lines (one run counted once, older lines and verifications left out).
 
 **Restore** (`tests/test_restore.sh`, `tests/read_backups.sh`,
 `tests/rebuild_server.sh`, `tests/test_restore.py`): the two procedures of

@@ -25,7 +25,8 @@ final class Messages
         'weekday' => 'weekday', 'day of the month' => 'monthday', 'keep hourly' => 'keep_hourly',
         'keep daily' => 'keep_daily', 'keep weekly' => 'keep_weekly', 'keep monthly' => 'keep_monthly',
         'notify on success' => 'notify_success', 'created' => 'created', 'log days' => 'log_days',
-        'history days' => 'history_days',
+        'history days' => 'history_days', 'parts of the data' => 'verify_parts', 'yellow from' => 'space_warn',
+        'red from' => 'space_full',
     ];
 
     /**
@@ -159,6 +160,14 @@ final class Messages
             '/^message: not valid$/' => ['message_invalid', []],
             '/^a chosen message is not in this snapshot$/' => ['message_not_in_snapshot', []],
             '/^cannot read the list of the messages: (.*)$/s' => ['list_read', ['detail']],
+            // verification and space warnings
+            '/^verification failed: (.*)$/s' => ['verify_failed', ['detail']],
+            '/^the verification found errors: (.*)$/s' => ['verify_errors', ['detail']],
+            '/^there are no backups on this destination yet: nothing to verify$/' => ['verify_nothing', []],
+            '/^the structure and all the data: no errors$/' => ['verify_ok_all', []],
+            '/^the structure and part (\d+) of (\d+) of the data: no errors$/' => ['verify_ok_part', ['part', 'parts']],
+            '/^verification: unknown frequency$/' => ['verify_every', []],
+            '/^space warnings: yellow must start below red$/' => ['space_order', []],
         ];
     }
 

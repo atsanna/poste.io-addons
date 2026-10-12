@@ -702,17 +702,25 @@ def queued_tasks():
     return sorted(f for f in os.listdir(QUEUE) if re.match(r"^\d{10}-(restore|forget)-[a-f0-9]{12}\.json$", f))
 
 
-def run_tasks(count_before, expect, timeout=600):
-    """Lets the engine take the requests in the queue; returns the new results."""
+def task_ids():
+    """The ids of the results of requests kept now (the state keeps the last 20: never counted)."""
+    return {t.get("id") for t in state().get("tasks", [])}
+
+
+def run_tasks(before, expect, timeout=600):
+    """Lets the engine take the requests in the queue; returns the new results (by id, not by
+    count). Verifications started by their schedule (cron runs the engine meanwhile) are left out."""
+    def new():
+        return [t for t in state().get("tasks", []) if t.get("id") not in before
+                and not (t.get("type") == "verify" and t.get("why") == "schedule")]
     end = time.time() + timeout
     while time.time() < end:
         engine_idle()
         sh(["poste-backup", "tick"])
-        tasks = state().get("tasks", [])
-        if len(tasks) >= count_before + expect and not queued_tasks():
-            return tasks[count_before:]
+        if len(new()) >= expect and not queued_tasks():
+            return new()
         time.sleep(2)
-    return state().get("tasks", [])[count_before:]
+    return new()
 
 
 def message_files(home):
@@ -827,7 +835,7 @@ carol_home = sh(["sqlite3", "/data/users.db", "SELECT home FROM users WHERE addr
 # carol's own mail before: one message, so that "nothing changed" could fail
 sh(["doveadm", "save", "-u", E["CAROL"]], input="From: x@example.net\r\nTo: %s\r\nSubject: carol's own\r\nMessage-ID: <carol-own@example.net>\r\n\r\nmine\r\n" % E["CAROL"])
 carol_before, alice_before = message_files(carol_home), message_files(alice_home)
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 url, html = restore_post(E["ALICE"], {"target": E["CAROL"]})
 check("restore requested from the admin (the engine does it within a minute)", "Restore requested" in html, url)
 done = run_tasks(n0, 1)
@@ -849,7 +857,7 @@ check("nothing of carol's own mail changed", len(carol_before) >= 1 and all(afte
 check("the restore folder of the engine is gone", not os.path.exists("/data/var/backup/engine/restore"), "removed")
 
 # into the same mailbox, twice: the second folder gets " (2)"
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 restore_post(E["ALICE"], {"target": E["ALICE"]})
 restore_post(E["ALICE"], {"target": E["ALICE"]})
 done = run_tasks(n0, 2)
@@ -866,7 +874,7 @@ check("snapshots page: the restores done, with their log", "Restore of %s into %
 
 # only one folder, into a new folder of my choice inside an existing folder of carol
 sh(["doveadm", "mailbox", "create", "-u", E["CAROL"], "Archive"])
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 restore_post(E["ALICE"], {"target": E["CAROL"], "name": "Partial test", "parent": "Archive"}, folders=[".Sent"])
 done = run_tasks(n0, 1)
 r = done[0] if done else {}
@@ -876,7 +884,7 @@ check("only the Sent folder, into Archive / Partial test of carol: that folder a
       and "Archive.Partial test.Sent" in part and "Archive.Partial test.INBOX" not in part, (r.get("note"), r.get("error"), part))
 
 # only some messages: by subject, by the date received, a text that starts with "-"
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 restore_post(E["ALICE"], {"target": E["CAROL"], "name": "By subject", "subject": "RESTORE me"})
 restore_post(E["ALICE"], {"target": E["CAROL"], "name": "Until January 2020", "until": "2020-01-31"})
 restore_post(E["ALICE"], {"target": E["CAROL"], "name": "Late January 2020", "since": "2020-01-16", "until": "2020-01-31"})
@@ -892,7 +900,7 @@ check("a date range with no message, and a text that starts with '-' (never an o
       and all(t.get("status") == "ok" for t in done), notes[2:])
 
 # requests changed behind the admin: refused by the engine, nothing restored
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 good = {"dest": SMB, "snapshot": SNAP, "source": E["ALICE"], "target": E["CAROL"], "folders": [""], "name": "Tampered"}
 for name, body in (("1000000001-restore-0a0a0a0a0a0a.json", dict(good, source="../../etc@example.test")),
                    ("1000000002-restore-0b0b0b0b0b0b.json", dict(good, folders=["../../../etc"])),
@@ -989,7 +997,7 @@ check("step 2: the choice between folders and single messages, the list of the m
 # two messages of many, into carol: only those two
 # the inbox's copies only (earlier restores put copies of "old one" in alice's Restored folders)
 ids = [x["id"] for x in allr.get("rows", []) if x["subject"] in ("Fattura n° 12 – ottobre", "old one") and x["id"].startswith("cur/")]
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 url, html = restore_post(A, {"target": E["CAROL"], "name": "Two messages"}, dest=LOCAL, snap=S1, messages=ids)
 done = run_tasks(n0, 1)
 r = done[0] if done else {}
@@ -1005,7 +1013,7 @@ for what, msgs, expect in (("none chosen", [], "choose at least one message"), (
     refused.append((what, expect in html))
 check("single messages refused, with their message: " + ", ".join(w for w, ok in refused), all(ok for w, ok in refused) and queued_tasks() == before_q,
       [w for w, ok in refused if not ok])
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 sh(["sh", "-c", 'cat > "$1"', "sh", QUEUE + "/1000000004-restore-0d0d0d0d0d0d.json"], user="mail",
    input=json.dumps({"dest": LOCAL, "snapshot": S1, "source": A, "target": E["CAROL"], "name": "Not there", "messages": ["cur/1.M1P1.nothere:2,S"]}))
 done = run_tasks(n0, 1)
@@ -1061,7 +1069,7 @@ os.symlink(alice_msg, evil)
 run_job(BOB)
 os.remove(evil)
 bob_snaps = sorted(snapshots(LOCAL, BOB) or [], key=lambda x: x["time"])
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 restore_post(E["BOB"], {"target": E["CAROL"], "name": "From bob"}, dest=LOCAL, snap=bob_snaps[-1]["id"] if bob_snaps else "0" * 64)
 done = run_tasks(n0, 1)
 r = done[0] if done else {}
@@ -1107,7 +1115,7 @@ token = [v for n, v, t in f[0]["fields"] if n == "_token"][0] if f else ""
 url, html = ADMIN.post(forget_path, {"_token": token, "job": TEMP})
 check("removal without the confirmation ticked, or without the CSRF token: refused, nothing asked of the engine",
       "Tick the confirmation" in html and queued_tasks() == before_q, queued_tasks())
-n0 = len(state().get("tasks", []))
+n0 = task_ids()
 url, html = ADMIN.post(forget_path, {"_token": token, "job": TEMP, "confirm": "yes"})
 done = run_tasks(n0, 1)
 r = done[0] if done else {}
@@ -1118,6 +1126,125 @@ check("the backups of the other jobs on the same destination are untouched", len
 CS = Panel(E["ALICE"], E["PA"], lang="cs")
 url, html = CS.get(BASE + "/snapshots?dest=" + SMB)
 check("in Czech: the snapshots page", "Snímky a obnova" in html and "Obnovit schránku" in html, url)
+
+# ===================================================================== verification, statistics, space warnings
+print("--- backup: verification, statistics, space warnings")
+import html as htmlmod
+VT, html = new_destination({"name": "Verify test", "type": "smb", "host": B["DEST_HOST"], "share": "backup", "folder": "verifytest",
+                            "user": "bkuser", "password": B["DEST_PASSWORD"], "domain": ""})
+VT = VT or "000000000000"
+check("a new destination: verified every Sunday at 04:00, a quarter of the data each time", config()["destinations"].get(VT, {}).get("verify")
+      == {"every": "week", "weekday": 7, "monthday": 1, "hour": 4, "minute": 0, "parts": 4}, config()["destinations"].get(VT, {}).get("verify"))
+VTJOB = new_job("Verify test", [VT], {"config": "1", "mail": "none"})
+VTJOB = VTJOB[0] if VTJOB else "000000000000"
+run_job(VTJOB)
+last = [l for l in (json.loads(x) for x in open("/data/var/backup/engine/history.jsonl")) if l.get("job") == VTJOB][-1:]
+l0 = last[0] if last else {}
+check("a history line of a backup has the space used on the destination and on /data (for the charts)",
+      all(isinstance(l0.get(k), int) and l0.get(k) > 0 for k in ("dest_used", "dest_free", "dest_total", "disk_used", "disk_total")),
+      {k: l0.get(k) for k in ("dest_used", "dest_free", "dest_total", "disk_used", "disk_total")})
+
+
+def verify_now(did):
+    f, html = form(BASE + "/destinations/%s/edit" % did, "/verify")
+    n0 = task_ids()
+    if f:
+        ADMIN.post(f["action"], {n: v or "" for n, v, t in f["fields"] if n})
+    done = run_tasks(n0, 1)
+    return done[0] if done else {}
+
+
+r1, r2 = verify_now(VT), verify_now(VT)
+check("Verify now: the structure and a quarter of the data, then the next quarter", (r1.get("note"), r2.get("note")) ==
+      ("the structure and part 1 of 4 of the data: no errors", "the structure and part 2 of 4 of the data: no errors")
+      and state()["verify"][VT]["next_part"] == 3, (r1.get("note"), r1.get("error"), r2.get("note")))
+url, html = post_form(BASE + "/destinations/%s/edit" % VT, {"verify_every": "day", "verify_hour": "0", "verify_minute": "0", "verify_parts": "1",
+                                                           "password": ""})
+check("the verification settings saved from the form", config()["destinations"][VT]["verify"] == {"every": "day", "weekday": 7, "monthday": 1,
+      "hour": 0, "minute": 0, "parts": 1} and config()["destinations"][VT].get("password") == B["DEST_PASSWORD"], config()["destinations"][VT]["verify"])
+r3 = verify_now(VT)
+check("all the data read when the setting says so", r3.get("note") == "the structure and all the data: no errors", (r3.get("note"), r3.get("error")))
+# a damaged file on the destination: one byte changed in a data file, through rclone like an outside hand
+ob = sh(["rclone", "obscure", "-"], input=B["DEST_PASSWORD"] + "\n").stdout.strip()
+venv = dict(os.environ, RCLONE_CONFIG="/usr/local/lib/poste-backup/rclone.conf", RCLONE_CONFIG_SV_TYPE="smb", RCLONE_CONFIG_SV_HOST=B["DEST_HOST"],
+            RCLONE_CONFIG_SV_USER="bkuser", RCLONE_CONFIG_SV_PASS=ob)
+packs = sorted(x for x in subprocess.run(["rclone", "lsf", "-R", "--files-only", "SV:backup/verifytest/data"], env=venv, capture_output=True,
+                                          text=True).stdout.split("\n") if x)
+pack = "SV:backup/verifytest/data/" + packs[0] if packs else ""
+data = subprocess.run(["rclone", "cat", pack], env=venv, capture_output=True).stdout if pack else b""
+if len(data) > 200:
+    data = data[:100] + bytes([data[100] ^ 0xFF]) + data[101:]
+    subprocess.run(["rclone", "rcat", pack], env=venv, input=data, capture_output=True)
+r4 = verify_now(VT)
+check("a data file changed on the destination: the verification finds it (and says what)", r4.get("status") == "error"
+      and (r4.get("error") or "").startswith("the verification found errors: ") and len(r4.get("error")) > 40, (r4.get("status"), r4.get("error")))
+url, html = ADMIN.get(BASE + "/")
+check("dashboard: the failed verification among the problems and in its card", "Verification of Verify test: the verification found errors" in html
+      and 'id="bk-verify-card"' in html, re.findall(r"Verification of Verify test[^<]*", html)[:1])
+# a destination that cannot be reached: the failed verification is recorded and shown (not an older result)
+post_form(BASE + "/destinations/%s/edit" % VT, {"password": "not-the-password"})
+r5 = verify_now(VT)
+v5 = state()["verify"].get(VT, {})
+url, html = ADMIN.get(BASE + "/")
+check("a verification that cannot reach the destination: failed, shown on the dashboard, tried again in an hour",
+      (r5.get("error") or "").startswith("verification failed: ") and v5.get("status") == "error" and isinstance(v5.get("retry_at"), int)
+      and "Verification of Verify test: verification failed:" in html, (r5.get("error"), v5.get("retry_at")))
+url, html = Panel(E["ALICE"], E["PA"], lang="cs").get(BASE + "/")
+check("in Czech, the message inside the message is translated too", "Ověření cíle Verify test: ověření selhalo:" in html
+      and "not reachable" not in re.findall(r"Ověření cíle Verify test:[^<]*", html)[0] if re.findall(r"Ověření cíle Verify test:[^<]*", html) else False,
+      re.findall(r"Ověření cíle Verify test:[^<]*", html)[:1])
+post_form(BASE + "/destinations/%s/edit" % VT, {"password": B["DEST_PASSWORD"]})
+url, html = ADMIN.get(BASE + "/logs")
+check("logs page: the verifications are listed", "Verification</td>" in html or "</i> Verification" in html, url)
+url, html = ADMIN.get(BASE + "/destinations/%s/edit" % VT)
+check("destination page: the last verifications with what was read and the result", "part 2 of 4" in html and "all of it, every time" in html
+      and "the verification found errors" in html, url)
+# a scheduled verification: due when its slot is newer than the last one (the engine's tick)
+engine_idle()
+t_sched = int(time.time())
+with open(STATE) as fh:
+    stt = json.load(fh)
+stt["verify"][VT]["last_slot"] = 1
+sh(["sh", "-c", 'cat > "$1.tmp" && mv "$1.tmp" "$1"', "sh", STATE], user="mail", input=json.dumps(stt))
+sh(["poste-backup", "tick"])
+hist = [json.loads(x) for x in open("/data/var/backup/engine/history.jsonl")]
+sched = [l for l in hist if l.get("kind") == "verify" and l.get("dest") == VT and l.get("reason") == "schedule" and l.get("start", 0) >= t_sched]
+check("a verification due by its schedule is run by the engine's tick", len(sched) == 1 and state()["verify"][VT]["last_slot"] > 1, len(sched))
+# statistics on the dashboard
+url, html = ADMIN.get(BASE + "/")
+m = re.search(r'data-stats="([^"]*)"', html)
+stats = json.loads(htmlmod.unescape(m.group(1))) if m else {}
+used = {x["name"]: x["data"] for x in stats.get("used", [])}
+check("statistics: 30 days, the space used on the destination today, the data added and the duration of the job",
+      len(stats.get("labels", [])) == 30 and isinstance((used.get("Verify test") or [None])[-1], int)
+      and any(x["name"] == "Verify test" and x["data"][-1] > 0 for x in stats.get("added", []))
+      and isinstance(stats.get("disk", [None])[-1], int) and html.count('<canvas id="bk-chart-') == 4, (len(stats.get("labels", [])), used.get("Verify test", [])[-1:]))
+lens = []
+for d in ("90", "365", "7"):
+    url, html = ADMIN.get(BASE + "/?days=" + d)
+    m = re.search(r'data-stats="([^"]*)"', html)
+    lens.append(len(json.loads(htmlmod.unescape(m.group(1)))["labels"]) if m else 0)
+check("statistics: 90 days, a year; another value is 30 days", lens == [90, 365, 30], lens)
+# the space warnings
+before = json.dumps(config()["settings"])
+ADMIN.post(BASE + "/settings/space", {"_token": "x", "space_warn": "1", "space_full": "2"})
+f, html = form(BASE + "/destinations", "/settings/space")
+url, html = post_form(BASE + "/destinations", {"space_warn": "90", "space_full": "80"}, suffix="/settings/space")
+check("space warnings: without the CSRF token, or yellow not below red, nothing saved (with the reason)", json.dumps(config()["settings"]) == before
+      and "yellow must start below red" in html, re.findall(r'alert-danger">([^<]*)', html)[:1])
+post_form(BASE + "/destinations", {"space_warn": "1", "space_full": "2"}, suffix="/settings/space")
+url, html = ADMIN.get(BASE + "/")
+disk_bar = re.search(r'<div class="bk-bar"><span class="([^"]*)" style="width: (\d+)%', html)
+check("space warnings saved: the bars take them (here everything is above 2%: red)", config()["settings"]["space_warn"] == 1
+      and config()["settings"]["space_full"] == 2 and disk_bar is not None and disk_bar.group(1) == "bk-full", disk_bar.groups() if disk_bar else None)
+post_form(BASE + "/destinations", {"space_warn": "80", "space_full": "90"}, suffix="/settings/space")
+url, html = ADMIN.get(BASE + "/destinations")
+check("destinations page: the last verification of each destination, the space warnings", "Last verification" in html
+      and 'name="space_warn" value="80"' in html and "the verification found errors" in html, url)
+CSV = Panel(E["ALICE"], E["PA"], lang="cs")
+url, html = CSV.get(BASE + "/")
+url2, html2 = CSV.get(BASE + "/destinations/%s/edit" % VT)
+check("in Czech: statistics and verification", "Statistiky" in html and "Poslední ověření" in html and "Ověřit nyní" in html2, url)
 
 # one run at a time
 with open("/run/poste-backup.lock") as f:

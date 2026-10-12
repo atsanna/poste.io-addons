@@ -15,7 +15,9 @@
  *      there is none (an empty folder), backs up, removes the old snapshots
  *      of this job according to its "keep" rules;
  *   3. records the result (state.json for the admin, one history line per
- *      destination for the statistics).
+ *      destination for the statistics, with the space used there and on /data).
+ * After the jobs, the destinations whose verification is due are verified
+ * (restic check, and a part of the data read again, a different part each time).
  * A destination that fails does not stop the others.
  */
 
@@ -27,6 +29,7 @@ final class Engine
     public const MAX_LIST = 16777216;        // restic prints a list of snapshots as one line: up to 16 MB
     public const MAX_FOLDERS = 2000;         // folders of a mailbox chosen for a restore
     public const MAX_MESSAGES = 1000;        // single messages chosen for a restore
+    public const VERIFY_TIMEOUT = 21600;     // a verification stops after 6 hours (the backups wait meanwhile)
     private const TAG = 'poste-backup';
 
     private array $cfg;
@@ -80,7 +83,7 @@ final class Engine
                     if (isset($this->cfg['jobs'][$m[1]]) && !isset($runs[$m[1]])) {
                         $runs[$m[1]] = 'manual';
                     }
-                } elseif (preg_match('/^\d{10}-(restore|forget)-([a-f0-9]{12})\.json$/', $f, $m)) {
+                } elseif (preg_match('/^\d{10}-(restore|forget|verify)-([a-f0-9]{12})\.json$/', $f, $m)) {
                     $raw = Store::readJson($path);          // never a link, never too big
                     @unlink($path);
                     $tasks[$m[2]] = self::task($m[1], $raw);
@@ -98,7 +101,26 @@ final class Engine
             foreach ($runs as $id => $why) {
                 $this->runJob($id, $why, $why === 'schedule' ? Schedule::lastSlot($this->cfg['jobs'][$id]['schedule'], $now, $this->tz) : null);
             }
-            return count($runs) . ' job(s) run' . ($tasks ? ', ' . count($tasks) . ' request(s) done' : '');
+            // verifications due, after the backups (the clock has moved on if a backup was long)
+            $verified = 0;
+            foreach ($this->cfg['destinations'] as $did => $d) {
+                [$due, $slot] = self::verifyDue($d['verify'], $this->state['verify'][$did]['last_slot'] ?? null, time(), $this->tz);
+                if ($slot !== null) {
+                    $this->state['verify'][$did]['last_slot'] = $slot;
+                    $this->saveState();
+                }
+                // one that could not run to its end is tried again an hour later
+                $retry = $this->state['verify'][$did]['retry_at'] ?? null;
+                if (!$due && $d['verify']['every'] !== 'never' && is_int($retry) && time() >= $retry) {
+                    $due = true;
+                }
+                if ($due) {
+                    $this->runTask(Config::newId(), ['type' => 'verify', 'dest' => $did, 'why' => 'schedule']);
+                    $verified++;
+                }
+            }
+            return count($runs) . ' job(s) run' . ($tasks ? ', ' . count($tasks) . ' request(s) done' : '')
+                . ($verified ? ", $verified verification(s)" : '');
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
@@ -133,12 +155,21 @@ final class Engine
         $this->tz = Schedule::zone($this->cfg['settings']['timezone']);
         date_default_timezone_set($this->tz->getName());
         $this->state = Store::readJson(Store::STATE) ?? [];
-        $this->state += ['jobs' => [], 'running' => null, 'destinations' => [], 'tasks' => [], 'oldest_mail' => []];
+        $this->state += ['jobs' => [], 'running' => null, 'destinations' => [], 'tasks' => [], 'oldest_mail' => [], 'verify' => []];
         $this->state['config_errors'] = $errors;
         // forget jobs and destinations that no longer exist
         $this->state['jobs'] = array_intersect_key($this->state['jobs'], $this->cfg['jobs']);
         $this->state['destinations'] = array_intersect_key((array) $this->state['destinations'], $this->cfg['destinations']);
         $this->state['oldest_mail'] = array_intersect_key((array) $this->state['oldest_mail'], $this->cfg['destinations']);
+        $this->state['verify'] = array_intersect_key((array) $this->state['verify'], $this->cfg['destinations']);
+        // the engine's own file, but read defensively: a malformed entry must not stop the ticks
+        foreach ($this->state['verify'] as $did => $v) {
+            $v = is_array($v) ? $v : [];
+            $v['last_slot'] = is_int($v['last_slot'] ?? null) ? $v['last_slot'] : null;
+            $v['next_part'] = is_int($v['next_part'] ?? null) && $v['next_part'] >= 1 ? $v['next_part'] : 1;
+            $v['retry_at'] = is_int($v['retry_at'] ?? null) ? $v['retry_at'] : null;
+            $this->state['verify'][$did] = $v;
+        }
     }
 
     private function saveState(): void
@@ -178,6 +209,7 @@ final class Engine
         foreach ($job['destinations'] as $did) {
             $d = $this->cfg['destinations'][$did];
             $t0 = time();
+            $space = [];
             if ($error !== null) {
                 $r = ['status' => 'error', 'error' => $error];
             } else {
@@ -185,6 +217,7 @@ final class Engine
                 $this->phase('backup', $did);
                 $r = $this->backupTo($did, $d, $id, $job, $paths, $log);
                 if (isset($r['space'])) {
+                    $space = $r['space'];
                     $this->state['destinations'][$did] = $r['space'] + ['t' => time()];
                     unset($r['space']);
                 }
@@ -201,8 +234,9 @@ final class Engine
                 't' => time(), 'start' => $t0, 'job' => $id, 'dest' => $did, 'reason' => $why,
                 'status' => $r['status'], 'added' => $r['added'], 'files' => $r['files'], 'bytes' => $r['bytes'],
                 'duration' => $r['duration'], 'snapshot' => $r['snapshot'], 'error' => $r['error'], 'note' => $r['note'],
-                'log' => basename($this->logPath($id, $start)),
-            ]);
+                'log' => basename($this->logPath($id, $start)), 'run_start' => $start,
+                // for the statistics: the space on the destination after this run, and on /data
+            ] + self::spaceFields($space));
         }
         $this->cleanStaging();
         $this->pruneIndex($log);
@@ -242,6 +276,25 @@ final class Engine
 
     // ---------------------------------------------------------------- requests of the admin
 
+    /**
+     * Is the verification of a destination due? $last: the slot of its last
+     * verification, null when there was none yet. Returns [due, slot to keep
+     * or null]: the first time the slot is only kept (a new destination is not
+     * verified at once, it has nothing to verify yet), then a verification is
+     * due once per new slot, like a job.
+     */
+    public static function verifyDue(array $v, ?int $last, int $now, \DateTimeZone $tz): array
+    {
+        if ($v['every'] === 'never') {
+            return [false, null];
+        }
+        $slot = Schedule::lastSlot($v, $now, $tz);
+        if ($last === null) {
+            return [false, $slot];
+        }
+        return $slot > $last ? [true, $slot] : [false, null];
+    }
+
     /** A snapshot id as restic prints it in full. */
     public static function isSnapshotId($id): bool
     {
@@ -264,6 +317,10 @@ final class Engine
             return $ok ? ['type' => 'restore', 'dest' => $dest, 'snapshot' => $raw['snapshot'],
                           'source' => $raw['source'], 'target' => strtolower($raw['target'])] + $opt
                        : ['type' => 'restore', 'invalid' => true];
+        }
+        if ($type === 'verify') {
+            return Config::isId($dest) ? ['type' => 'verify', 'dest' => $dest, 'why' => ($raw['why'] ?? '') === 'schedule' ? 'schedule' : 'manual']
+                                       : ['type' => 'verify', 'invalid' => true];
         }
         $ok = Config::isId($dest) && Config::isId($raw['job'] ?? null);
         return $ok ? ['type' => 'forget', 'dest' => $dest, 'job' => $raw['job']] : ['type' => 'forget', 'invalid' => true];
@@ -395,7 +452,8 @@ final class Engine
             ? 'restore of a mailbox' . (empty($t['invalid']) ? " ({$t['source']} from snapshot {$t['snapshot']} into {$t['target']}, "
                 . ($t['messages'] ? count($t['messages']) . ' message(s)' : count($t['folders']) . ' folder(s)')
                 . ', new folder "' . ($t['parent'] !== '' ? $t['parent'] . '.' : '') . $t['name'] . '")' : '')
-            : 'removal of the backups of a job' . (empty($t['invalid']) ? " ({$t['job']})" : ''));
+            : ($t['type'] === 'verify' ? 'verification of a destination' . (empty($t['invalid']) ? ' (' . $t['why'] . ')' : '')
+                : 'removal of the backups of a job' . (empty($t['invalid']) ? " ({$t['job']})" : '')));
         $this->state['running'] = ['task' => $id, 'type' => $t['type'], 'since' => $start, 'dest' => $did, 'phase' => $t['type'],
                                    'source' => $t['source'] ?? null, 'target' => $t['target'] ?? null, 'job' => null, 'progress' => null];
         $this->saveState();
@@ -405,13 +463,22 @@ final class Engine
             $r = ['status' => 'error', 'error' => 'unknown destination'];
         } else {
             $this->logLine($log, "--- destination \"{$d['name']}\" ($did)");
-            $r = $t['type'] === 'restore' ? $this->restoreMailbox($did, $d, $t, $log) : $this->forgetJob($did, $d, $t, $log);
+            switch ($t['type']) {
+                case 'restore':
+                    $r = $this->restoreMailbox($did, $d, $t, $log);
+                    break;
+                case 'verify':
+                    $r = $this->verifyDestination($did, $d, $t, $log, $id, $start);
+                    break;
+                default:
+                    $r = $this->forgetJob($did, $d, $t, $log);
+            }
         }
         $r += ['error' => null, 'note' => null];
         $this->logLine($log, "result: {$r['status']}" . ($r['error'] ? " - {$r['error']}" : '') . ($r['note'] ? " ({$r['note']})" : ''));
         $this->state['tasks'][] = [
             'id' => $id, 'type' => $t['type'], 'dest' => $did, 'snapshot' => $t['snapshot'] ?? null, 'source' => $t['source'] ?? null,
-            'target' => $t['target'] ?? null, 'job' => $t['job'] ?? null, 'start' => $start, 'end' => time(),
+            'target' => $t['target'] ?? null, 'job' => $t['job'] ?? null, 'why' => $t['why'] ?? 'manual', 'start' => $start, 'end' => time(),
             'status' => $r['status'], 'error' => $r['error'], 'note' => $r['note'], 'log' => basename($this->logPath($id, $start)),
         ];
         $this->state['tasks'] = array_slice($this->state['tasks'], -20);
@@ -621,6 +688,18 @@ final class Engine
         }
     }
 
+    /** The space fields of a history line: the destination's (measured after the backup) and /data's now. */
+    private static function spaceFields(array $space): array
+    {
+        $total = @disk_total_space('/data');
+        $free = @disk_free_space('/data');
+        return [
+            'dest_used' => $space['used'] ?? null, 'dest_free' => $space['free'] ?? null, 'dest_total' => $space['total'] ?? null,
+            'disk_used' => $total !== false && $free !== false ? (int) ($total - $free) : null,
+            'disk_total' => $total !== false ? (int) $total : null,
+        ];
+    }
+
     /** Bytes /data needs for a restore of $size bytes: the copy, the import, and some room left. */
     public static function spaceNeeded(int $size): int
     {
@@ -702,6 +781,130 @@ final class Engine
             }
         };
         $walk($dir);
+        return (@scandir($dir) ?: ['x', 'y', 'z']) === ['.', '..'];
+    }
+
+    /**
+     * Verifies a destination: restic checks the structure of the repository
+     * and reads again a part of the stored data (a different part each time,
+     * so that in "parts" verifications everything is read once), or all of it
+     * when parts is 1. A part where errors were found is read again until it
+     * is clean: an error never disappears because another part was fine. At
+     * most VERIFY_TIMEOUT seconds (the backups wait meanwhile). The result is
+     * kept for the admin (state, history).
+     */
+    private function verifyDestination(string $did, array $d, array $t, $log, string $id, int $start): array
+    {
+        $tmp = $this->privateTmp();
+        if ($tmp === null) {
+            return $this->verified($did, $t, $id, $start, ['status' => 'error', 'error' => 'verification failed: cannot create a temporary folder'], null);
+        }
+        // restic check keeps a cache of its own while it runs: in a folder of ours, not in /tmp,
+        // emptied before and after (a run that was stopped leaves nothing behind for long)
+        $work = Store::CACHE . '/check';
+        try {
+            [$env, $err] = $this->resticEnv($did, $d, $tmp);
+            if ($err) {
+                return $this->verified($did, $t, $id, $start, ['status' => 'error', 'error' => 'verification failed: ' . $err], null);
+            }
+            [$exists, $err] = $this->repositoryExists($did, $d, $env, $log);
+            if ($err) {
+                return $this->verified($did, $t, $id, $start, ['status' => 'error', 'error' => 'verification failed: ' . $err], null);
+            }
+            if (!$exists) {
+                return ['status' => 'ok', 'note' => 'there are no backups on this destination yet: nothing to verify'];
+            }
+            if (!self::emptyTree($work) && !@mkdir($work, 0700)) {
+                return $this->verified($did, $t, $id, $start, ['status' => 'error', 'error' => 'verification failed: cannot create a temporary folder'], null);
+            }
+            $env['TMPDIR'] = $work;
+            $parts = (int) $d['verify']['parts'];
+            $part = (int) ($this->state['verify'][$did]['next_part'] ?? 1);
+            if ($part < 1 || $part > $parts) {
+                $part = 1;
+            }
+            $what = $parts === 1 ? 'the structure and all the data' : "the structure and part $part of $parts of the data";
+            $this->logLine($log, "verifying $what");
+            // the first line that says what is wrong (restic ends with "Fatal: repository contains errors")
+            $found = null;
+            $spot = function (string $line) use (&$found) {
+                $l = trim($line);
+                if ($found === null && $l !== '' && stripos($l, 'no errors') === false && stripos($l, 'Fatal:') !== 0
+                    && preg_match('/error|does not match|invalid|damaged|corrupt|missing|unexpected/i', $l) === 1) {
+                    $found = $l;
+                }
+            };
+            $args = $parts === 1 ? ['check', '--read-data'] : ['check', '--read-data-subset', "$part/$parts"];
+            $r = $this->restic(Destination::repository($did, $d), $args, $env, $log, self::VERIFY_TIMEOUT, $spot, $spot);
+            if ($r['exit'] === 0) {
+                return $this->verified($did, $t, $id, $start, ['status' => 'ok', 'note' => "$what: no errors"], [$part, $parts, true]);
+            }
+            if (!$r['timeout'] && stripos($r['out'] . $r['err'], 'repository contains errors') !== false) {
+                return $this->verified($did, $t, $id, $start, ['status' => 'error',
+                    'error' => 'the verification found errors: ' . mb_substr(mb_scrub($found ?? self::lastLine($r['err'])), 0, 300)], [$part, $parts, false]);
+            }
+            // not run to its end (unreachable, locked, too long...): the same part, tried again in an hour
+            return $this->verified($did, $t, $id, $start, ['status' => 'error', 'error' => 'verification failed: ' . self::lastLine($r['err'])], null);
+        } finally {
+            self::emptyTree($work);
+            @rmdir($work);
+            $this->removeTmp($tmp);
+        }
+    }
+
+    /** The part to read next time: the following one after a clean check, the same one after errors. */
+    public static function nextPart(int $part, int $parts, bool $clean): int
+    {
+        return $clean ? $part % $parts + 1 : $part;
+    }
+
+    /**
+     * Keeps the result of a verification (state and history). $part: [part,
+     * parts, clean] when the check ran to its end; null when it did not (it is
+     * then tried again in an hour, not only at the next slot).
+     */
+    private function verified(string $did, array $t, string $id, int $start, array $res, ?array $part): array
+    {
+        $res += ['error' => null, 'note' => null];
+        $v = (array) ($this->state['verify'][$did] ?? []);
+        $v = ['last_slot' => $v['last_slot'] ?? null, 'next_part' => $v['next_part'] ?? 1, 't' => time(), 'start' => $start,
+              'status' => $res['status'], 'error' => $res['error'], 'note' => $res['note'],
+              'part' => $part[0] ?? null, 'parts' => $part[1] ?? null, 'log' => basename($this->logPath($id, $start)),
+              'retry_at' => $part === null ? time() + 3600 : null];
+        if ($part !== null) {
+            $v['next_part'] = self::nextPart($part[0], $part[1], $part[2]);
+        }
+        $this->state['verify'][$did] = $v;
+        Store::appendJsonLine(Store::HISTORY, [
+            't' => time(), 'start' => $start, 'kind' => 'verify', 'dest' => $did, 'reason' => $t['why'] ?? 'manual',
+            'status' => $res['status'], 'duration' => time() - $start, 'part' => $v['part'], 'parts' => $v['parts'],
+            'error' => $res['error'], 'note' => $res['note'], 'log' => $v['log'],
+        ]);
+        return $res;
+    }
+
+    /**
+     * Empties a folder of the engine (made by it, under its cache): links are
+     * removed, never followed. True when the folder exists and is empty now.
+     */
+    private static function emptyTree(string $dir): bool
+    {
+        if (!is_dir($dir) || is_link($dir)) {
+            return false;
+        }
+        foreach (@scandir($dir) ?: [] as $e) {
+            if ($e === '.' || $e === '..') {
+                continue;
+            }
+            $p = "$dir/$e";
+            if (is_dir($p) && !is_link($p)) {
+                @chmod($p, 0700);
+                self::emptyTree($p);
+                @rmdir($p);
+            } else {
+                @unlink($p);
+            }
+        }
         return (@scandir($dir) ?: ['x', 'y', 'z']) === ['.', '..'];
     }
 

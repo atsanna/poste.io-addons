@@ -10,6 +10,7 @@ require '/usr/local/lib/poste-backup/lib/Store.php';
 require '/usr/local/lib/poste-backup/lib/Engine.php';
 require '/usr/local/lib/poste-backup/lib/Messages.php';
 require '/usr/local/lib/poste-backup/lib/Index.php';
+require '/usr/local/lib/poste-backup/lib/Panel.php';
 
 use PosteBackup\Config;
 use PosteBackup\Schedule;
@@ -100,6 +101,88 @@ foreach ($destOk as $what => $d) {
     [$v, $e] = Config::destination($d);
     check("destination accepted: $what", $v !== null && !$e, $e);
 }
+
+// --- verification and space warnings
+[$v, $e] = Config::destination($destOk['local']);
+check('a destination without a verification setting: every Sunday at 04:00, a quarter of the data', ($v['verify'] ?? null) === Config::VERIFY_DEFAULT
+      && Config::VERIFY_DEFAULT === ['every' => 'week', 'weekday' => 7, 'monthday' => 1, 'hour' => 4, 'minute' => 0, 'parts' => 4], $v['verify'] ?? null);
+$mine = ['every' => 'month', 'weekday' => 1, 'monthday' => 28, 'hour' => 23, 'minute' => 59, 'parts' => 1];
+[$v, $e] = Config::destination($destOk['local'] + ['verify' => $mine]);
+check('a verification setting is kept as given', ($v['verify'] ?? null) === $mine, $e);
+$bad = [];
+foreach ([['every' => 'year'], ['parts' => 0], ['parts' => 53], ['parts' => '4'], ['hour' => 24], ['weekday' => 0], 'week'] as $x) {
+    [$v, $e] = Config::destination($destOk['local'] + ['verify' => is_array($x) ? $x + $mine : $x]);
+    if ($v !== null) {
+        $bad[] = $x;
+    }
+}
+check('a verification setting that is not valid is refused (frequency, parts 1-52, hour, weekday, not an object)', !$bad, $bad);
+[$c] = Config::validate(['settings' => []]);
+check('space warnings: 80 and 90 when not set', $c['settings']['space_warn'] === 80 && $c['settings']['space_full'] === 90, $c['settings']);
+[$c, $e] = Config::validate(['settings' => ['space_warn' => 50, 'space_full' => 60]]);
+check('space warnings: kept as set', $c['settings']['space_warn'] === 50 && $c['settings']['space_full'] === 60 && !$e, $e);
+$errs = [];
+foreach ([[90, 80], [80, 80], [0, 90], [80, 100], ['80', 90]] as [$w, $f]) {
+    [$c, $e] = Config::validate(['settings' => ['space_warn' => $w, 'space_full' => $f]]);
+    $errs[] = $e && $c['settings']['space_warn'] === 80 && $c['settings']['space_full'] === 90 ? 'refused' : 'KEPT';
+}
+check('space warnings refused (yellow not below red, 0, 100, text): the defaults stay', $errs === array_fill(0, 5, 'refused'), $errs);
+check('space warnings: the reason', Config::spaceWarnings(90, 80)[2] === ['space warnings: yellow must start below red'], Config::spaceWarnings(90, 80)[2]);
+// when a verification is due (UTC; Sunday 2026-10-11 04:00 = 1791691200)
+$week = ['every' => 'week', 'weekday' => 7, 'monthday' => 1, 'hour' => 4, 'minute' => 0, 'parts' => 4];
+$sun = 1791691200;
+$d1 = PosteBackup\Engine::verifyDue($week, null, $sun + 60, $utc);
+$d2 = PosteBackup\Engine::verifyDue($week, $sun - 7 * 86400, $sun + 60, $utc);
+$d3 = PosteBackup\Engine::verifyDue($week, $sun, $sun + 3 * 86400, $utc);
+$d4 = PosteBackup\Engine::verifyDue(['every' => 'never'] + $week, $sun - 7 * 86400, $sun + 60, $utc);
+check('verification due: the first time only its slot is kept; then once per new slot; never when off',
+      $d1 === [false, $sun] && $d2 === [true, $sun] && $d3 === [false, null] && $d4 === [false, null], [$d1, $d2, $d3, $d4]);
+check('verification request: valid, from the admin or the schedule; an invalid destination is refused',
+      PosteBackup\Engine::task('verify', ['dest' => '0a1b2c3d4e5f']) === ['type' => 'verify', 'dest' => '0a1b2c3d4e5f', 'why' => 'manual']
+      && PosteBackup\Engine::task('verify', ['dest' => '0a1b2c3d4e5f', 'why' => 'schedule'])['why'] === 'schedule'
+      && !empty(PosteBackup\Engine::task('verify', ['dest' => '../x'])['invalid']), 'verify');
+// the charts of the dashboard, from history lines (UTC, "now" = 2026-10-11 12:00)
+$now = 1791720000;
+$h = [
+    ['t' => $now - 86400, 'start' => $now - 86400, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'added' => 100, 'duration' => 10, 'log' => 'r1',
+     'dest_used' => 1000, 'disk_used' => 5000, 'disk_total' => 9000],
+    ['t' => $now - 86000, 'start' => $now - 86000, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd2d2d2d2d2d2', 'added' => 120, 'duration' => 15, 'log' => 'r1',
+     'dest_used' => 2000, 'disk_used' => 5100, 'disk_total' => 9000],
+    ['t' => $now - 3600, 'start' => $now - 3600, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'added' => 7, 'duration' => 3, 'log' => 'r2', 'dest_used' => 1007],
+    ['t' => $now - 1800, 'start' => $now - 1800, 'job' => 'bbbbbbbbbbbb', 'dest' => 'd1d1d1d1d1d1', 'added' => 5, 'duration' => 2, 'log' => 'r3', 'dest_used' => 1012],
+    ['t' => $now - 600, 'start' => $now - 600, 'kind' => 'verify', 'dest' => 'd1d1d1d1d1d1', 'duration' => 99, 'status' => 'ok'],
+    ['t' => $now - 40 * 86400, 'start' => $now - 40 * 86400, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'added' => 999999, 'duration' => 9, 'log' => 'old'],
+];
+$cfgs = ['destinations' => ['d1d1d1d1d1d1' => ['name' => 'NAS'], 'd2d2d2d2d2d2' => ['name' => 'Cloud']], 'jobs' => ['aaaaaaaaaaaa' => ['name' => 'Email']]];
+$st = PosteBackup\Panel::statistics($h, $cfgs, $utc, 30, $now);
+$byName = function (array $series) {
+    $o = [];
+    foreach ($series as $x) {
+        $o[(string) $x['name']] = [array_slice($x['data'], -2), $x['id']];
+    }
+    return $o;
+};
+check('charts: 30 days, today last', count($st['labels']) === 30 && end($st['labels']) === '10-11' && $st['labels'][0] === '09-12', [$st['labels'][0], end($st['labels'])]);
+check('charts: space used per destination, the last measure of each day', $byName($st['used']) === ['Cloud' => [[2000, null], 'd2d2d2d2d2d2'], 'NAS' => [[1000, 1012], 'd1d1d1d1d1d1']], $byName($st['used']));
+check('charts: data added per job, one run counts once (its largest destination), runs of a day added up; a deleted job has no name',
+      $byName($st['added']) === ['' => [[0, 5], 'bbbbbbbbbbbb'], 'Email' => [[120, 7], 'aaaaaaaaaaaa']], $byName($st['added']));
+check('charts: duration per job, a run as long as all its destinations; verifications and older lines left out',
+      $byName($st['duration']) === ['' => [[0, 2], 'bbbbbbbbbbbb'], 'Email' => [[25, 3], 'aaaaaaaaaaaa']], $byName($st['duration']));
+check('charts: the server disk, the last measure of each day', array_slice($st['disk'], -2) === [5100, null] && $st['diskTotal'] === 9000, $st['disk']);
+$h2 = [['t' => $now - 100, 'start' => $now - 900, 'run_start' => $now - 1000, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'duration' => 800, 'log' => 'r9'],
+       ['t' => $now - 50, 'start' => $now - 100, 'run_start' => $now - 1000, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd2d2d2d2d2d2', 'duration' => 50, 'log' => 'r9']];
+$st2 = PosteBackup\Panel::statistics($h2, $cfgs, $utc, 30, $now);
+check('charts: a run lasts from its start to the end of its last destination (the common phases count)', end($st2['duration'][0]['data']) === 950, $st2['duration']);
+$hf = tempnam(sys_get_temp_dir(), 'hist');
+file_put_contents($hf, json_encode($h[5]) . "\nnot json\n" . json_encode($h[0]) . "\n" . json_encode($h[1]) . "\n");
+$read = iterator_to_array(PosteBackup\Panel::historyLines($hf, $now - 31 * 86400), false);
+unlink($hf);
+check('history read one line at a time: older lines and broken ones left out', count($read) === 2 && $read[0]['dest_used'] === 1000, count($read));
+check('the next part to verify: the following one after a clean check, around; the same one after errors',
+      PosteBackup\Engine::nextPart(1, 4, true) === 2 && PosteBackup\Engine::nextPart(4, 4, true) === 1
+      && PosteBackup\Engine::nextPart(3, 4, false) === 3 && PosteBackup\Engine::nextPart(1, 1, true) === 1, 'nextPart');
+check('charts: a year, labelled with the year', count(PosteBackup\Panel::statistics([], $cfgs, $utc, 365, $now)['labels']) === 365
+      && PosteBackup\Panel::statistics([], $cfgs, $utc, 365, $now)['labels'][364] === '2026-10-11', 'year');
 
 // --- settings: what is refused
 $bad = [
@@ -363,6 +446,10 @@ $samples = [
     '7 message(s) restored into the folder "Archive / Restored 2026-10-11 02:00" of bob@example.com',
     'choose at least one message', 'too many messages: up to 1000 at a time', 'message: not valid', 'a chosen message is not in this snapshot',
     'cannot read the list of the messages: SQLSTATE[HY000]: General error: 5 database is locked',
+    'verification failed: not reachable: couldn\'t connect SMB', 'the verification found errors: Pack ID does not match, want 2dcf, got 9bf1',
+    'there are no backups on this destination yet: nothing to verify', 'the structure and all the data: no errors',
+    'the structure and part 2 of 4 of the data: no errors', 'verification: unknown frequency', 'space warnings: yellow must start below red',
+    'parts of the data: a whole number from 1 to 52', 'yellow from: a whole number from 1 to 99', 'red from: a whole number from 1 to 99',
     // what the code writes, read from the code itself
     PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
 ];

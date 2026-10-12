@@ -63,7 +63,12 @@ All notable changes to this project are documented here. The format follows
   or month in a time zone of their own, with keep rules per job; a **Test**
   of each destination before saving (reachability, empty folder or existing
   repository, free space, a write); live progress, the logs of every run,
-  the space on each destination (yellow from 80% used, red from 90%), logs kept for a number of days; pages and
+  the space on each destination (yellow and red from limits set in the admin, 80% and 90% by default); a
+  scheduled **verification** of each destination (restic check and a part of
+  the data read again, a different part each time: every Sunday, a quarter,
+  by default; *Verify now*); **statistics** on the dashboard (space used on
+  each destination and on the server, data added and duration of the runs,
+  per day over 30 days, 90 days or a year); logs kept for a number of days; pages and
   messages in English and Czech. The
   encryption key is made at the first start and downloaded from the admin.
   The engine runs as `mail`, never as root, and validates the settings again
