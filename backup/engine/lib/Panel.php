@@ -154,7 +154,7 @@ final class Panel
             }
             $env['RESTIC_PASSWORD_FILE'] = Store::KEY;
             $env['RESTIC_CACHE_DIR'] = Store::CACHE . '/restic-admin';
-            $r = Proc::run(array_merge(['restic', '-r', Destination::repository($did, $d), '--no-lock'], $args), $env, null, 180, $onLine,
+            $r = Proc::run(array_merge(Destination::resticCommand(Destination::repository($did, $d), $env), ['--no-lock'], $args), $env, null, 180, $onLine,
                 null, null, Engine::MAX_LIST);
             if ($r['exit'] !== 0) {
                 if (preg_match('/Is there a repository at the following location|unable to open config file|repository does not exist/i', $r['err'])) {
@@ -325,7 +325,8 @@ final class Panel
 
     /**
      * The four charts of the dashboard, one value per day of the last $days
-     * days (in the time zone of the backups), from the history lines of the
+     * days (one per hour of the last 24 hours when $days is 1), in the time
+     * zone of the backups, from the history lines of the
      * backups: the space used on each destination and on /data (the last
      * measure of the day), the data added by each job (a run writes the same
      * data to each of its destinations: its largest number counts) and how
@@ -337,13 +338,27 @@ final class Panel
      */
     public static function statistics(iterable $lines, array $cfg, \DateTimeZone $tz, int $days, int $now): array
     {
-        $first = (new \DateTimeImmutable('@' . $now))->setTimezone($tz)->setTime(0, 0)->modify('-' . ($days - 1) . ' days');
+        // the buckets: hours for a day, days otherwise. The hours are real hours (counted in
+        // UTC) labelled in the zone: when the clock changes a label shows twice or is skipped,
+        // but no hour is counted twice or lost; the days are the zone's own
+        $hourly = $days === 1;
+        $n = $hourly ? 24 : $days;
         $labels = $index = [];
-        for ($i = 0; $i < $days; $i++) {
-            $day = $first->modify("+$i days");
-            $index[$day->format('Y-m-d')] = $i;
-            $labels[] = $day->format($days > 90 ? 'Y-m-d' : 'm-d');
+        if ($hourly) {
+            $h0 = intdiv($now, 3600) - ($n - 1);
+            for ($i = 0; $i < $n; $i++) {
+                $index[$h0 + $i] = $i;
+                $labels[] = (new \DateTimeImmutable('@' . (($h0 + $i) * 3600)))->setTimezone($tz)->format('H:i');
+            }
+        } else {
+            $first = (new \DateTimeImmutable('@' . $now))->setTimezone($tz)->setTime(0, 0)->modify('-' . ($days - 1) . ' days');
+            for ($i = 0; $i < $n; $i++) {
+                $b = $first->modify("+$i days");
+                $index[$b->format('Y-m-d')] = $i;
+                $labels[] = $b->format($days > 90 ? 'Y-m-d' : 'm-d');
+            }
         }
+        $days = $n;
         $used = $runs = [];
         $disk = array_fill(0, $days, null);
         $diskTotal = null;
@@ -352,11 +367,11 @@ final class Panel
                 continue;
             }
             $t = (int) ($l['start'] ?? $l['t'] ?? 0);
-            $day = (new \DateTimeImmutable('@' . $t))->setTimezone($tz)->format('Y-m-d');
-            if (!isset($index[$day])) {
+            $bucket = $hourly ? intdiv($t, 3600) : (new \DateTimeImmutable('@' . $t))->setTimezone($tz)->format('Y-m-d');
+            if (!isset($index[$bucket])) {
                 continue;
             }
-            $i = $index[$day];
+            $i = $index[$bucket];
             if (is_int($l['dest_used'] ?? null)) {
                 $used[$l['dest']][$i] = $l['dest_used'];
             }
@@ -633,6 +648,19 @@ final class Panel
                 return ['ok', $lines];
             }
 
+            if ($d['type'] === 'rest') {
+                // the certificate confirmed, then the repository asked for with the user and password
+                [$exists, $err] = Destination::restCheck($d, $tmp);
+                if ($err) {
+                    return ['error', [$err]];
+                }
+                $lines[] = $exists ? 'reachable; it already holds a backup repository' : 'reachable; the repository does not exist yet, it is created at the first run';
+                $lines[] = 'free space: not reported by a REST server';
+                if (!empty($d['append_only'])) {
+                    $lines[] = 'append-only: the old backups are removed on the server\'s side';
+                }
+                return ['ok', $lines];
+            }
             [$env, $err] = Destination::env($id, $d, $tmp, $tmp);
             if ($err) {
                 return ['error', [$err]];

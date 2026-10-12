@@ -15,6 +15,19 @@
 <p class="text-info" style="margin-top:14px"><i class="fa fa-spinner fa-spin"></i> <span class="bk-live-text">{{ live.running.text }}</span></p>
 {% endif %}
 
+<div class="bk-nav">
+    <a href="{{ path('poste_backup_destinations') }}" class="bk-tile1{% if destProblems %} bk-tile-bad{% endif %}"><i class="fa fa-folder-open-o"></i><strong>{{ 'poste_backup.destinations.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.destinations_summary'|trans({'{count}': destinations|length, '{problems}': destProblems}) }}</span></a>
+    <a href="{{ path('poste_backup_jobs') }}" class="bk-tile2"><i class="fa fa-clock-o"></i><strong>{{ 'poste_backup.jobs.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.jobs_summary'|trans({'{count}': jobs|length}) }}{% if next %} &middot; {{ 'poste_backup.dashboard.next'|trans({'{time}': next|date('Y-m-d H:i')}) }}{% endif %}</span></a>
+    <a href="{{ path('poste_backup_snapshots') }}" class="bk-tile3"><i class="fa fa-history"></i><strong>{{ 'poste_backup.snapshots.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.snapshots.summary'|trans }}</span></a>
+    <a href="{{ path('poste_backup_logs') }}" class="bk-tile4"><i class="fa fa-file-text-o"></i><strong>{{ 'poste_backup.logs.title'|trans }}</strong>
+        <span class="bk-muted">{{ 'poste_backup.dashboard.logs_summary'|trans }}</span></a>
+    <a href="{{ path('poste_backup_key') }}" class="bk-tile5{% if not keyDownloaded %} bk-tile-bad{% endif %}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>
+        <span class="bk-muted">{% if keyDownloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': keyDownloaded|date('Y-m-d')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}</span></a>
+</div>
+
 <div class="bk-status">
     <div class="bk-card"><h4><i class="fa fa-hdd-o"></i> {{ 'poste_backup.dashboard.disk'|trans }}</h4>
         <div class="bk-bar"><span class="{{ disk.level }}" style="width: {{ disk.usedPercent }}%"></span></div>
@@ -70,21 +83,8 @@
     {% endif %}
 </div>
 
-<div class="bk-nav">
-    <a href="{{ path('poste_backup_destinations') }}"><i class="fa fa-folder-open-o"></i><strong>{{ 'poste_backup.destinations.title'|trans }}</strong>
-        <span class="bk-muted">{{ 'poste_backup.dashboard.destinations_summary'|trans({'{count}': destinations|length, '{problems}': destProblems}) }}</span></a>
-    <a href="{{ path('poste_backup_jobs') }}"><i class="fa fa-clock-o"></i><strong>{{ 'poste_backup.jobs.title'|trans }}</strong>
-        <span class="bk-muted">{{ 'poste_backup.dashboard.jobs_summary'|trans({'{count}': jobs|length}) }}{% if next %} &middot; {{ 'poste_backup.dashboard.next'|trans({'{time}': next|date('Y-m-d H:i')}) }}{% endif %}</span></a>
-    <a href="{{ path('poste_backup_snapshots') }}"><i class="fa fa-history"></i><strong>{{ 'poste_backup.snapshots.title'|trans }}</strong>
-        <span class="bk-muted">{{ 'poste_backup.snapshots.summary'|trans }}</span></a>
-    <a href="{{ path('poste_backup_logs') }}"><i class="fa fa-file-text-o"></i><strong>{{ 'poste_backup.logs.title'|trans }}</strong>
-        <span class="bk-muted">{{ 'poste_backup.dashboard.logs_summary'|trans }}</span></a>
-    <a href="{{ path('poste_backup_key') }}"><i class="fa fa-key"></i><strong>{{ 'poste_backup.key.title'|trans }}</strong>
-        <span class="bk-muted">{% if keyDownloaded %}{{ 'poste_backup.key.downloaded'|trans({'{time}': keyDownloaded|date('Y-m-d')}) }}{% else %}{{ 'poste_backup.key.never'|trans }}{% endif %}</span></a>
-</div>
-
 <h3 class="bk-stats-title">{{ 'poste_backup.stats.title'|trans }}
-    <small>{% for n in [30, 90, 365] %}{% if not loop.first %} &middot; {% endif %}{% if n == days %}<strong>{{ ('poste_backup.stats.days_' ~ n)|trans }}</strong>{% else %}<a href="{{ path('poste_backup', {days: n}) }}">{{ ('poste_backup.stats.days_' ~ n)|trans }}</a>{% endif %}{% endfor %}</small></h3>
+    <small>{% for n in [1, 7, 30, 90, 365] %}{% if not loop.first %} &middot; {% endif %}{% if n == days %}<strong>{{ ('poste_backup.stats.days_' ~ n)|trans }}</strong>{% else %}<a href="{{ path('poste_backup', {days: n}) }}">{{ ('poste_backup.stats.days_' ~ n)|trans }}</a>{% endif %}{% endfor %}</small></h3>
 {# the data in an attribute: escaped like any text of the page (names of jobs are the user's) #}
 <div class="bk-charts" id="bk-stats" data-stats="{{ stats|json_encode }}"
      data-texts="{{ {'deleted_job': 'poste_backup.stats.deleted_job'|trans, 'deleted_dest': 'poste_backup.stats.deleted_dest'|trans,
@@ -124,11 +124,24 @@
             return (Math.round(bytes / u[0] * 10) / 10) + ' ' + u[1];
         }
         function draw(id, type, series, kind, fill) {
+            // no value at all: say it, instead of empty axes
+            var values = 0;
+            series.forEach(function (s) { s.data.forEach(function (v) { if (v !== null && v !== 0) { values++; } }); });
+            if (values === 0) {
+                var p = document.createElement('p');
+                p.className = 'bk-muted bk-chart-none';
+                p.textContent = tx.none;
+                document.getElementById(id).replaceWith(p);
+                return;
+            }
             var unit = unitOf(series.map(function (s) { return s.data; }), kind);
             var sets = series.map(function (s, i) {
                 var c = colors[i % colors.length];
+                // a few values: each one drawn as a point (a single value of a line would not show otherwise)
+                var known = s.data.filter(function (v) { return v !== null; }).length;
                 return {label: s.name, data: s.data.map(function (v) { return v === null ? null : Math.round(v / unit[0] * 100) / 100; }),
-                        borderColor: c, backgroundColor: fill ? c + '26' : c, pointRadius: 0, spanGaps: true, fill: fill,
+                        borderColor: c, backgroundColor: fill ? c + '26' : c, pointRadius: known <= 45 ? 3 : 0, pointBackgroundColor: c,
+                        spanGaps: true, fill: fill,
                         lineTension: 0};      // straight lines: a curve would draw values that are not there
             });
             new Chart(document.getElementById(id), {type: type, data: {labels: st.labels, datasets: sets}, options: {

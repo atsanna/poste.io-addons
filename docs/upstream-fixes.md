@@ -1,9 +1,10 @@
 # Upstream fixes
 
-Two problems of the Poste.io image that break spam learning: moving a message
+Three problems of the Poste.io image around spam learning: moving a message
 to **Junk** (or out of it) is supposed to teach rspamd, and on 2.5.17 it does
-not. Both were reported to Poste.io; the Dockerfiles carry a workaround, marked
-`UPSTREAM-FIX`, to be removed when the base image fixes them.
+not (fixes 1 and 2); and every message learned stays behind in `/tmp` (fix 3).
+The first two were reported to Poste.io; the Dockerfiles carry a workaround,
+marked `UPSTREAM-FIX`, to be removed when the base image fixes them.
 
 ## 1. The learning scripts are world-writable
 
@@ -28,21 +29,43 @@ recipient**: rspamd then learns into `RS<address>`, which no scan ever reads.
 The block ends with `grep -q` checks: if Poste.io changes the scripts, the
 build fails instead of shipping a fix that no longer applies.
 
+## 3. Every learned message stays in /tmp
+
+The `spam` / `ham` scripts copy the message into a temporary file
+(`input_tmpfile=$(mktemp)`) to give it to `rspamc` twice, and never remove it.
+Each message moved into or out of Junk leaves a copy of itself in the
+container's `/tmp`, readable by the `mail` user, until the container is
+recreated.
+
+**Fix**: right after the `mktemp` line the scripts get
+
+```sh
+trap 'rm -f "$input_tmpfile"' EXIT
+trap 'exit 1' HUP INT TERM
+```
+
+so the file is removed when the script ends, also when it is stopped. As in
+fix 2, a `grep` check fails the build if the scripts change.
+
 ## Are they still needed?
 
 Before building a new Poste.io version, look at the base image:
 
 ```bash
 docker run --rm --entrypoint sh poste.io/mailserver:<VERSION> -c \
-  'ls -l /etc/dovecot/sieve; grep -n "pipe :copy" /etc/dovecot/sieve/*.sieve; grep -n "rspamc.*learn_" /etc/dovecot/sieve/spam /etc/dovecot/sieve/ham'
+  'ls -l /etc/dovecot/sieve; grep -n "pipe :copy" /etc/dovecot/sieve/*.sieve; grep -n "rspamc.*learn_\|tmpfile" /etc/dovecot/sieve/spam /etc/dovecot/sieve/ham'
 ```
 
 (`analogic/poste.io:<VERSION>` for the open source edition.)
 
 - scripts `-rwxr-xr-x` → remove fix 1;
 - `pipe` with an argument and `rspamc` with `--rcpt` (or an equivalent
-  solution) → remove fix 2. If the build fails on the `grep` checks instead,
-  the scripts changed: read them before adapting the block.
+  solution) → remove fix 2;
+- the scripts remove their temporary file (`rm`, a `trap`, or no temporary
+  file at all) → remove fix 3.
+
+If the build fails on the `grep` checks instead, the scripts changed: read them
+before adapting the block.
 
 ## Checking that learning works
 

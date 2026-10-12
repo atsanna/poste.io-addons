@@ -45,6 +45,7 @@ poste_backup:
     sftp: SFTP
     smb: SMB / Samba
     s3: S3
+    rest: "Server REST (restic rest-server)"
   auth:
     password: Heslo
     key: Klíč SSH
@@ -68,6 +69,7 @@ poste_backup:
     auth: Přihlášení
     optional: volitelné
     unchanged: beze změny
+    repository: "Repozitář"
   destinations:
     space: "Místo"
     title: Cíle záloh
@@ -121,6 +123,17 @@ poste_backup:
     check_trust: "Jsou to klíče serveru, důvěřovat jim a otestovat"
     check_failed: "Test nelze spustit: načtěte stránku znovu a zkuste to znovu."
     verify_queued: "Ověření vyžádáno: modul ho spustí do minuty (po záloze, která právě běží)."
+    append_only: "Přijímá jen nové zálohy (jen přidávání)"
+    append_only_help: "Spuštěný s --append-only server odmítá mazat: tento poštovní server tam může zálohy jen přidávat a ani ten, kdo by ho ovládl, je nemůže smazat. Staré zálohy se pak odstraňují na straně serveru, s klíčem (viz dokumentace); pravidla uchovávání úloh se zde nepoužijí."
+    rest_help: "REST server restic přes HTTPS, například na NAS (viz dokumentace: spuštění, certifikát, uživatelé). První Test ukáže certifikát serveru k potvrzení."
+    rest_first: "První test ukáže certifikát serveru: porovnejte jeho otisk s otiskem certifikátu vytvořeného na serveru a potvrďte ho."
+    cert_found: "Server {host} odpověděl tímto certifikátem:"
+    cert_names: "pro {names}, platný do {until}"
+    cert_help: "Porovnejte ho s otiskem certifikátu vytvořeného na serveru (openssl x509 -in cert.pem -noout -fingerprint -sha256). Po potvrzení bude přijímán jen tento certifikát."
+    cert_trust: "Je to můj server: potvrdit"
+    cert_trusted: "Certifikát potvrzen."
+    cert_other: "Server nyní předkládá jiný certifikát než ten potvrzený: obnovený, nebo je někdo mezi vámi. Před potvrzením porovnejte jeho otisk níže s otiskem na serveru; do té doby se zálohy do tohoto cíle zastaví."
+    cert_confirmed: "Certifikát potvrzen: {fingerprint}, platný do {until}"
   jobs:
     log: "záznam"
     title: Úlohy zálohování
@@ -315,6 +328,7 @@ poste_backup:
     too_many_chosen: "Nejvýše {max, number} zpráv najednou: vyberte méně, nebo obnovte složky s filtrem."
     summary_messages: "Vybrané zprávy se uloží do nové složky „{folder}“ schránky {mailbox} (s „ (2)“, pokud je název obsazený) ve svých složkách a s příznaky. Nic, co už ve schránce je, se nezmění."
     task_verify: "Ověření cíle {destination}"
+    append_only: "{destination} přijímá jen nové zálohy: odsud se nikdy neodstraňují, ani pravidly uchovávání úloh, ani tlačítkem „Odstranit tyto zálohy“. Staré se odstraňují na straně serveru (viz dokumentace)."
   logs:
     keep_title: "Uchovávání záznamů"
     keep_logs: "Záznamy běhů po dobu"
@@ -365,6 +379,9 @@ poste_backup:
     verify_parts: "části dat"
     space_warn: "žlutá od"
     space_full: "červená od"
+    repository: "repozitář"
+    certificate: "certifikát"
+    append_only: "jen přidávání"
   msg:
     not_object: "není to objekt"
     settings_not_object: "soubor nastavení není objekt JSON"
@@ -481,6 +498,17 @@ poste_backup:
     verify_ok_part: "struktura a část {part} z {parts} dat: bez chyb"
     verify_every: "ověření: neznámá četnost"
     space_order: "upozornění na místo: žlutá musí začínat pod červenou"
+    rest_repository: "repozitář: povinný"
+    rest_cert_unconfirmed: "certifikát serveru ještě nebyl potvrzen (otestujte cíl v administraci)"
+    rest_auth: "server odmítl uživatele nebo heslo"
+    rest_no_cert: "server neposlal žádný certifikát"
+    rest_cert_name: "certifikát je pro {names}, ne pro {host}: vytvořte ho s tímto názvem (viz dokumentace)"
+    rest_empty: "dostupné; repozitář ještě neexistuje, vytvoří se při prvním běhu"
+    rest_space: "volné místo: server REST ho neuvádí"
+    rest_append_only: "jen přidávání: staré zálohy se odstraňují na straně serveru"
+    rest_no_forget: "tento cíl přijímá jen nové zálohy: odstraňte je na serveru"
+    rest_cert_changed: "certifikát serveru se změnil: není to ten potvrzený"
+    rest_cert_expired: "platnost certifikátu skončila {date}: obnovte ho na serveru"
   settings:
     timezone: "Časové pásmo plánů"
     timezone_container: "pásmo kontejneru ({zone})"
@@ -509,14 +537,16 @@ poste_backup:
     off: "ověřování vypnuto"
   stats:
     title: "Statistiky"
+    days_1: "1 den"
+    days_7: "7 dní"
     days_30: "30 dní"
     days_90: "90 dní"
     days_365: "1 rok"
     used: "Obsazené místo na každém cíli"
-    added: "Data přidaná běhy každé úlohy"
+    added: "Data přidaná běhy každé úlohy (před kompresí)"
     duration: "Doba běhů každé úlohy"
     disk: "Obsazený disk serveru (/data)"
     deleted_job: "smazaná úloha ({id})"
     deleted_dest: "smazaný cíl ({id})"
     used_of: "obsazeno z {total}"
-    none: "zatím žádná data"
+    none: "Zatím žádná data: tyto hodnoty zaznamenávají zálohy vytvořené touto verzí."

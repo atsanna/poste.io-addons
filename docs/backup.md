@@ -137,7 +137,9 @@ key back instead (same file, owner `mail`, mode `0600`).
 *Mailserver backup > Destinations > Add a destination.* The **Test** button next to
 *Save* tries the values of the form **before** they are saved: it checks that
 the destination can be reached, that the folder is empty or already a
-repository, the free space, and writes and removes a small file. The page is
+repository, the free space, and writes and removes a small file (a REST
+server reports no free space and is not written to: there the Test checks the
+certificate, the user and the repository). The page is
 not reloaded, so a password typed stays in its field. A saved destination
 can be tested again from its page. Use **one folder per mail server**.
 
@@ -213,6 +215,70 @@ inside the container and vanish with it), that is **on the same disk as
 write**: the backups are written by the user `mail`, **uid 8, gid 8**. Give the
 folder of the volume to that user (for an NFS export: a directory owned by
 8:8 on the server, and an export that does not squash that user).
+
+### REST server, append-only (`rest-server`)
+
+restic's own server, [`rest-server`](https://github.com/restic/rest-server),
+started with `--append-only`, **refuses to delete**: this mail server can
+only add backups there, and someone who takes it over cannot delete or
+overwrite the backups there either (see
+[If the mail server is compromised](#if-the-mail-server-is-compromised)). The
+old backups are then removed **on the server's side**, by the server's own
+schedule and with the key. HTTPS only.
+
+On the NAS (or another machine), with Docker (QNAP Container Station,
+Synology Container Manager, ...): a folder for the data, a certificate whose
+name is the one the mail server will use (a host name, or an IP address),
+and a user:
+
+```bash
+mkdir -p /share/backup/rest && cd /share/backup/rest
+# a certificate for the name used by the mail server (here nas.example.lan; for an
+# address use subjectAltName=IP:192.0.2.10), valid ten years
+openssl req -x509 -newkey ed25519 -nodes -keyout key.pem -out cert.pem -days 3650 \
+    -subj "/CN=nas.example.lan" -addext "subjectAltName=DNS:nas.example.lan"
+openssl x509 -in cert.pem -noout -fingerprint -sha256      # compare it in the admin
+docker run -d --name rest-server --restart unless-stopped -p 8000:8000 \
+    -v /share/backup/rest:/data -e OPTIONS="--append-only --tls --tls-cert /data/cert.pem --tls-key /data/key.pem" \
+    restic/rest-server:0.12.1
+docker exec -it rest-server create_user mailserver          # asks for the password
+```
+
+In the admin: *Add a destination*, type **REST server**, the server's name,
+port `8000`, a repository name (for example `mailserver`), the user and the
+password, **Accepts only new backups (append-only)** ticked. The first
+**Test** shows the certificate the server presents: compare its fingerprint
+with the one printed above, then confirm it. From then on only that
+certificate is accepted, also by the admin's own checks (another one is
+refused, as for the SSH keys of SFTP, even one signed by a public authority),
+and the user and password never appear on a command line (they go to restic
+in its environment). An expired certificate is refused.
+
+**A new certificate** (renewed, or a new server under the same name): the
+backups to that destination stop with "the server's certificate changed". The
+**Test** on the destination's page then shows the new certificate with its
+fingerprint, to be compared and confirmed like the first one; nothing is sent
+to the server before. The address may be a name or an IP address (IPv6 too);
+the certificate must name it.
+
+On an append-only destination this server never removes snapshots: the keep
+rules of the jobs are not applied there, and *Remove these backups* is not
+offered (and refused by the engine). Remove them on the server's side, for
+example once a week, with the same rules as the job and **the key** (the last
+line of the file downloaded from the admin), kept **outside** the folder the
+REST server serves:
+
+```bash
+tail -n 1 poste-backup-key.txt > /share/backup/restic.key && chmod 600 /share/backup/restic.key
+docker run --rm -v /share/backup/rest:/data -v /share/backup/restic.key:/key:ro -e RESTIC_PASSWORD_FILE=/key \
+    restic/restic:0.14.0 -r /data/mailserver forget --host poste --group-by host,tags \
+    --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+```
+
+Keep that key file readable only by the administrators of the NAS. Free
+space is not reported by a REST server (as with S3). Without
+`--append-only` on the server, untick the box: this server then removes the
+old snapshots there as on any other destination.
 
 ### Verification
 
@@ -296,7 +362,8 @@ restored. They are no longer thinned out by any keep rule: remove them from
   warnings of the next stage).
 - **Last verification** of each destination, and when the next one is (see
   [Verification](#verification)).
-- **Statistics**, for the last 30 days, 90 days or year, one value per day:
+- **Statistics**, for the last day (one value per hour), or 7 days, 30 days,
+  90 days or a year (one value per day):
   the space used on each destination and on the server's disk (the last
   measure of the day), the data added by the runs of each job (a run writes
   the same data to each of its destinations: it counts once) and how long they
@@ -554,6 +621,16 @@ this machine, then:
 export RESTIC_REPOSITORY=/mnt/mail-backup
 ```
 
+**A REST server**: the server's certificate in a file (the `cert.pem` made on
+the server, or the one the admin shows in *Restore the server*), and every
+restic command below with `--cacert server.pem` (a password with `@ : / %` or
+spaces goes into the address percent-encoded: `@` is `%40`):
+
+```bash
+read -rsp 'Password of the REST server: ' P; echo
+export RESTIC_REPOSITORY="rest:https://mailserver:$P@nas.example.lan:8000/mailserver" && unset P
+```
+
 Then restic, as usual:
 
 ```bash
@@ -771,9 +848,9 @@ the mail server has no say:
 - an **SFTP server**: snapshots of its file system, or a copy of the backup
   folder made by that server to a place the mail server cannot reach.
 
-A destination where the mail server may only add (the old snapshots then
-removed by the destination's side) is planned for a next stage of this
-add-on.
+- a **REST server in append-only mode**: the mail server can only add
+  there, whatever it is made to do; see
+  [REST server, append-only](#rest-server-append-only-rest-server).
 
 ## Files and folders
 
@@ -825,9 +902,8 @@ something that is not a folder owned by root.
 - **One repository per server**: do not point two mail servers to the same
   folder.
 - No notifications yet: they come with the next stages.
-- The statistics are per day; a destination that the mail server may only
-  add to (old snapshots removed on the destination's side) comes with the
-  next stage.
+- The statistics are per day, and per hour in the 1-day view (real hours: on
+  the day the clock changes, an hour label shows twice or is skipped).
 - A mailbox is restored into a new folder: whole, some of its folders, the
   messages of a filter (dates, sender, subject), or up to 1,000 single
   messages at a time chosen from a list. The whole server is restored from

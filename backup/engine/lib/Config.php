@@ -15,7 +15,7 @@ namespace PosteBackup;
 
 final class Config
 {
-    public const TYPES = ['local', 'sftp', 'smb', 's3'];
+    public const TYPES = ['local', 'sftp', 'smb', 's3', 'rest'];
     public const EVERY = ['hour', 'day', 'week', 'month'];
     public const VERIFY_EVERY = ['never', 'day', 'week', 'month'];
     /** A verification of a destination when none is set: every Sunday at 04:00, a quarter of the data each time. */
@@ -187,6 +187,19 @@ final class Config
                 $out['user'] = self::user($d['user'] ?? null, $e);
                 $out['password'] = self::secret($d['password'] ?? null, 'password', $e);
                 $out['domain'] = self::match($d['domain'] ?? '', '/^[A-Za-z0-9._-]{0,64}$/', 'domain', $e);
+                break;
+            case 'rest':
+                // restic's REST server (rest-server), over HTTPS only, with its certificate confirmed in the admin
+                $out['host'] = self::host($d['host'] ?? null, $e);
+                $out['port'] = self::int($d['port'] ?? 8000, 1, 65535, 'port', $e);
+                $out['folder'] = self::folder($d['folder'] ?? '', $e);
+                if ($out['folder'] === '' && !$e) {
+                    $e[] = 'repository: required';
+                }
+                $out['user'] = self::user($d['user'] ?? null, $e);
+                $out['password'] = self::secret($d['password'] ?? null, 'password', $e);
+                $out['append_only'] = self::bool($d['append_only'] ?? true, 'append-only', $e);
+                $out['cert'] = self::certificate($d['cert'] ?? '', $e);
                 break;
             case 's3':
                 $out['endpoint'] = self::endpoint($d['endpoint'] ?? null, $e);
@@ -437,6 +450,20 @@ final class Config
             return '';
         }
         return rtrim($v, '/');
+    }
+
+    /** The confirmed certificate of a REST server: one PEM certificate, as OpenSSL writes it back; '' = not confirmed yet. */
+    public static function certificate($v, array &$e): string
+    {
+        if ($v === '') {
+            return '';
+        }
+        $c = is_string($v) && strlen($v) <= 16384 && strpos($v, '-----BEGIN CERTIFICATE-----') === 0 ? @openssl_x509_read($v) : false;
+        if ($c === false || !@openssl_x509_export($c, $pem)) {
+            $e[] = 'certificate: not valid';
+            return '';
+        }
+        return $pem;
     }
 
     private const KEY_TYPES = ['ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'ssh-rsa'];

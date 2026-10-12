@@ -2,7 +2,7 @@
 upstream-fixes add-ons, run inside a test container by run.sh. An add-on that is not in the
 image is reported as SKIP. Every check prints PASS or FAIL with what it found;
 the exit code is the number of failures."""
-import imaplib, os, re, ssl, stat, subprocess, sys, time, urllib.parse
+import imaplib, os, pwd, re, ssl, stat, subprocess, sys, time, urllib.parse
 sys.path.insert(0, "/tests")
 from panel import Panel, env
 
@@ -444,6 +444,11 @@ def upstream_fixes():
     modes = {p: mode(p).split()[0] for p in ("/etc/dovecot/sieve", "/etc/dovecot/sieve/spam", "/etc/dovecot/sieve/ham")}
     check("fix 1: sieve folder and learning scripts not world-writable (755)", set(modes.values()) == {"755"}, modes)
     body = " ".join("word%d lorem ipsum dolor sit amet consectetur" % i for i in range(40))
+    def learn_tmp():
+        """The temporary files of the learning scripts (mktemp, owned by mail) now in /tmp."""
+        uid = pwd.getpwnam("mail").pw_uid
+        return {f for f in os.listdir("/tmp") if f.startswith("tmp.") and os.lstat("/tmp/" + f).st_uid == uid}
+    tmp_before = learn_tmp()
     m = imap(E["ALICE"], E["PA"])
     m.append("INBOX", None, None, ("From: spammer@example.net\r\nTo: alice@example.test\r\nSubject: Cheap offer\r\n"
                                    "Message-ID: <learn-test@example.net>\r\n\r\n" + body + "\r\n").encode())
@@ -464,6 +469,14 @@ def upstream_fixes():
     dom, user = sh(redis % "RSexample.test_*").split(), sh(redis % ("RS%s*" % E["ALICE"])).split()
     check("fix 2: learned into the domain's Bayes bucket, the one used for scanning", len(dom) > 0 and len(user) == 0,
           "domain keys %d, per-address keys %d" % (len(dom), len(user)))
+    # the script goes on after learning (fuzzy_add): its file must be gone once it ends
+    left = learn_tmp() - tmp_before
+    for _ in range(15):
+        if not left:
+            break
+        time.sleep(2)
+        left = learn_tmp() - tmp_before
+    check("fix 3: the learning script leaves no copy of the message in /tmp", learned != "" and not left, sorted(left))
 
 
 for group in (external_mailboxes, activesync_logs, dark_theme, upstream_fixes):

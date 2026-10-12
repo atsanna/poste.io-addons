@@ -8,8 +8,10 @@
 # tests/test_addons.py, tests/test_activesync.py and tests/test_backup.py
 # inside the container (add-ons missing from the image are skipped). With the
 # backup add-on, two more throw-away containers are test destinations on the
-# same private network: Samba + SFTP (tests/backup-dest) and S3 (rclone's own
-# S3 server); a tmpfs at /backup/local plays a volume mounted by the host.
+# same private network: Samba + SFTP (tests/backup-dest), S3 (rclone's own
+# S3 server) and restic's REST server in append-only mode over HTTPS (its
+# official image; a certificate made here with openssl); a tmpfs at
+# /backup/local plays a volume mounted by the host.
 # Then tests/test_restore.sh reads the backups from another machine and
 # rebuilds the whole server from them on a new installation.
 # Exit code 0 = every check passed. Containers, volume and network are
@@ -22,9 +24,13 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 
 # S3 test server: rclone's official image, pinned (1.68.2)
 S3_IMAGE=rclone/rclone:1.68.2@sha256:74c51b8817e5431bd6d7ed27cb2a50d8ee78d77f6807b72a41ef6f898845942b
+# REST server: restic's official rest-server, pinned (0.12.1)
+REST_IMAGE=restic/rest-server:0.12.1@sha256:19ff50daca27a473bfa38ebf9d8156e2dcba74c494839dd7b09e90fb32cb0efe
 
 cleanup() {
     docker rm -f "$NAME" "$NAME-dest" "$NAME-s3" "$NAME-reader" "$NAME-new" >/dev/null 2>&1 || true
+    # with its anonymous volume (/data of the image), that one only
+    docker rm -f -v "$NAME-rest" >/dev/null 2>&1 || true
     docker volume rm "$NAME-data" "$NAME-new-data" "$NAME-restore" >/dev/null 2>&1 || true
     docker network rm "$NAME-net" >/dev/null 2>&1 || true
 }
@@ -70,11 +76,28 @@ if docker exec "$NAME" test -x /usr/local/bin/poste-backup; then
     docker build -q -t poste-addons-test-dest "$DIR/backup-dest" >/dev/null
     docker run -d --name "$NAME-dest" --network "$NAME-net" -e DEST_PASSWORD="$DP" poste-addons-test-dest >/dev/null
     docker run -d --name "$NAME-s3" --network "$NAME-net" "$S3_IMAGE" serve s3 /data --addr :8080 --auth-key "testkey,$DP" >/dev/null
+    # the REST server: HTTPS with a certificate for its name (and another one, for a server
+    # that is not the confirmed one), a user, --append-only; the files go in before it starts
+    RT=$(mktemp -d)
+    for c in cert other; do
+        openssl req -x509 -newkey ed25519 -nodes -keyout "$RT/$c-key.pem" -out "$RT/$c.pem" -days 30 \
+            -subj "/CN=$NAME-rest" -addext "subjectAltName=DNS:$NAME-rest" 2>/dev/null
+    done
+    docker run --rm --entrypoint htpasswd "$REST_IMAGE" -B -b -n bk "$DP" | head -1 > "$RT/.htpasswd"
+    docker create --name "$NAME-rest" --network "$NAME-net" \
+        -e OPTIONS="--append-only --tls --tls-cert /data/cert.pem --tls-key /data/cert-key.pem" "$REST_IMAGE" >/dev/null
+    for f in .htpasswd cert.pem cert-key.pem; do
+        docker cp "$RT/$f" "$NAME-rest:/data/$f"
+    done
+    docker start "$NAME-rest" >/dev/null
+    docker cp "$RT/cert.pem" "$NAME:/tests/rest-cert.pem"
+    docker cp "$RT/other.pem" "$NAME:/tests/rest-other.pem"
+    rm -rf "$RT"
     # the real size and free space of the Samba share, read on its server: what
     # the admin must show (rclone 1.60 reports SMB space wrong)
     SMB_DF=$(docker exec "$NAME-dest" df -B1 --output=size,avail /srv/smb | tail -1)
-    docker exec "$NAME" sh -c 'umask 077; printf "DEST_HOST=%s\nS3_HOST=%s\nDEST_PASSWORD=%s\nDEST_SMB_SIZE=%s\nDEST_SMB_AVAIL=%s\n" "$1" "$2" "$3" "$4" "$5" > /tests/backup.env' \
-        sh "$NAME-dest" "$NAME-s3" "$DP" $SMB_DF
+    docker exec "$NAME" sh -c 'umask 077; printf "DEST_HOST=%s\nS3_HOST=%s\nDEST_PASSWORD=%s\nDEST_SMB_SIZE=%s\nDEST_SMB_AVAIL=%s\nREST_HOST=%s\n" "$1" "$2" "$3" "$4" "$5" "$6" > /tests/backup.env' \
+        sh "$NAME-dest" "$NAME-s3" "$DP" $SMB_DF "$NAME-rest"
 fi
 
 # test accounts: random passwords, kept in the container only

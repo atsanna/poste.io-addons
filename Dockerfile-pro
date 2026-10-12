@@ -1,6 +1,6 @@
 # Poste.io Pro image with the add-ons of this repository: External
 # Mailboxes, admin dark theme, calendars and contacts over ActiveSync,
-# ActiveSync logs in the admin, backup and restore, and two upstream fixes.
+# ActiveSync logs in the admin, backup and restore, and three upstream fixes.
 # Each add-on is one section below, between the "ADD-ON" markers: delete a
 # section to leave that add-on out, or run select-addons.sh (see
 # docs/choosing-addons.md). See README.md and docs/installation.md.
@@ -239,3 +239,18 @@ RUN set -e; D=/etc/dovecot/sieve; \
       grep -qF "pipe :copy \"$c\" [\"\${IMAPUSER}\"];" $D/report-$c.sieve; \
     done; \
     chmod 0644 $D/report-spam.sieve $D/report-ham.sieve; chmod 0755 $D/spam $D/ham
+
+#======================================================================#
+#  UPSTREAM-FIX 3: the learning scripts leave every message in /tmp
+#======================================================================#
+# The "spam"/"ham" scripts copy the message to a mktemp file for rspamc and
+# never remove it: each message moved into or out of Junk stays in /tmp until
+# the container is recreated. Here the scripts remove it when they end, also
+# when they are stopped. The grep FAILS the build if Poste.io changes them.
+# See docs/upstream-fixes.md.
+RUN set -e; D=/etc/dovecot/sieve; \
+    for c in spam ham; do \
+      sed -i "s|^input_tmpfile=\$(mktemp)\$|&\ntrap 'rm -f \"\$input_tmpfile\"' EXIT\ntrap 'exit 1' HUP INT TERM|" $D/$c; \
+      grep -qF "trap 'rm -f \"\$input_tmpfile\"' EXIT" $D/$c; \
+    done; \
+    chmod 0755 $D/spam $D/ham

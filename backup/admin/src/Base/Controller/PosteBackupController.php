@@ -299,7 +299,7 @@ class PosteBackupController extends AbstractController
             }
         }
         $days = (int) $request->query->get('days', '30');
-        $days = in_array($days, [30, 90, 365], true) ? $days : 30;
+        $days = in_array($days, [1, 7, 30, 90, 365], true) ? $days : 30;
         $stats = Panel::statistics(Panel::historyLines(Store::HISTORY, $now - ($days + 1) * 86400), $cfg, $tz, $days, $now);
 
         $total = @disk_total_space('/data');
@@ -525,6 +525,8 @@ class PosteBackupController extends AbstractController
             'hasSecret' => $old !== null,
             'test' => $id ? $this->testShown(Panel::tests()[$id] ?? null) : null,
             'scan' => $id ? $session->get('poste_backup_scan_' . $id) : null,
+            'certScan' => $id ? $session->get('poste_backup_cert_' . $id) : null,
+            'certInfo' => ($values['type'] ?? '') === 'rest' && ($values['cert'] ?? '') !== '' ? self::certInfo((string) $values['cert']) : null,
             'publicKey' => $id ? Panel::publicKey($id) : null,
             'localRoots' => Config::LOCAL_ROOTS,
             'weekdays' => [1, 2, 3, 4, 5, 6, 7],
@@ -582,6 +584,15 @@ class PosteBackupController extends AbstractController
         if ($d['type'] === 'sftp' && $d['auth'] === 'key' && ($id === null || Panel::publicKey($id) === null)) {
             return new JsonResponse(['status' => 'save_first', 'lines' => [$this->t('poste_backup.destination.check_save_first')]]);
         }
+        if ($d['type'] === 'rest' && $d['cert'] === '') {
+            // first contact: the server's certificate, to be confirmed (nothing is sent to it before)
+            [$c, $err] = \PosteBackup\Destination::serverCertificate($d['host'], $d['port']);
+            if ($err) {
+                return new JsonResponse(['status' => 'error', 'lines' => [$this->msg($err)]]);
+            }
+            return new JsonResponse(['status' => 'cert', 'host' => $d['host'], 'fingerprint' => $c['fingerprint'], 'pem' => $c['pem'],
+                                     'names' => implode(', ', $c['names']), 'until' => date('Y-m-d', $c['until'])]);
+        }
         if ($d['type'] === 'sftp' && !$d['hostkeys']) {
             [$keys, $err] = Panel::scanHostKeys($d['host'], $d['port']);
             if ($err) {
@@ -633,7 +644,7 @@ class PosteBackupController extends AbstractController
             return true;
         };
         $identity = ['smb' => ['host', 'share', 'user', 'domain'], 'sftp' => ['host', 'port', 'user'],
-                     's3' => ['endpoint', 'bucket', 'access_key']][$type] ?? [];
+                     's3' => ['endpoint', 'bucket', 'access_key'], 'rest' => ['host', 'port', 'user']][$type] ?? [];
         $secret = function (string $k) use ($p, $old, $same, $identity) {
             $v = (string) $p->get($k, '');
             return ($v === '' && $same($identity)) ? ($old[$k] ?? '') : $v;
@@ -668,6 +679,19 @@ class PosteBackupController extends AbstractController
                     $d[$k] = $str($k);
                 }
                 $d['secret_key'] = $secret('secret_key');
+                break;
+            case 'rest':
+                $d['host'] = $str('host');
+                $d['port'] = ctype_digit($str('port')) ? (int) $str('port') : -1;
+                $d['folder'] = $str('folder');
+                $d['user'] = $str('user');
+                $d['password'] = $secret('password');
+                $d['append_only'] = $p->get('append_only') !== null;
+                // the certificate confirmed in the form (its Test button) wins; otherwise the
+                // confirmed one stays only if the server is the same
+                $posted = trim((string) $p->get('cert', ''));
+                $sameServer = $old && $old['type'] === 'rest' && $old['host'] === $d['host'] && $old['port'] === $d['port'];
+                $d['cert'] = $posted !== '' ? $posted . "\n" : ($sameServer ? $old['cert'] : '');
                 break;
         }
         return $d;
@@ -721,7 +745,25 @@ class PosteBackupController extends AbstractController
                 } else {
                     $request->getSession()->set('poste_backup_scan_' . $id, $keys);
                 }
+            } elseif ($d['type'] === 'rest' && $d['cert'] === '') {
+                // first contact: show the server's certificate, to be confirmed
+                [$c, $err] = \PosteBackup\Destination::serverCertificate($d['host'], $d['port']);
+                if ($err) {
+                    $this->addFlash('error', $this->msg($err));
+                } else {
+                    $request->getSession()->set('poste_backup_cert_' . $id, $c);
+                }
             } else {
+                if ($d['type'] === 'rest') {
+                    // the server presents another certificate (renewed, or someone in between): shown
+                    // to be confirmed again, like the first one; nothing is sent to it before
+                    [$c, $err] = \PosteBackup\Destination::serverCertificate($d['host'], $d['port']);
+                    if (!$err && !\PosteBackup\Destination::sameCertificate($c['pem'], $d['cert'])) {
+                        $this->addFlash('error', $this->t('poste_backup.destination.cert_other'));
+                        $request->getSession()->set('poste_backup_cert_' . $id, $c);
+                        return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
+                    }
+                }
                 $r = Panel::test($id, $d);
                 $this->addFlash($r['status'] === 'error' ? 'error' : 'notice', $this->t('poste_backup.destination.tested.' . $r['status']));
             }
@@ -736,6 +778,27 @@ class PosteBackupController extends AbstractController
     {
         $d = Panel::config()['destinations'][$id] ?? null;
         $session = $request->getSession();
+        if ($d !== null && $d['type'] === 'rest') {
+            $shown = $session->get('poste_backup_cert_' . $id);
+            if ($this->csrf($request, 'poste_backup_destination_trust') && is_array($shown)) {
+                // read again: it must be exactly the certificate shown and confirmed
+                [$c, $err] = \PosteBackup\Destination::serverCertificate($d['host'], $d['port']);
+                if ($err || $c['pem'] !== $shown['pem']) {
+                    $this->addFlash('error', $err ? $this->msg($err) : $this->msg("the server's certificate changed: it is not the one confirmed"));
+                } else {
+                    $err = Panel::update(function (array $cf) use ($id, $c, $d) {
+                        if (($cf['destinations'][$id]['host'] ?? null) !== $d['host'] || ($cf['destinations'][$id]['port'] ?? null) !== $d['port']) {
+                            return 'the destination changed meanwhile';
+                        }
+                        $cf['destinations'][$id]['cert'] = $c['pem'];
+                        return $cf;
+                    });
+                    $this->addFlash($err ? 'error' : 'notice', $err ? $this->msg($err) : $this->t('poste_backup.destination.cert_trusted'));
+                }
+            }
+            $session->remove('poste_backup_cert_' . $id);
+            return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
+        }
         $shown = $session->get('poste_backup_scan_' . $id);
         if ($d === null || $d['type'] !== 'sftp') {
             throw $this->createNotFoundException();
@@ -965,7 +1028,7 @@ class PosteBackupController extends AbstractController
     {
         $boxes = 0;
         foreach ($paths as $p) {
-            if (preg_match('#^/data/domains/[^/]+/[^/]+$#', $p)) {
+            if (\PosteBackup\Engine::isMailboxPath($p)) {
                 $boxes++;
             }
         }
@@ -1016,6 +1079,7 @@ class PosteBackupController extends AbstractController
         $state = Panel::state();
         return $this->render('Base/PosteBackup/snapshots.html.twig', [
             'destinations' => $cfg['destinations'],
+            'appendOnly' => $did !== '' && \PosteBackup\Engine::appendOnly($cfg['destinations'][$did]),
             'dest' => $did,
             'snapshots' => $snapshots,
             'error' => $error !== null ? $this->msg($error) : null,
@@ -1199,6 +1263,17 @@ class PosteBackupController extends AbstractController
                                  'rows' => $rows]);
     }
 
+    /** The fingerprint and end of validity of a confirmed certificate, to show it. */
+    private static function certInfo(string $pem): ?array
+    {
+        $c = @openssl_x509_read($pem);
+        if ($c === false) {
+            return null;
+        }
+        return ['fingerprint' => 'SHA256 ' . strtoupper(implode(':', str_split((string) openssl_x509_fingerprint($c, 'sha256'), 2))),
+                'until' => (int) (openssl_x509_parse($c)['validTo_time_t'] ?? 0)];
+    }
+
     /** "Customer Ltd" of "Customer Ltd <billing@customer.com>"; the address when there is no name. */
     private static function senderName(string $from): string
     {
@@ -1279,6 +1354,18 @@ class PosteBackupController extends AbstractController
                 $lines[] = 'export RCLONE_CONFIG_BK_SECRET_ACCESS_KEY=$P && unset P';
                 $lines[] = 'export RESTIC_REPOSITORY=' . $q('rclone:BK:' . $d['bucket'] . ($d['folder'] !== '' ? '/' . $d['folder'] : ''));
                 break;
+            case 'rest':
+                // the confirmed certificate, written as it is: restic accepts only that server
+                $lines[] = "cat > server.pem <<'EOF'";
+                foreach (explode("\n", trim($d['cert'])) as $l) {
+                    $lines[] = $l;
+                }
+                $lines[] = 'EOF';
+                $lines[] = '# a password with @ : / % or spaces goes into the address percent-encoded (@ is %40, : is %3A, ...)';
+                $lines[] = "read -rsp 'Password of the REST server: ' P; echo";
+                $lines[] = 'export RESTIC_REPOSITORY=' . $q('rest:https://' . rawurlencode($d['user']) . ':') . '"$P"' . $q('@' . substr(\PosteBackup\Destination::restUrl($d, false), 8)) . ' && unset P';
+                $lines[] = '# and add --cacert server.pem to every restic command below';
+                break;
             default:
                 $lines[] = '# where the share or disk of this destination is mounted on the host:';
                 $lines[] = 'export RESTIC_REPOSITORY=' . $q($d['path']);
@@ -1300,8 +1387,13 @@ class PosteBackupController extends AbstractController
      */
     public function snapshotsForgetAction(Request $request, string $dest)
     {
-        if (!isset(Panel::config()['destinations'][$dest])) {
+        $d = Panel::config()['destinations'][$dest] ?? null;
+        if ($d === null) {
             throw $this->createNotFoundException();
+        }
+        if (\PosteBackup\Engine::appendOnly($d)) {
+            $this->addFlash('error', $this->msg('this destination accepts only new backups: remove them on the server'));
+            return $this->redirectToRoute('poste_backup_snapshots', ['dest' => $dest]);
         }
         if ($this->csrf($request, 'poste_backup_forget')) {
             $job = (string) $request->request->get('job', '');

@@ -24,6 +24,9 @@
     <div class="alert alert-danger">{{ error }}</div>
 {% endif %}
 
+{% if appendOnly %}
+    <div class="alert alert-info"><i class="fa fa-lock"></i> {{ 'poste_backup.snapshots.append_only'|trans({'{destination}': destinations[dest].name}) }}</div>
+{% endif %}
 {% if snapshots is not null %}
 <table class="table table-striped table-hover bk">
     <thead><tr><th>{{ 'poste_backup.snapshots.time'|trans }}</th><th>{{ 'poste_backup.snapshots.job'|trans }}</th>
@@ -60,7 +63,7 @@
                 {% elseif jobs[job] is defined %}<strong>{{ jobs[job].name }}</strong>
                 {% else %}<span class="bk-muted">{{ 'poste_backup.snapshots.job_deleted'|trans({'{id}': job}) }}</span>{% endif %}</td>
             <td>{{ 'poste_backup.snapshots.count'|trans({'{count}': count}) }}</td>
-            <td class="text-right">{% if job != '-' %}
+            <td class="text-right">{% if job != '-' and not appendOnly %}
                 <form method="post" action="{{ path('poste_backup_snapshots_forget', {dest: dest}) }}" style="display:inline"
                       onsubmit="return confirm('{{ 'poste_backup.snapshots.forget_confirm_js'|trans|e('js') }}')">
                     <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_forget') }}">

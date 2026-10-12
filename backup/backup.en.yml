@@ -45,6 +45,7 @@ poste_backup:
     sftp: SFTP
     smb: SMB / Samba
     s3: S3
+    rest: "REST server (restic rest-server)"
   auth:
     password: Password
     key: SSH key
@@ -68,6 +69,7 @@ poste_backup:
     auth: Login with
     optional: optional
     unchanged: unchanged
+    repository: "Repository"
   destinations:
     space: "Space"
     title: Destinations
@@ -121,6 +123,17 @@ poste_backup:
     check_trust: "These are the server's keys: trust them and test"
     check_failed: "The test could not be run: reload the page and try again."
     verify_queued: "Verification requested: the engine starts it within a minute (after a backup that is running)."
+    append_only: "Accepts only new backups (append-only)"
+    append_only_help: "Started with --append-only, the server refuses to delete: this mail server can only add backups there, and someone who takes it over cannot delete them either. The old backups are then removed on the server's side, with the key (see the documentation); the keep rules of the jobs are not applied here."
+    rest_help: "restic's REST server over HTTPS, for example on the NAS (see the documentation: starting it, its certificate, its users). The first Test shows the server's certificate, to be confirmed."
+    rest_first: "The first test shows the server's certificate: compare its fingerprint with the one of the certificate made on the server, then confirm it."
+    cert_found: "The server {host} answered with this certificate:"
+    cert_names: "for {names}, valid until {until}"
+    cert_help: "Compare it with the fingerprint of the certificate made on the server (openssl x509 -in cert.pem -noout -fingerprint -sha256). Once confirmed, only that certificate is accepted."
+    cert_trust: "This is my server: confirm it"
+    cert_trusted: "Certificate confirmed."
+    cert_other: "The server now presents another certificate than the one confirmed: renewed, or someone in between. Compare its fingerprint below with the one on the server before confirming it; until then the backups to this destination stop."
+    cert_confirmed: "Certificate confirmed: {fingerprint}, valid until {until}"
   jobs:
     log: "log"
     title: Backup jobs
@@ -315,6 +328,7 @@ poste_backup:
     too_many_chosen: "Up to {max, number} messages at a time: choose fewer, or restore folders with a filter."
     summary_messages: "The messages chosen go into a new folder «{folder}» of {mailbox} (with \" (2)\" if that name is taken), in their folders and with their flags. Nothing already in the mailbox is changed."
     task_verify: "Verification of {destination}"
+    append_only: "{destination} accepts only new backups: they are never removed from here, neither by the keep rules of the jobs nor with \"Remove these backups\". The old ones are removed on the server's side (see the documentation)."
   logs:
     keep_title: "Keeping the logs"
     keep_logs: "Logs of the runs, for"
@@ -365,6 +379,9 @@ poste_backup:
     verify_parts: "parts of the data"
     space_warn: "yellow from"
     space_full: "red from"
+    repository: "repository"
+    certificate: "certificate"
+    append_only: "append-only"
   msg:
     not_object: "not an object"
     settings_not_object: "the settings file is not a JSON object"
@@ -481,6 +498,17 @@ poste_backup:
     verify_ok_part: "the structure and part {part} of {parts} of the data: no errors"
     verify_every: "verification: unknown frequency"
     space_order: "space warnings: yellow must start below red"
+    rest_repository: "repository: required"
+    rest_cert_unconfirmed: "the server's certificate has not been confirmed yet (Test the destination in the admin)"
+    rest_auth: "the server refused the user or the password"
+    rest_no_cert: "the server sent no certificate"
+    rest_cert_name: "the certificate is for {names}, not for {host}: make it with that name (see the documentation)"
+    rest_empty: "reachable; the repository does not exist yet, it is created at the first run"
+    rest_space: "free space: not reported by a REST server"
+    rest_append_only: "append-only: the old backups are removed on the server's side"
+    rest_no_forget: "this destination accepts only new backups: remove them on the server"
+    rest_cert_changed: "the server's certificate changed: it is not the one confirmed"
+    rest_cert_expired: "the certificate expired on {date}: renew it on the server"
   settings:
     timezone: "Time zone of the schedules"
     timezone_container: "the container's ({zone})"
@@ -509,14 +537,16 @@ poste_backup:
     off: "verification off"
   stats:
     title: "Statistics"
+    days_1: "1 day"
+    days_7: "7 days"
     days_30: "30 days"
     days_90: "90 days"
     days_365: "1 year"
     used: "Space used on each destination"
-    added: "Data added by the runs of each job"
+    added: "Data added by the runs of each job (before compression)"
     duration: "Duration of the runs of each job"
     disk: "Server disk (/data) used"
     deleted_job: "deleted job ({id})"
     deleted_dest: "deleted destination ({id})"
     used_of: "used of {total}"
-    none: "no data yet"
+    none: "No data yet: these values are recorded by the backups made with this version."

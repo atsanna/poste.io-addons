@@ -104,6 +104,29 @@ export RESTIC_REPOSITORY=rclone:BK:$S3_BUCKET/$S3_FOLDER
 read_one "S3" "$SNAP_S3"
 forget_remote
 
+# --- a REST server (append-only): its certificate, every command with --cacert
+if [ -n "${SNAP_REST:-}" ]; then
+    P=$REST_PASSWORD
+    export RESTIC_REPOSITORY="rest:https://$REST_USER:$P@$REST_HOST:$REST_PORT/$REST_FOLDER" && unset P
+    out=$(restic --cacert server.pem snapshots --group-by tags --latest 1 2>&1)
+    case "$out" in
+        *"${SNAP_REST:0:8}"*) check "REST: restic lists the snapshots, the latest of the job among them" 0 "${SNAP_REST:0:8}" ;;
+        *) check "REST: restic lists the snapshots, the latest of the job among them" 1 "$(echo "$out" | tail -n 2)" ;;
+    esac
+    rm -rf /tmp/restore
+    out=$(restic --cacert server.pem restore "$SNAP_REST" --target /tmp/restore --include /data/var/backup/engine/staging/users.db 2>&1)
+    [ -s /tmp/restore/data/var/backup/engine/staging/users.db ]
+    check "REST: the accounts database restored from it" $? "$(echo "$out" | tail -n 1)"
+    out=$(restic snapshots 2>&1)
+    case "$out" in
+        *"certificate signed by unknown authority"*) check "REST: without its certificate restic refuses the server" 0 "unknown authority" ;;
+        *) check "REST: without its certificate restic refuses the server" 1 "$(echo "$out" | tail -n 1)" ;;
+    esac
+    forget_remote
+else
+    check "REST: a snapshot of the job to the REST server" 1 "none in restore.env"
+fi
+
 # --- a folder (the share or disk mounted on this machine)
 export RESTIC_REPOSITORY=/work/local
 read_one "folder" "$SNAP_LOCAL"

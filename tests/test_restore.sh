@@ -57,6 +57,8 @@ done
 # a key the SFTP server accepts: the one the old server's admin made
 docker exec "$NAME" sh -c '. /tests/restore.env; cat "/data/var/backup/settings/ssh/$SFTPKEY_ID"' |
     docker exec -i "$NAME-reader" sh -c 'umask 077; cat > /work/sftp-key'
+# the REST server's certificate (cert.pem made on that server)
+docker exec "$NAME" cat /tests/rest-cert.pem | docker exec -i "$NAME-reader" sh -c 'cat > /work/server.pem'
 # the local destination's folder, as a share mounted on that machine
 docker exec "$NAME" tar -C /backup -cf - local | docker exec -i "$NAME-reader" tar -C /work -xf -
 docker cp "$DIR/read_backups.sh" "$NAME-reader:/work/read_backups.sh" >/dev/null

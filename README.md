@@ -18,7 +18,8 @@ image on top of the official one:
 - **Backup and restore** — encrypted, scheduled backups of the configuration
   and the mail to SMB, SFTP, S3 or a mounted volume, set up and watched from
   the admin.
-- **Two upstream fixes** that make "move to Junk" actually teach rspamd.
+- **Three upstream fixes** that make "move to Junk" actually teach rspamd,
+  without leaving a copy of each message in `/tmp`.
 
 Take all of them or only the ones you want: each add-on is one section of the
 Dockerfile ([choosing the add-ons](docs/choosing-addons.md)).
@@ -111,9 +112,11 @@ devices must resync once)
 - The **configuration** (accounts, domains, settings, certificates, DKIM keys,
   calendars and address books, webmail settings, spam filter training) and
   **all the mail or chosen mailboxes**, every hour, day, week or month.
-- To one or more destinations at once: **SMB/Samba, SFTP, S3**, or a volume
-  mounted by the host (NFS, a second disk); a **Test** of each destination
-  before saving it (reachable, empty folder, free space, a write).
+- To one or more destinations at once: **SMB/Samba, SFTP, S3**, a volume
+  mounted by the host (NFS, a second disk), or restic's **REST server in
+  append-only mode**, where a compromised mail server cannot delete the
+  backups; a **Test** of each destination before saving it (reachable, empty
+  folder, free space, a write).
 - Made with [restic](https://restic.net): encrypted before leaving the
   server, deduplicated and compressed, so frequent backups store only what
   changed; keep rules per job (hourly, daily, weekly, monthly).

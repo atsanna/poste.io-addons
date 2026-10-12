@@ -193,6 +193,17 @@ def prepare():
         "S3_ACCESS": d[dests["S3"]]["access_key"], "S3_SECRET": d[dests["S3"]]["secret_key"],
     }
     values.update({"SNAP_" + k: v for k, v in snaps.items()})
+    # the REST server (append-only) of test_backup.py, with the latest snapshot of its job
+    rest = by_name.get("REST append-only")
+    rjob = [i for i, j in cfg["jobs"].items() if j["name"] == "To REST"]
+    if rest and rjob:
+        r = sh(["poste-backup", "restic", rest, "snapshots", "--json", "--tag", "job:" + rjob[0]])
+        try:
+            values["SNAP_REST"] = sorted(json.loads(r.stdout), key=lambda x: x["time"])[-1]["id"]
+        except (ValueError, IndexError, KeyError):
+            values["SNAP_REST"] = ""
+        values.update({"REST_HOST": d[rest]["host"], "REST_PORT": str(d[rest]["port"]), "REST_FOLDER": d[rest]["folder"],
+                       "REST_USER": d[rest]["user"], "REST_PASSWORD": d[rest]["password"]})
     with open("/tests/restore.env", "w") as f:
         os.chmod("/tests/restore.env", 0o600)
         for k, v in values.items():

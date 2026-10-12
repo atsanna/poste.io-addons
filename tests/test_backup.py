@@ -1093,19 +1093,25 @@ check("restore the server from SFTP with a key: a key of one's own instead of a 
 local_list = json.loads(restic(LOCAL, "snapshots", "--json").stdout or "[]")
 with_config = sum(1 for x in local_list if "/data/var/backup/engine/staging" in x["paths"])
 url, html = ADMIN.get(BASE + "/snapshots?dest=" + LOCAL)
+conf_only = [x for x in local_list if "/data/var/backup/engine/staging" in x["paths"] and "/data/domains" not in x["paths"]
+             and not any(re.match(r"^/data/domains/[^/]+/[^/]+$", p) and p.rsplit("/", 1)[1] not in ("private", "public", "selector") for p in x["paths"])]
+rows_conf = [r for r in re.findall(r"<tr>(.*?)</tr>", html, re.S) if any(x["short_id"] in r for x in conf_only)]
+check("a snapshot of the configuration only (with the DKIM keys): 'configuration', no mailbox count, no 'Restore a mailbox'",
+      len(conf_only) >= 1 and len(rows_conf) == len(conf_only) and all("configuration" in r and "mailbox" not in r.lower() for r in rows_conf),
+      [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", r))[:120] for r in rows_conf][:2])
 check("restore the server is offered only for snapshots with the configuration",
       html.count("/server\"") == with_config and with_config < len(local_list), (html.count("/server\""), with_config, len(local_list)))
 
 # the backups of a job that no longer exists: listed, removed on request, the others stay
 TEMP = new_job("Temporary", [LOCAL], {"config": "1", "mail": "none"})
 TEMP = TEMP[0] if TEMP else "000000000000"
-run_job(TEMP)
+temp_run = run_job(TEMP)
 whole_local = len(snapshots(LOCAL, WHOLE) or [])
 temp_local = len(snapshots(LOCAL, TEMP) or [])
 post_form(BASE + "/jobs", suffix="/%s/delete" % TEMP)
 url, html = ADMIN.get(BASE + "/snapshots?dest=" + LOCAL)
 check("a deleted job: its backups are listed as those of a deleted job", TEMP not in config()["jobs"] and temp_local >= 1
-      and "deleted job (%s)" % TEMP in html, (temp_local, TEMP in config()["jobs"]))
+      and "deleted job (%s)" % TEMP in html, (temp_local, TEMP in config()["jobs"], (temp_run.stdout + temp_run.stderr)[-300:]))
 forget_path = BASE + "/snapshots/%s/forget" % LOCAL
 before_q = queued_tasks()
 ADMIN.post(forget_path, {"_token": "x", "job": TEMP, "confirm": "yes"})
@@ -1208,8 +1214,8 @@ stt["verify"][VT]["last_slot"] = 1
 sh(["sh", "-c", 'cat > "$1.tmp" && mv "$1.tmp" "$1"', "sh", STATE], user="mail", input=json.dumps(stt))
 sh(["poste-backup", "tick"])
 hist = [json.loads(x) for x in open("/data/var/backup/engine/history.jsonl")]
-sched = [l for l in hist if l.get("kind") == "verify" and l.get("dest") == VT and l.get("reason") == "schedule" and l.get("start", 0) >= t_sched]
-check("a verification due by its schedule is run by the engine's tick", len(sched) == 1 and state()["verify"][VT]["last_slot"] > 1, len(sched))
+sched_runs = [l for l in hist if l.get("kind") == "verify" and l.get("dest") == VT and l.get("reason") == "schedule" and l.get("start", 0) >= t_sched]
+check("a verification due by its schedule is run by the engine's tick", len(sched_runs) == 1 and state()["verify"][VT]["last_slot"] > 1, len(sched_runs))
 # statistics on the dashboard
 url, html = ADMIN.get(BASE + "/")
 m = re.search(r'data-stats="([^"]*)"', html)
@@ -1220,11 +1226,11 @@ check("statistics: 30 days, the space used on the destination today, the data ad
       and any(x["name"] == "Verify test" and x["data"][-1] > 0 for x in stats.get("added", []))
       and isinstance(stats.get("disk", [None])[-1], int) and html.count('<canvas id="bk-chart-') == 4, (len(stats.get("labels", [])), used.get("Verify test", [])[-1:]))
 lens = []
-for d in ("90", "365", "7"):
+for d in ("90", "365", "8", "7", "1"):
     url, html = ADMIN.get(BASE + "/?days=" + d)
     m = re.search(r'data-stats="([^"]*)"', html)
     lens.append(len(json.loads(htmlmod.unescape(m.group(1)))["labels"]) if m else 0)
-check("statistics: 90 days, a year; another value is 30 days", lens == [90, 365, 30], lens)
+check("statistics: 90 days, a year, 7 days, one day per hour; another value is 30 days", lens == [90, 365, 30, 7, 24], lens)
 # the space warnings
 before = json.dumps(config()["settings"])
 ADMIN.post(BASE + "/settings/space", {"_token": "x", "space_warn": "1", "space_full": "2"})
@@ -1245,6 +1251,91 @@ CSV = Panel(E["ALICE"], E["PA"], lang="cs")
 url, html = CSV.get(BASE + "/")
 url2, html2 = CSV.get(BASE + "/destinations/%s/edit" % VT)
 check("in Czech: statistics and verification", "Statistiky" in html and "Poslední ověření" in html and "Ověřit nyní" in html2, url)
+
+# ===================================================================== REST server, append-only
+print("--- backup: a REST server in append-only mode")
+RH = B["REST_HOST"]
+rest_values = {"name": "REST append-only", "type": "rest", "host": RH, "port": "8000", "folder": "mailserver", "user": "bk",
+               "password": B["DEST_PASSWORD"], "append_only": "1"}
+
+
+def fingerprint(path):
+    out = sh(["openssl", "x509", "-in", path, "-noout", "-fingerprint", "-sha256"]).stdout.strip()
+    return "SHA256 " + out.split("=", 1)[1] if "=" in out else "?"
+
+
+def check_json(values):
+    f, html = form(BASE + "/destinations/new")
+    data = {n: (v or "") for n, v, t in f["fields"] if n and not t.endswith(":off") and t not in ("submit", "button")}
+    data.update(values)
+    url, body = ADMIN.post(BASE + "/destinations/check", data)
+    try:
+        return json.loads(body)
+    except ValueError:
+        return {"status": "?", "body": body[:200]}
+
+
+r0 = check_json(rest_values)
+check("REST, the form's Test: first the server's certificate, its fingerprint and names (nothing sent to the server before)",
+      r0.get("status") == "cert" and r0.get("fingerprint") == fingerprint("/tests/rest-cert.pem") and r0.get("names") == RH
+      and "BEGIN CERTIFICATE" in r0.get("pem", ""), {k: r0.get(k) for k in ("status", "fingerprint", "names")})
+r1 = check_json(dict(rest_values, cert=r0.get("pem", "")))
+check("the certificate confirmed: reachable, no repository yet, no free space reported, append-only said",
+      r1.get("status") == "ok" and any("does not exist yet" in l for l in r1.get("lines", [])) and any("REST server" in l for l in r1.get("lines", []))
+      and any("append-only" in l for l in r1.get("lines", [])), r1.get("lines"))
+r2 = check_json(dict(rest_values, cert=r0.get("pem", ""), password="wrong-password"))
+r3 = check_json(dict(rest_values, cert=open("/tests/rest-other.pem").read()))
+ip = sh(["getent", "hosts", RH]).stdout.split()[0] if sh(["getent", "hosts", RH]).stdout.split() else "?"
+r4 = check_json(dict(rest_values, host=ip))
+check("refused: a wrong password, another certificate than the server's, an address that is not in the certificate",
+      r2.get("status") == "error" and "refused the user or the password" in " ".join(r2.get("lines", []))
+      and r3.get("status") == "error" and "not reachable" in " ".join(r3.get("lines", []))
+      and r4.get("status") == "error" and ("the certificate is for %s, not for %s" % (RH, ip)) in " ".join(r4.get("lines", [])),
+      (r2.get("lines"), r3.get("lines"), r4.get("lines")))
+REST, html = new_destination(dict(rest_values, cert=r0.get("pem", "")))
+REST = REST or "000000000000"
+d = config()["destinations"].get(REST, {})
+check("the REST destination saved with its certificate, append-only", d.get("type") == "rest" and d.get("append_only") is True
+      and "BEGIN CERTIFICATE" in d.get("cert", ""), {k: d.get(k) for k in ("type", "append_only")})
+RJOB = new_job("To REST", [REST], {"config": "1", "mail": "none", "keep_hourly": "1", "keep_daily": "0"})
+RJOB = RJOB[0] if RJOB else "000000000000"
+outs = [run_job(RJOB).stdout.strip() for _ in range(3)]
+snaps = snapshots(REST, RJOB)
+s = state()["jobs"].get(RJOB, {})
+log = open("/data/var/backup/engine/logs/" + s["log"]).read() if s.get("log") else ""
+check("three runs, keep 1 per hour: the three snapshots stay on the append-only server (nothing removed from here), the log says why",
+      snaps is not None and len(snaps) == 3 and s.get("status") == "ok" and "append-only destination: the old snapshots are removed on the server" in log,
+      (outs, len(snaps or []), s.get("status")))
+check("the password of the REST server is in no log of the run", B["DEST_PASSWORD"] not in log, "not in the log")
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + REST)
+check("snapshots page: the append-only note, no removal of the backups of a job there", "accepts only new backups" in html
+      and 'action="/admin/backup/snapshots/%s/forget"' % REST not in html and html.count('<code>') >= 3, url)
+before_q = queued_tasks()
+f = [x for x in Panel.parse(ADMIN.get(BASE + "/snapshots?dest=" + SMB)[1]).forms if x["action"].endswith("/forget")]
+token = [v for n, v, t in f[0]["fields"] if n == "_token"][0] if f else ""
+url, html = ADMIN.post(BASE + "/snapshots/%s/forget" % REST, {"_token": token, "job": RJOB, "confirm": "yes"})
+n0 = task_ids()
+sh(["sh", "-c", 'cat > "$1"', "sh", QUEUE + "/1000000005-forget-0e0e0e0e0e0e.json"], user="mail", input=json.dumps({"dest": REST, "job": RJOB}))
+done = run_tasks(n0, 1)
+check("removing the backups of a job there: refused by the admin, and by the engine for a request written behind it",
+      "accepts only new backups" in html and queued_tasks() == before_q and [t.get("error") for t in done]
+      == ["this destination accepts only new backups: remove them on the server"] and len(snapshots(REST, RJOB) or []) == 3,
+      [t.get("error") for t in done])
+rv = verify_now(REST)
+check("a verification of the append-only server works", rv.get("status") == "ok" and (rv.get("note") or "").endswith("no errors"), (rv.get("note"), rv.get("error")))
+url, html = ADMIN.get(BASE + "/snapshots/%s/%s/server" % (REST, sorted(snaps or [{"id": "0" * 64}], key=lambda x: x["time"])[-1]["id"]))
+check("restore the server from it: the commands with the confirmed certificate and --cacert, no password", "BEGIN CERTIFICATE" in html
+      and "--cacert server.pem" in html and "rest:https://bk:" in html and B["DEST_PASSWORD"] not in html, ADMIN.status)
+# a server whose certificate is not the confirmed one: the backup fails, nothing is sent
+post_form(BASE + "/destinations/%s/edit" % REST, {"cert": open("/tests/rest-other.pem").read(), "password": ""})
+run_job(RJOB)
+s = state()["jobs"].get(RJOB, {})
+err = (s.get("destinations", {}).get(REST) or {}).get("error") or ""
+check("another certificate saved for that server: the backup fails before sending anything, and says why", s.get("status") == "error"
+      and err.startswith("not reachable") and "certificate" in err.lower(), err)
+post_form(BASE + "/destinations/%s/edit" % REST, {"cert": r0.get("pem", ""), "password": ""})
+url, html = Panel(E["ALICE"], E["PA"], lang="cs").get(BASE + "/destinations/new")
+check("in Czech: the REST server type", "Server REST (restic rest-server)" in html, url)
 
 # one run at a time
 with open("/run/poste-backup.lock") as f:

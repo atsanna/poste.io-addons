@@ -85,7 +85,7 @@ switch ($cmd) {
         $env += ['RESTIC_PASSWORD_FILE' => Store::KEY, 'RESTIC_CACHE_DIR' => Store::CACHE . '/restic',
                  'PATH' => Proc::PATH, 'LANG' => 'C.UTF-8'];
         // the terminal stays attached: restic's own output and prompts
-        $p = proc_open(array_merge(['restic', '-r', Destination::repository($id, $d)], array_slice($argv, 3)),
+        $p = proc_open(array_merge(Destination::resticCommand(Destination::repository($id, $d), $env), array_slice($argv, 3)),
                        [0 => STDIN, 1 => STDOUT, 2 => STDERR], $pipes, null, $env);
         $exit = is_resource($p) ? proc_close($p) : 127;
         foreach (glob("$tmp/*") ?: [] as $f) {

@@ -11,6 +11,8 @@ require '/usr/local/lib/poste-backup/lib/Engine.php';
 require '/usr/local/lib/poste-backup/lib/Messages.php';
 require '/usr/local/lib/poste-backup/lib/Index.php';
 require '/usr/local/lib/poste-backup/lib/Panel.php';
+require '/usr/local/lib/poste-backup/lib/Proc.php';
+require '/usr/local/lib/poste-backup/lib/Destination.php';
 
 use PosteBackup\Config;
 use PosteBackup\Schedule;
@@ -181,8 +183,78 @@ check('history read one line at a time: older lines and broken ones left out', c
 check('the next part to verify: the following one after a clean check, around; the same one after errors',
       PosteBackup\Engine::nextPart(1, 4, true) === 2 && PosteBackup\Engine::nextPart(4, 4, true) === 1
       && PosteBackup\Engine::nextPart(3, 4, false) === 3 && PosteBackup\Engine::nextPart(1, 1, true) === 1, 'nextPart');
+$st24 = PosteBackup\Panel::statistics([['t' => $now - 1800, 'start' => $now - 1800, 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1',
+    'added' => 5, 'duration' => 2, 'log' => 'h1', 'dest_used' => 77]], $cfgs, $utc, 1, $now);
+// $now is 12:00 UTC: the hours from 13:00 of the day before to 12:00; the run at 11:30 is in the 11:00 hour, the one before last
+check('charts: one day is per hour, 24 values, the last hour last', count($st24['labels']) === 24 && end($st24['labels']) === '12:00'
+      && $st24['labels'][0] === '13:00' && $st24['used'][0]['data'][22] === 77 && end($st24['used'][0]['data']) === null, $st24['labels']);
+// the clock goes back in Rome on 2026-10-25 (03:00 CEST -> 02:00 CET): 02:30 happens twice, two runs an hour apart stay two hours
+$rome = new DateTimeZone('Europe/Rome');
+$u = function (string $when) { return (new DateTimeImmutable($when, new DateTimeZone('UTC')))->getTimestamp(); };
+$dst = PosteBackup\Panel::statistics([
+    ['t' => $u('2026-10-25 00:31'), 'start' => $u('2026-10-25 00:30'), 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'added' => 1, 'duration' => 1, 'log' => 'x1', 'dest_used' => 10],
+    ['t' => $u('2026-10-25 01:31'), 'start' => $u('2026-10-25 01:30'), 'job' => 'aaaaaaaaaaaa', 'dest' => 'd1d1d1d1d1d1', 'added' => 2, 'duration' => 1, 'log' => 'x2', 'dest_used' => 20]],
+    $cfgs, $rome, 1, $u('2026-10-25 04:30'));
+$twice = array_keys($dst['labels'], '02:00', true);
+check('charts: one day across a change of the clock: 24 real hours, 02:00 twice, the two runs of 02:30 in two hours',
+      count($dst['labels']) === 24 && count($twice) === 2 && $dst['used'][0]['data'][$twice[0]] === 10 && $dst['used'][0]['data'][$twice[1]] === 20,
+      [$dst['labels'], $dst['used'][0]['data'] ?? null]);
 check('charts: a year, labelled with the year', count(PosteBackup\Panel::statistics([], $cfgs, $utc, 365, $now)['labels']) === 365
       && PosteBackup\Panel::statistics([], $cfgs, $utc, 365, $now)['labels'][364] === '2026-10-11', 'year');
+
+check('a mailbox in the paths of a snapshot, not the DKIM key files of a domain (a backup of the configuration holds them)',
+      PosteBackup\Engine::isMailboxPath('/data/domains/example.com/alice') && !PosteBackup\Engine::isMailboxPath('/data/domains/example.com/private')
+      && !PosteBackup\Engine::isMailboxPath('/data/domains/example.com/public') && !PosteBackup\Engine::isMailboxPath('/data/domains/example.com/selector')
+      && !PosteBackup\Engine::isMailboxPath('/data/domains/example.com') && !PosteBackup\Engine::isMailboxPath('/data/domains/example.com/alice/Maildir'), 'paths');
+
+// --- a REST server (append-only)
+// a real certificate, made here (never one written by hand)
+$k = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+openssl_x509_export(openssl_csr_sign(openssl_csr_new(['commonName' => 'nas.example.lan'], $k), null, $k, 30), $pemOk);
+$restOk = ['name' => 'NAS', 'type' => 'rest', 'host' => 'nas.example.lan', 'port' => 8000, 'folder' => 'mail', 'user' => 'bk', 'password' => 'p@ss:w/rd'];
+[$v, $e] = Config::destination($restOk);
+check('REST destination: accepted without a certificate yet, append-only unless said otherwise', $v !== null && $v['append_only'] === true
+      && $v['cert'] === '' && PosteBackup\Engine::appendOnly($v), $e);
+$bad = [];
+foreach ([['folder' => ''], ['folder' => '../x'], ['port' => 70000], ['cert' => 'not a certificate'], ['cert' => "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"],
+          ['append_only' => 'yes'], ['host' => 'a b'], ['password' => '']] as $x) {
+    [$v, $e] = Config::destination($x + $restOk);
+    if ($v !== null) {
+        $bad[] = $x;
+    }
+}
+check('REST destination refused: no repository, a path, a port, a certificate that is not one, append-only not true/false, host, no password', !$bad, $bad);
+$tmpd = sys_get_temp_dir() . '/u' . bin2hex(random_bytes(4));
+mkdir($tmpd, 0700);
+[$v] = Config::destination($restOk + ['cert' => $pemOk, 'append_only' => false]);
+[$env, $err] = PosteBackup\Destination::env('0a1b2c3d4e5f', $v, $tmpd, '/tmp');
+$cmd = PosteBackup\Destination::resticCommand(PosteBackup\Destination::repository('0a1b2c3d4e5f', $v), $env ?? []);
+check('REST: the address with the user and password (encoded) in the environment, never on the command line; the certificate as --cacert',
+      $err === null && ($env['RESTIC_REPOSITORY'] ?? '') === 'rest:https://bk:p%40ss%3Aw%2Frd@nas.example.lan:8000/mail'
+      && $cmd === ['restic', '--cacert', $tmpd . '/cacert-0a1b2c3d4e5f.pem'] && is_file($tmpd . '/cacert-0a1b2c3d4e5f.pem')
+      && strpos(implode(' ', $cmd), 'p@ss') === false && !PosteBackup\Engine::appendOnly($v), [$env['RESTIC_REPOSITORY'] ?? null, $cmd]);
+array_map('unlink', glob("$tmpd/*"));
+rmdir($tmpd);
+[$v] = Config::destination($restOk);
+check('REST without a confirmed certificate: no connection, a clear reason', PosteBackup\Destination::env('0a1b2c3d4e5f', $v, '/tmp', '/tmp')[1]
+      === "the server's certificate has not been confirmed yet (Test the destination in the admin)", 'unconfirmed');
+check('REST: an IPv6 address in brackets; other destinations keep -r', PosteBackup\Destination::restUrl(['host' => '2001:db8::1'] + $restOk, false)
+      === 'https://[2001:db8::1]:8000/mail' && PosteBackup\Destination::resticCommand('/backup/x', []) === ['restic', '-r', '/backup/x'], 'url');
+// the names of a certificate, as openssl_x509_parse writes them (an IPv6 address in full)
+$san = 'DNS:nas.example.lan, DNS:*.backup.example.lan, IP Address:2001:DB8:0:0:0:0:0:1, IP Address:192.0.2.10';
+$covers = function (string $h) use ($san) { return PosteBackup\Destination::certCovers($h, $san)[0]; };
+check('REST certificate names: an IPv6 address written short or in full, IPv4, the name, a wildcard one level down',
+      $covers('2001:db8::1') && $covers('2001:DB8:0:0:0:0:0:1') && $covers('192.0.2.10') && $covers('NAS.example.lan') && $covers('a.backup.example.lan'),
+      PosteBackup\Destination::certCovers('2001:db8::1', $san)[1]);
+check('REST certificate names refused: another address, two levels under a wildcard, the wildcard\'s own domain, an address written as a name',
+      !$covers('2001:db8::2') && !$covers('a.b.backup.example.lan') && !$covers('backup.example.lan') && !$covers('192.0.2.11')
+      && !PosteBackup\Destination::certCovers('192.0.2.10', 'DNS:192.0.2.10')[0], 'refused');
+check('REST certificate names shown: an IPv6 address short', PosteBackup\Destination::certCovers('x', $san)[1][2] === '2001:db8::1',
+      PosteBackup\Destination::certCovers('x', $san)[1]);
+openssl_x509_export(openssl_csr_sign(openssl_csr_new(['commonName' => 'nas.example.lan'], $k), null, $k, 30), $pemAgain);
+check('REST: the same certificate is recognised, another one (a new one for the same name and key) is not',
+      PosteBackup\Destination::sameCertificate($pemOk, $pemOk . "\n") && !PosteBackup\Destination::sameCertificate($pemOk, $pemAgain)
+      && !PosteBackup\Destination::sameCertificate('not a certificate', 'not a certificate'), 'same');
 
 // --- settings: what is refused
 $bad = [
@@ -450,6 +522,13 @@ $samples = [
     'there are no backups on this destination yet: nothing to verify', 'the structure and all the data: no errors',
     'the structure and part 2 of 4 of the data: no errors', 'verification: unknown frequency', 'space warnings: yellow must start below red',
     'parts of the data: a whole number from 1 to 52', 'yellow from: a whole number from 1 to 99', 'red from: a whole number from 1 to 99',
+    'repository: required', "the server's certificate has not been confirmed yet (Test the destination in the admin)",
+    'the server refused the user or the password', 'the server sent no certificate',
+    'the certificate is for poste-rest, not for 172.18.0.5: make it with that name (see the documentation)',
+    'reachable; the repository does not exist yet, it is created at the first run', 'free space: not reported by a REST server',
+    "append-only: the old backups are removed on the server's side", 'this destination accepts only new backups: remove them on the server',
+    "the server's certificate changed: it is not the one confirmed", 'certificate: not valid', 'append-only: not true/false',
+    'the certificate expired on 2026-10-01: renew it on the server',
     // what the code writes, read from the code itself
     PosteBackup\Engine::outcome(3, 2, 1)['error'], PosteBackup\Engine::outcome(3, 2, 1)['note'],
 ];

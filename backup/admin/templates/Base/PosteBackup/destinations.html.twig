@@ -17,7 +17,7 @@
         <tr>
             <th>{{ d.name }}</th>
             <td>{{ ('poste_backup.type.' ~ d.type)|trans }}</td>
-            <td><code>{% if d.type == 'local' %}{{ d.path }}{% elseif d.type == 'sftp' %}{{ d.user }}@{{ d.host }}:{{ d.folder }}{% elseif d.type == 'smb' %}//{{ d.host }}/{{ d.share }}{% if d.folder %}/{{ d.folder }}{% endif %}{% else %}{{ d.endpoint }}/{{ d.bucket }}{% if d.folder %}/{{ d.folder }}{% endif %}{% endif %}</code></td>
+            <td><code>{% if d.type == 'local' %}{{ d.path }}{% elseif d.type == 'sftp' %}{{ d.user }}@{{ d.host }}:{{ d.folder }}{% elseif d.type == 'smb' %}//{{ d.host }}/{{ d.share }}{% if d.folder %}/{{ d.folder }}{% endif %}{% elseif d.type == 'rest' %}https://{{ d.host }}:{{ d.port }}/{{ d.folder }}{% if d.append_only %} <i class="fa fa-lock" title="{{ 'poste_backup.destination.append_only'|trans }}"></i>{% endif %}{% else %}{{ d.endpoint }}/{{ d.bucket }}{% if d.folder %}/{{ d.folder }}{% endif %}{% endif %}</code></td>
             <td>{% if t is null %}<span class="bk-muted">{{ 'poste_backup.destinations.not_tested'|trans }}</span>
                 {% elseif t.status == 'error' %}<span class="text-danger"><i class="fa fa-times-circle"></i> {{ t.lines|last }}</span>
                 {% else %}<span class="text-success"><i class="fa fa-check"></i> {{ t.t|date('Y-m-d H:i') }}</span>{% endif %}</td>

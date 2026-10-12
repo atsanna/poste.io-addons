@@ -19,15 +19,25 @@
 /* space nearly used up: yellow from 80%, red from 90% */
 .bk-bar span.bk-warn { background: #f0ad4e; }
 .bk-bar span.bk-full { background: #d9534f; }
-.bk-nav { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 6px; }
+/* the buttons of the dashboard: tiles like those of Poste.io's own dashboard (white text, a big
+   pale icon on the right, the same greens and blues; red when something needs a look) */
+.bk-nav { display: flex; flex-wrap: wrap; gap: 0.6em; margin: 20px 0 6px; }
 .bk-stats-title { margin: 26px 0 8px; }
 .bk-stats-title small { font-size: 13px; margin-left: 8px; }
 .bk-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; }
 .bk-chart { height: 220px; position: relative; }
-.bk-nav a { flex: 1 1 170px; border: 1px solid var(--bs-border-color, #ddd); border-radius: 4px; padding: 12px 14px; color: inherit; text-decoration: none; }
-.bk-nav a:hover { border-color: #3DC7BE; }
-.bk-nav i.fa { font-size: 22px; color: #3DC7BE; float: left; margin: 2px 10px 0 0; }
-.bk-nav strong { display: block; }
+.bk-chart-none { padding-top: 90px; text-align: center; }
+.bk-nav a { flex: 1 1 180px; position: relative; min-height: 96px; padding: 1em 76px 1em 1em; color: #fff; text-decoration: none; border: none; }
+.bk-nav a:hover, .bk-nav a:focus { color: #fff; text-decoration: none; filter: brightness(1.1); }
+.bk-nav a i.fa { font-size: 60px; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: rgba(255, 255, 255, 0.5); }
+.bk-nav strong { display: block; font-size: 22px; font-weight: normal; line-height: 1.2; margin-bottom: 4px; }
+.bk-nav .bk-muted { color: rgba(255, 255, 255, 0.9); }
+.bk-nav .bk-tile1 { background-color: #29A200; }
+.bk-nav .bk-tile2 { background-color: #00AE46; }
+.bk-nav .bk-tile3 { background-color: #00B383; }
+.bk-nav .bk-tile4 { background-color: #00AEB9; }
+.bk-nav .bk-tile5 { background-color: #0098C4; }
+.bk-nav a.bk-tile-bad { background-color: #d9534f; }
 .bk-form { max-width: 900px; }
 .bk-form .form-group { margin-bottom: 14px; }
 .bk-row { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: flex-end; }

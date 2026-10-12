@@ -238,9 +238,24 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   days, 90 days and a year (another value is 30), with the space, the data
   added and the duration of the job; the space warnings refused without the
   CSRF token and when yellow is not below red, then saved and taken by the
-  bars; in Czech. Unit checks: the verification settings and their limits,
+  bars; in Czech;
+- a REST server in append-only mode (restic's official `rest-server`, HTTPS
+  with a certificate made by `run.sh`): the form's Test shows the server's
+  certificate first (its fingerprint compared with `openssl`), then, confirmed,
+  says reachable and empty; a wrong password, another certificate and an
+  address that is not in the certificate are refused with their reason;
+  three runs with "keep 1 per hour" leave the three snapshots there (nothing
+  removed from this server) and the log says why; no password in the log;
+  the snapshots page shows the note and no removal there, and the engine
+  refuses one written behind the admin; a verification works; the commands
+  to restore the server carry the certificate and `--cacert`, no password;
+  another certificate saved for the server makes the backup fail before
+  anything is sent; in Czech. Unit checks: the verification settings and their limits,
   when a verification is due, the request, the charts computed from history
-  lines (one run counted once, older lines and verifications left out).
+  lines (one run counted once, older lines and verifications left out); a
+  REST destination (accepted without a certificate yet, refused values, the
+  address with the encoded password in the environment and never on the
+  command line, `--cacert`, IPv6 in brackets).
 
 **Restore** (`tests/test_restore.sh`, `tests/read_backups.sh`,
 `tests/rebuild_server.sh`, `tests/test_restore.py`): the two procedures of

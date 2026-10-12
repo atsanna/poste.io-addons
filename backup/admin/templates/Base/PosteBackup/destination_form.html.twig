@@ -14,7 +14,7 @@
             <input class="form-control" id="bk-name" name="name" style="width:260px" maxlength="60" value="{{ values.name ?? '' }}" required></div>
         <div class="form-group"><label class="control-label" for="bk-type">{{ 'poste_backup.field.type'|trans }}</label>
             <select class="form-control" id="bk-type" name="type">
-                {% for t in ['smb', 'sftp', 's3', 'local'] %}<option value="{{ t }}"{% if values.type == t %} selected{% endif %}>{{ ('poste_backup.type.' ~ t)|trans }}</option>{% endfor %}
+                {% for t in ['smb', 'sftp', 's3', 'rest', 'local'] %}<option value="{{ t }}"{% if values.type == t %} selected{% endif %}>{{ ('poste_backup.type.' ~ t)|trans }}</option>{% endfor %}
             </select></div>
     </div>
 
@@ -33,6 +33,29 @@
             <div class="form-group bk-type" data-type="smb"><label class="control-label" for="bk-share">{{ 'poste_backup.field.share'|trans }}</label>
                 <input class="form-control" id="bk-share" name="share" style="width:160px" value="{{ values.share ?? '' }}"></div>
         </div>
+    </div>
+
+    <div class="bk-type" data-type="rest">
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-rhost">{{ 'poste_backup.field.host'|trans }}</label>
+                <input class="form-control" id="bk-rhost" name="host" style="width:260px" value="{{ values.host ?? '' }}"></div>
+            <div class="form-group"><label class="control-label" for="bk-rport">{{ 'poste_backup.field.port'|trans }}</label>
+                <input class="form-control bk-small" id="bk-rport" name="port" value="{{ values.type == 'rest' ? (values.port ?? 8000) : 8000 }}"></div>
+            <div class="form-group"><label class="control-label" for="bk-rrepo">{{ 'poste_backup.field.repository'|trans }}</label>
+                <input class="form-control" id="bk-rrepo" name="folder" style="width:200px" value="{{ values.type == 'rest' ? (values.folder ?? '') : '' }}" placeholder="mailserver"></div>
+        </div>
+        <div class="bk-row">
+            <div class="form-group"><label class="control-label" for="bk-ruser">{{ 'poste_backup.field.user'|trans }}</label>
+                <input class="form-control" id="bk-ruser" name="user" style="width:200px" value="{{ values.user ?? '' }}" autocomplete="off"></div>
+            <div class="form-group"><label class="control-label" for="bk-rpassword">{{ 'poste_backup.field.password'|trans }}</label>
+                <input class="form-control" id="bk-rpassword" name="password" type="password" style="width:200px" autocomplete="new-password"
+                       placeholder="{{ hasSecret ? 'poste_backup.field.unchanged'|trans : '' }}"></div>
+        </div>
+        <div class="checkbox"><label><input type="checkbox" name="append_only" value="1"{% if values.append_only ?? true %} checked{% endif %}>
+            <strong>{{ 'poste_backup.destination.append_only'|trans }}</strong></label>
+            <p class="help-block" style="margin:2px 0 0 20px">{{ 'poste_backup.destination.append_only_help'|trans }}</p></div>
+        {% if certInfo %}<p class="bk-muted"><i class="fa fa-lock"></i> {{ 'poste_backup.destination.cert_confirmed'|trans({'{fingerprint}': certInfo.fingerprint, '{until}': certInfo.until|date('Y-m-d')}) }}</p>{% endif %}
+        <p class="help-block">{{ 'poste_backup.destination.rest_help'|trans }}</p>
     </div>
 
     <div class="bk-type" data-type="s3">
@@ -128,6 +151,8 @@
 
     {# SFTP keys confirmed with the Test button below, saved with the destination #}
     <input type="hidden" name="hostkeys" id="bk-hostkeys" value="">
+    {# the REST server's certificate confirmed with the Test button, saved with the destination #}
+    <input type="hidden" name="cert" id="bk-cert" value="">
     <button type="submit" class="btn btn-primary"><i class="fa fa-check"></i> {{ 'poste_backup.action.save'|trans }}</button>
     <button type="button" class="btn btn-default" id="bk-check" title="{{ 'poste_backup.destination.check_help'|trans }}"
             data-url="{{ id ? path('poste_backup_destination_check_saved', {id: id}) : path('poste_backup_destination_check') }}"><i class="fa fa-plug"></i> {{ 'poste_backup.action.test'|trans }}</button>
@@ -147,7 +172,18 @@
     {% if values.type == 'sftp' and not values.hostkeys and not scan %}
         <p>{{ 'poste_backup.destination.sftp_first'|trans }}</p>
     {% endif %}
-    {% if scan %}
+    {% if values.type == 'rest' and not values.cert and not certScan %}
+        <p>{{ 'poste_backup.destination.rest_first'|trans }}</p>
+    {% endif %}
+    {% if certScan %}
+        <p><strong>{{ 'poste_backup.destination.cert_found'|trans({'{host}': values.host}) }}</strong></p>
+        <p><code>{{ certScan.fingerprint }}</code><br><span class="bk-muted">{{ 'poste_backup.destination.cert_names'|trans({'{names}': certScan.names|join(', '), '{until}': certScan.until|date('Y-m-d')}) }}</span></p>
+        <p class="help-block">{{ 'poste_backup.destination.cert_help'|trans }}</p>
+        <form method="post" action="{{ path('poste_backup_destination_trust', {id: id}) }}" style="display:inline">
+            <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_destination_trust') }}">
+            <button type="submit" class="btn btn-warning btn-sm"><i class="fa fa-check"></i> {{ 'poste_backup.destination.cert_trust'|trans }}</button>
+        </form>
+    {% elseif scan %}
         <p><strong>{{ 'poste_backup.destination.keys_found'|trans({'{host}': values.host}) }}</strong></p>
         <ul>{% for k in scan %}<li><code>{{ k[1] }}</code></li>{% endfor %}</ul>
         <p class="help-block">{{ 'poste_backup.destination.keys_help'|trans }}</p>
@@ -202,7 +238,7 @@
             $(this).toggle(on).find('input, select').prop('disabled', !on);
         });
         $('#bk-auth').trigger('chosen:updated');
-        var pw = type === 'smb' || (type === 'sftp' && $('#bk-auth').val() === 'password');
+        var pw = type === 'smb' || (type === 'sftp' && $('#bk-auth').val() === 'password');   // REST: its own password field
         $('.bk-password').toggle(pw).find('input').prop('disabled', !pw);
         $('.bk-keyhelp').toggle(type === 'sftp' && $('#bk-auth').val() === 'key');
     }
@@ -236,11 +272,27 @@
         notSaved: '{{ 'poste_backup.destination.check_not_saved'|trans|e('js') }}',
         keysFound: '{{ 'poste_backup.destination.keys_found'|trans({'{host}': '%host%'})|e('js') }}',
         keysHelp: '{{ 'poste_backup.destination.keys_help'|trans|e('js') }}',
+        certFound: '{{ 'poste_backup.destination.cert_found'|trans({'{host}': '%host%'})|e('js') }}',
+        certNames: '{{ 'poste_backup.destination.cert_names'|trans({'{names}': '%names%', '{until}': '%until%'})|e('js') }}',
+        certHelp: '{{ 'poste_backup.destination.cert_help'|trans|e('js') }}',
+        certTrust: '{{ 'poste_backup.destination.cert_trust'|trans|e('js') }}',
         trust: '{{ 'poste_backup.destination.check_trust'|trans|e('js') }}',
         failed: '{{ 'poste_backup.destination.check_failed'|trans|e('js') }}'
     };
     function bkShow(r) {
         var $box = $('#bk-check-result').empty().show();
+        if (r.status === 'cert') {
+            $box.append($('<p>').append($('<strong>').text(bkT.certFound.replace('%host%', function () { return r.host; }))));
+            $box.append($('<p>').append($('<code>').text(r.fingerprint)).append('<br>')
+                .append($('<span class="bk-muted">').text(bkT.certNames.replace('%names%', function () { return r.names; }).replace('%until%', function () { return r.until; }))));
+            $box.append($('<p class="help-block">').text(bkT.certHelp));
+            $('<button type="button" class="btn btn-warning btn-sm">').append('<i class="fa fa-check"></i> ').append(document.createTextNode(bkT.certTrust))
+                .appendTo($box).on('click', function () {
+                    $('#bk-cert').val(r.pem);
+                    $('#bk-check').trigger('click');
+                });
+            return;
+        }
         if (r.status === 'keys') {
             $box.append($('<p>').append($('<strong>').text(bkT.keysFound.replace('%host%', r.host))));
             var $ul = $('<ul>').appendTo($box);
@@ -291,5 +343,6 @@
 
     // keys confirmed for one server are not kept for another
     $('#bk-host, #bk-port').on('input', function () { $('#bk-hostkeys').val(''); });
+    $('#bk-rhost, #bk-rport').on('input', function () { $('#bk-cert').val(''); });
 </script>
 {% endblock %}

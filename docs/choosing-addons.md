@@ -11,7 +11,7 @@ and lives in its own folder of the repository.
 | [Calendars and contacts over ActiveSync](activesync-dav.md) | `activesync-dav` | `activesync-dav/` | 19 lines of Z-Push configuration, two Z-Push backends, installs `libawl-php` |
 | [ActiveSync logs in the admin](activesync-logs.md) | `activesync-logs` | `activesync-logs/` | adds an admin page and one menu entry (after *User logs*), a start script (`/etc/cont-init.d`) and the nightly rotation of the Z-Push logs (`/etc/cron.d`, `/etc/logrotate.d`) |
 | [Backup and restore](backup.md) | `backup` | `backup/` | adds admin pages and one menu entry, the engine (`/usr/local/bin/poste-backup` and its library), a cron entry and a start script (`/etc/cron.d`, `/etc/cont-init.d`), installs restic, rclone, the OpenSSH client and smbclient |
-| [Upstream fixes for spam learning](upstream-fixes.md) | `upstream-fixes` | — (in the Dockerfile) | permissions and recipient of the Junk learning scripts |
+| [Upstream fixes for spam learning](upstream-fixes.md) | `upstream-fixes` | — (in the Dockerfile) | permissions, recipient and temporary files of the Junk learning scripts |
 
 No add-on needs another one. The tests build the open source image with each
 add-on alone, as well as with all of them (see [testing.md](testing.md)).

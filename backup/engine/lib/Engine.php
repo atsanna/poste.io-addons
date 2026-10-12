@@ -852,6 +852,22 @@ final class Engine
         }
     }
 
+    /**
+     * Is this path of a snapshot a mailbox (its home, /data/domains/<domain>/<name>)?
+     * Not the DKIM key files of a domain, which a backup of the configuration
+     * holds at the same depth (private, public, selector).
+     */
+    public static function isMailboxPath(string $p): bool
+    {
+        return preg_match('#^/data/domains/[^/]+/([^/]+)$#', $p, $m) === 1 && !in_array($m[1], ['private', 'public', 'selector'], true);
+    }
+
+    /** A destination where this server may only add (a REST server started with --append-only). */
+    public static function appendOnly(array $d): bool
+    {
+        return $d['type'] === 'rest' && !empty($d['append_only']);
+    }
+
     /** The part to read next time: the following one after a clean check, the same one after errors. */
     public static function nextPart(int $part, int $parts, bool $clean): int
     {
@@ -911,6 +927,9 @@ final class Engine
     /** Removes every snapshot of a job from a destination (restic forget + prune). */
     private function forgetJob(string $did, array $d, array $t, $log): array
     {
+        if (self::appendOnly($d)) {
+            return ['status' => 'error', 'error' => 'this destination accepts only new backups: remove them on the server'];
+        }
         $tmp = $this->privateTmp();
         if ($tmp === null) {
             return ['status' => 'error', 'error' => 'cannot create a temporary folder'];
@@ -995,7 +1014,7 @@ final class Engine
         foreach ($list as $snap) {
             $mail = false;
             foreach ((array) ($snap['paths'] ?? []) as $p) {
-                if (is_string($p) && ($p === '/data/domains' || preg_match('#^/data/domains/[^/]+/[^/]+$#', $p) === 1)) {
+                if (is_string($p) && ($p === '/data/domains' || self::isMailboxPath($p))) {
                     $mail = true;
                 }
             }
@@ -1369,11 +1388,16 @@ final class Engine
                     array_push($forget, '--keep-' . $k, (string) $n);
                 }
             }
-            $this->phase('prune', $did);
-            $f = $this->restic($repo, $forget, $env, $log, 0);
-            if ($f['exit'] !== 0) {
-                $res['status'] = 'warning';
-                $res['error'] = 'backup done, but the old snapshots were not removed: ' . self::lastLine($f['err']);
+            if (self::appendOnly($d)) {
+                // the server refuses to delete: its own side removes the old snapshots
+                $this->logLine($log, 'append-only destination: the old snapshots are removed on the server\'s side, not from here');
+            } else {
+                $this->phase('prune', $did);
+                $f = $this->restic($repo, $forget, $env, $log, 0);
+                if ($f['exit'] !== 0) {
+                    $res['status'] = 'warning';
+                    $res['error'] = 'backup done, but the old snapshots were not removed: ' . self::lastLine($f['err']);
+                }
             }
             $this->oldestMail($did, $repo, $env, $log);
             $this->phase('space', $did);
@@ -1426,8 +1450,13 @@ final class Engine
      */
     private function space(string $did, array $d, array $env, string $tmp, $log): array
     {
-        $path = $d['type'] === 'local' ? $d['path'] : Destination::rclonePath($did, $d);
         $out = ['used' => null, 'free' => null, 'total' => null];
+        if ($d['type'] === 'rest') {
+            // a REST server does not say how much it holds or has free
+            $this->logLine($log, 'space: not reported by a REST server');
+            return $out;
+        }
+        $path = $d['type'] === 'local' ? $d['path'] : Destination::rclonePath($did, $d);
         $s = Proc::run(['rclone', 'size', '--json', $path], $env, null, 600, null, $log);
         $j = json_decode($s['out'], true);
         if ($s['exit'] === 0 && is_array($j) && isset($j['bytes'])) {
@@ -1485,6 +1514,15 @@ final class Engine
     /** Returns [exists, error]: a repository is there only if its "config" file is. */
     private function repositoryExists(string $did, array $d, array $env, $log): array
     {
+        if ($d['type'] === 'rest') {
+            $tmp = $this->privateTmp();
+            if ($tmp === null) {
+                return [false, 'cannot create a temporary folder'];
+            }
+            [$exists, $err] = Destination::restCheck($d, $tmp);
+            $this->removeTmp($tmp);
+            return [(bool) $exists, $err];
+        }
         if ($d['type'] === 'local') {
             $err = Destination::checkLocal($d['path']);
             if ($err) {
@@ -1520,11 +1558,11 @@ final class Engine
     private function restic(string $repo, array $args, array $env, $log, int $timeout, ?callable $onLine = null,
                             ?callable $onErrLine = null, int $maxLine = 1048576): array
     {
-        $cmd = array_merge(['restic', '-r', $repo], $args);
+        $cmd = array_merge(Destination::resticCommand($repo, $env), $args);
         $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine, $maxLine);
         if ($r['exit'] !== 0 && stripos($r['err'], 'repository is already locked') !== false) {
             $this->logLine($log, 'repository locked: removing stale locks and retrying once');
-            Proc::run(['restic', '-r', $repo, 'unlock'], $env, null, 300, null, $log);
+            Proc::run(array_merge(Destination::resticCommand($repo, $env), ['unlock']), $env, null, 300, null, $log);
             $r = Proc::run($cmd, $env, null, $timeout, $onLine, $log, $onErrLine, $maxLine);
         }
         return $r;

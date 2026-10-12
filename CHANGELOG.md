@@ -56,8 +56,12 @@ All notable changes to this project are documented here. The format follows
   keys, calendars and address books, webmail settings, spam filter training,
   the other add-ons' settings) and all the mail or chosen mailboxes, to one or
   more destinations at once: SMB/Samba, SFTP (server key confirmed in the
-  admin, password or a key pair made by the admin), S3, or a volume mounted
-  by the host (NFS, a second disk). Made with restic (deduplicated,
+  admin, password or a key pair made by the admin), S3, a volume mounted
+  by the host (NFS, a second disk), or restic's **REST server in append-only
+  mode** (HTTPS, its certificate confirmed in the admin, and confirmed again
+  when the server presents a new one): the mail server can
+  only add there, so someone who takes it over cannot delete the backups; the
+  old ones are removed on the server's side (documented). Made with restic (deduplicated,
   compressed, checked) and rclone from the image's Debian packages; the
   databases are copied consistently while in use. Jobs every hour, day, week
   or month in a time zone of their own, with keep rules per job; a **Test**
@@ -96,6 +100,14 @@ All notable changes to this project are documented here. The format follows
   configuration file said the opposite of what the option does: fixed.
   Existing mailboxes keep their settings; one saved again from the admin with
   this combination gets "Read all" off.
+
+### Fixed
+- **Upstream fixes: the spam learning scripts no longer leave every message in
+  `/tmp`.** Poste.io's `spam` / `ham` scripts copy the message to a temporary
+  file for `rspamc` and never remove it, so each message moved into or out of
+  Junk stayed in the container's `/tmp` until the container was recreated. A
+  third fix removes the file when the script ends, also when it is stopped
+  ([upstream fixes](docs/upstream-fixes.md#3-every-learned-message-stays-in-tmp)).
 
 ## [1.1.0] - 2026-10-11
 

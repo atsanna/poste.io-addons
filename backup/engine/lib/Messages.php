@@ -26,7 +26,7 @@ final class Messages
         'keep daily' => 'keep_daily', 'keep weekly' => 'keep_weekly', 'keep monthly' => 'keep_monthly',
         'notify on success' => 'notify_success', 'created' => 'created', 'log days' => 'log_days',
         'history days' => 'history_days', 'parts of the data' => 'verify_parts', 'yellow from' => 'space_warn',
-        'red from' => 'space_full',
+        'red from' => 'space_full', 'repository' => 'repository', 'certificate' => 'certificate', 'append-only' => 'append_only',
     ];
 
     /**
@@ -168,6 +168,18 @@ final class Messages
             '/^the structure and part (\d+) of (\d+) of the data: no errors$/' => ['verify_ok_part', ['part', 'parts']],
             '/^verification: unknown frequency$/' => ['verify_every', []],
             '/^space warnings: yellow must start below red$/' => ['space_order', []],
+            // REST server (append-only)
+            '/^repository: required$/' => ['rest_repository', []],
+            '/^the server\'s certificate has not been confirmed yet \(Test the destination in the admin\)$/' => ['rest_cert_unconfirmed', []],
+            '/^the server refused the user or the password$/' => ['rest_auth', []],
+            '/^the server sent no certificate$/' => ['rest_no_cert', []],
+            '/^the certificate is for (.+), not for (.+): make it with that name \(see the documentation\)$/' => ['rest_cert_name', ['names', 'host']],
+            '/^reachable; the repository does not exist yet, it is created at the first run$/' => ['rest_empty', []],
+            '/^free space: not reported by a REST server$/' => ['rest_space', []],
+            '/^append-only: the old backups are removed on the server\'s side$/' => ['rest_append_only', []],
+            '/^this destination accepts only new backups: remove them on the server$/' => ['rest_no_forget', []],
+            '/^the server\'s certificate changed: it is not the one confirmed$/' => ['rest_cert_changed', []],
+            '/^the certificate expired on (\d{4}-\d{2}-\d{2}): renew it on the server$/' => ['rest_cert_expired', ['date']],
         ];
     }
 
