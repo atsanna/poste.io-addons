@@ -6,6 +6,8 @@ poste_backup:
   title: Mailserver backup
   error:
     csrf: Invalid CSRF token, reload the page
+  wait:
+    reading: "Reading the backup on the destination: on a large backup it can take a minute."
   action:
     save: Save
     edit: Edit

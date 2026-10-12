@@ -6,6 +6,12 @@
 <div class="alert alert-danger">{{ flashMessage }}</div>
 {% endfor %}
 <style>
+/* The admin's Font Awesome 4.3.0 writes "0{" for "0%{" in the keyframes of fa-spin (minified CSS):
+   the first frame is dropped and a spinner turns by about one degree, so it looks still (measured).
+   A keyframes rule of our own, on the pages of this add-on. */
+@-webkit-keyframes bk-spin { from { -webkit-transform: rotate(0deg); transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); transform: rotate(360deg); } }
+@keyframes bk-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.fa-spin { -webkit-animation: bk-spin 1.2s infinite linear; animation: bk-spin 1.2s infinite linear; }
 .bk-muted { color: var(--bs-secondary-color, #777); font-size: 12px; }
 .bk-alert { padding: 8px 12px; margin: 14px 0 0; }
 .bk-alert ul { margin: 4px 0 0; padding-left: 20px; }

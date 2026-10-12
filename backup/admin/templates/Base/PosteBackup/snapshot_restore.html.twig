@@ -22,13 +22,15 @@
 .bk-msgs .bk-noidx { color: var(--bs-secondary-color, #999); font-style: italic; white-space: normal; }
 .bk-chosen { background: var(--bs-secondary-bg, #f4fbfa); border: 1px solid var(--bs-border-color, #cdeeea); border-radius: 3px; padding: 4px 10px; display: inline-block; }
 .bk-pager { font-size: 13px; }
+.bk-pager .bk-held { pointer-events: none; opacity: 0.5; }
 </style>
-<p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
+<p><a href="{{ path('poste_backup_snapshots', {dest: dest}) }}" data-bk-wait><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.snapshots.title'|trans }}</a></p>
+{% include 'Base/PosteBackup/_wait.html.twig' %}
 <p class="bk-muted" style="font-size:13px">{{ 'poste_backup.snapshots.restore_of'|trans({'{time}': time ? time|date('Y-m-d H:i') : snap|slice(0, 8), '{destination}': destination.name}) }}</p>
 
 {% if error %}
     <div class="alert alert-danger">{{ error }}</div>
-    {% if step == 2 %}<p><a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}">{{ 'poste_backup.snapshots.another_mailbox'|trans }}</a></p>{% endif %}
+    {% if step == 2 %}<p><a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}" data-bk-wait>{{ 'poste_backup.snapshots.another_mailbox'|trans }}</a></p>{% endif %}
 
 {% elseif step == 1 %}
 <div class="bk-box" style="max-width:900px">
@@ -40,7 +42,7 @@
         {% for a, b in boxes %}
             <tr><td>{{ a }}{% if b.state == 'gone' %}<span class="bk-tag">{{ 'poste_backup.snapshots.gone'|trans }}</span>{% elseif b.state == 'redirect' %}<span class="bk-tag">{{ 'poste_backup.snapshots.redirect'|trans }}</span>{% endif %}</td>
                 <td class="text-right">{{ b.messages|number_format(0, '.', ',') }}</td>
-                <td class="text-right"><a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap, source: a}) }}">{{ 'poste_backup.snapshots.choose'|trans }} <i class="fa fa-chevron-right"></i></a></td></tr>
+                <td class="text-right"><a class="btn btn-default btn-xs" data-bk-wait href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap, source: a}) }}">{{ 'poste_backup.snapshots.choose'|trans }} <i class="fa fa-chevron-right"></i></a></td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -53,8 +55,8 @@
 {% else %}
 <p style="font-size:15px">{{ 'poste_backup.snapshots.source'|trans }}: <strong>{{ source }}</strong> &middot; {{ 'poste_backup.snapshots.count_messages'|trans({'{count}': messages}) }}
     {% if sourceState == 'gone' %}<span class="bk-tag">{{ 'poste_backup.snapshots.gone'|trans }}</span>{% endif %}
-    <a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}" style="font-size:12px">({{ 'poste_backup.snapshots.another_mailbox'|trans }})</a></p>
-<form method="post" class="bk-form" id="bk-restore">
+    <a href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: snap}) }}" style="font-size:12px" data-bk-wait>({{ 'poste_backup.snapshots.another_mailbox'|trans }})</a></p>
+<form method="post" class="bk-form" id="bk-restore" data-bk-wait>
     <input type="hidden" name="_token" value="{{ csrf_token('poste_backup_restore') }}">
     <input type="hidden" name="source" value="{{ source }}">
 
@@ -175,11 +177,22 @@
     function bkPlural(n, forms) { return (n === 1 ? forms.one : (n >= 2 && n <= 4 ? forms.few : forms.other)).replace('%n%', n.toLocaleString('en-US')); }
     function bkCount() { return Object.keys(bkChosen).length; }
     function bkMode() { return $('input[name=what]:checked').val(); }
+    var bkSeq = 0;
+    function bkBusy(on) {
+        $('#bk-search, #bk-mfolder, #bk-q, #bk-mall').prop('disabled', on);
+        $('#bk-prev, #bk-next').toggleClass('bk-held', on);
+        $('#bk-search i').attr('class', on ? 'fa fa-spinner fa-spin' : 'fa fa-search');
+    }
     function bkLoad(page) {
-        var $b = $('#bk-mlist tbody').empty().append($('<tr>').append($('<td colspan="6" class="bk-noidx">').text(bkS.loading)));
+        var seq = ++bkSeq;
+        var $b = $('#bk-mlist tbody').empty().append($('<tr>').append($('<td colspan="6" class="bk-noidx">')
+            .append($('<i class="fa fa-spinner fa-spin">'), ' ', document.createTextNode(bkS.loading))));
         var $p = $('#bk-part-messages');
+        bkBusy(true);
         $.getJSON($p.data('url'), {source: $p.data('source'), folder: $('#bk-mfolder').val(), q: $.trim($('#bk-q').val()), page: page})
+            .always(function () { if (seq === bkSeq) { bkBusy(false); } })
             .done(function (r) {
+                if (seq !== bkSeq) { return; }
                 $b.empty();
                 if (r.error) { $b.append($('<tr>').append($('<td colspan="6" class="text-danger">').text(r.error))); return; }
                 bkPage = r.page; bkPages = r.pages;
@@ -202,7 +215,7 @@
                 $('#bk-next').toggleClass('bk-muted', bkPage >= bkPages - 1);
                 $('#bk-mall').prop('checked', r.rows.length > 0 && $('.bk-msg:not(:checked)').length === 0);
             })
-            .fail(function () { $b.empty().append($('<tr>').append($('<td colspan="6" class="text-danger">').text(bkS.loadError))); });
+            .fail(function () { if (seq === bkSeq) { $b.empty().append($('<tr>').append($('<td colspan="6" class="text-danger">').text(bkS.loadError))); } });
     }
     $('input[name=what]').on('change', function () {
         var single = bkMode() === 'messages';
@@ -214,8 +227,8 @@
     $('#bk-search').on('click', function () { bkLoad(0); });
     $('#bk-mfolder').on('change', function () { bkLoad(0); });
     $('#bk-q').on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); bkLoad(0); } });
-    $('#bk-prev').on('click', function (e) { e.preventDefault(); if (bkPage > 0) { bkLoad(bkPage - 1); } });
-    $('#bk-next').on('click', function (e) { e.preventDefault(); if (bkPage < bkPages - 1) { bkLoad(bkPage + 1); } });
+    $('#bk-prev').on('click', function (e) { e.preventDefault(); if (!$(this).hasClass('bk-held') && bkPage > 0) { bkLoad(bkPage - 1); } });
+    $('#bk-next').on('click', function (e) { e.preventDefault(); if (!$(this).hasClass('bk-held') && bkPage < bkPages - 1) { bkLoad(bkPage + 1); } });
     $('#bk-mlist').on('change', '.bk-msg', function () {
         if (this.checked) { bkChosen[this.value] = true; } else { delete bkChosen[this.value]; }
         $('#bk-mall').prop('checked', $('.bk-msg:not(:checked)').length === 0);

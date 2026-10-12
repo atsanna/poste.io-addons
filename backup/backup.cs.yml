@@ -6,6 +6,8 @@ poste_backup:
   title: Zálohy poštovního serveru
   error:
     csrf: Neplatný token CSRF, načtěte stránku znovu
+  wait:
+    reading: "Čtení zálohy z cíle: u velké zálohy to může trvat i minutu."
   action:
     save: Uložit
     edit: Upravit

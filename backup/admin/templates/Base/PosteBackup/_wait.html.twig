@@ -1,0 +1,81 @@
+{# While a page that reads a snapshot is on its way. Those pages read the destination
+   before they answer (restic: the list of the snapshots, what a snapshot holds), which
+   takes a while on a large backup; without a sign the page looks idle. A link, a button
+   or a form marked data-bk-wait shows a spinner and the note below, and is not sent twice.
+   There is no percentage: restic does not say how far it is. #}
+<style>
+/* on top of the page, where it is seen also when the page was scrolled (Restore is at the bottom) */
+.bk-wait { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 2000; margin: 0; max-width: 92vw;
+           display: flex; align-items: center; gap: 14px; padding: 14px 22px; font-size: 15px;
+           box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3); }
+.bk-wait .fa-spinner { font-size: 30px; }
+</style>
+<div class="alert alert-info bk-wait" id="bk-wait" role="status" style="display:none"><i class="fa fa-spinner fa-spin"></i> <span>{{ 'poste_backup.wait.reading'|trans }}</span></div>
+<script>
+    (function () {
+        var SPIN = 'fa fa-spinner fa-spin';
+        // shows that el (a link or a submit button) is working; false if it already is
+        window.bkWait = function (el) {
+            if (!el || el.getAttribute('aria-busy') === 'true') {
+                return false;
+            }
+            el.setAttribute('aria-busy', 'true');
+            el.classList.add('disabled', 'bk-busy');
+            var i = el.querySelector('i.fa');
+            if (i) {
+                i.setAttribute('data-bk-was', i.className);
+                i.className = SPIN;
+            } else {
+                el.insertAdjacentHTML('afterbegin', '<i class="' + SPIN + ' bk-added"></i> ');
+            }
+            var note = document.getElementById('bk-wait');
+            if (note) {
+                note.style.display = '';
+            }
+            return true;
+        };
+        document.addEventListener('click', function (e) {
+            var a = e.target.closest ? e.target.closest('a[data-bk-wait]') : null;
+            // a new tab or window opens elsewhere: nothing to wait for on this page
+            if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+                return;
+            }
+            if (!window.bkWait(a)) {
+                e.preventDefault();
+            }
+        });
+        document.addEventListener('submit', function (e) {
+            var f = e.target;
+            // a form a handler has stopped (a confirmation answered "no") is not on its way
+            if (!f.matches || !f.matches('form[data-bk-wait]') || e.defaultPrevented) {
+                return;
+            }
+            if (!window.bkWait(e.submitter || f.querySelector('[type=submit]'))) {
+                e.preventDefault();
+            }
+        });
+        // back to this page from the browser's history: as it was, not still waiting
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted) {
+                return;
+            }
+            document.querySelectorAll('.bk-busy').forEach(function (el) {
+                el.removeAttribute('aria-busy');
+                el.classList.remove('disabled', 'bk-busy');
+                var i = el.querySelector('i[data-bk-was]');
+                if (i) {
+                    i.className = i.getAttribute('data-bk-was');
+                    i.removeAttribute('data-bk-was');
+                }
+                var added = el.querySelector('i.bk-added');
+                if (added) {
+                    added.parentNode.removeChild(added);
+                }
+            });
+            var note = document.getElementById('bk-wait');
+            if (note) {
+                note.style.display = 'none';
+            }
+        });
+    })();
+</script>

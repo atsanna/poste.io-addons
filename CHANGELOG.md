@@ -14,6 +14,15 @@ All notable changes to this project are documented here. The format follows
   The English pages moved to `docs/en/docs/` (they are the source); a strict
   build stops on a broken link or anchor, and on a translation that lost a
   heading, a code block, a link or an image ([docs/README.md](docs/README.md)).
+- **Backup: the pages that read a snapshot show that they are working.** The
+  list of the snapshots and the first two steps of a restore are read from the
+  destination before the page answers, which takes a while on a large backup:
+  the link or button clicked shows a spinner and is held, and a note says what
+  is happening (English and Czech). The list of single messages shows a
+  spinner while a page of it loads, with its controls held. No percentage:
+  restic does not say how far it is. The spinners of these pages now turn:
+  the admin's Font Awesome 4.3.0 has a broken `fa-spin` animation ("0{" for
+  "0%{" in its minified CSS), defined again here.
 - **External Mailboxes: getmail errors in the admin.** `cron.sh` writes what
   getmail reports (errors and warnings) to `/data/log/getmail/errors.log`,
   with the time and the mailbox, shown as the new **Getmail Errors** log type

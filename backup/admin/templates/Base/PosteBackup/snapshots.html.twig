@@ -5,6 +5,7 @@
 {% block body -%}
 {% include 'Base/PosteBackup/_common.html.twig' %}
 <p><a href="{{ path('poste_backup') }}"><span class="glyphicon glyphicon-chevron-left"></span> {{ 'poste_backup.title'|trans }}</a></p>
+{% include 'Base/PosteBackup/_wait.html.twig' %}
 {% if live.running %}
 <p class="text-info"><i class="fa fa-spinner fa-spin"></i> <span class="bk-live-text">{{ live.running.text }}</span></p>
 {% endif %}
@@ -12,12 +13,12 @@
 {% if not destinations %}
     <div class="alert alert-info">{{ 'poste_backup.jobs.no_destination'|trans }} <a href="{{ path('poste_backup_destination_new') }}">{{ 'poste_backup.destinations.add'|trans }}</a></div>
 {% else %}
-<form method="get" action="{{ path('poste_backup_snapshots') }}" class="bk-row" style="margin-bottom:12px">
+<form method="get" action="{{ path('poste_backup_snapshots') }}" class="bk-row" style="margin-bottom:12px" data-bk-wait>
     <div class="form-group"><label class="control-label" for="bk-dest">{{ 'poste_backup.snapshots.destination'|trans }}</label>
         <select id="bk-dest" name="dest">
             {% for did, d in destinations %}<option value="{{ did }}"{% if did == dest %} selected{% endif %}>{{ d.name }}</option>{% endfor %}
         </select></div>
-    <div class="form-group"><button type="submit" class="btn btn-default btn-sm"><i class="fa fa-refresh"></i> {{ 'poste_backup.snapshots.show'|trans }}</button></div>
+    <div class="form-group"><button type="submit" class="btn btn-default btn-sm" id="bk-show"><i class="fa fa-refresh"></i> {{ 'poste_backup.snapshots.show'|trans }}</button></div>
 </form>
 
 {% if error %}
@@ -41,7 +42,7 @@
             <td>{% if s.what.config %}{{ 'poste_backup.jobs.what_config'|trans }}{% endif %}{% if s.what.config and (s.what.all or s.what.boxes) %} + {% endif %}{% if s.what.all %}{{ 'poste_backup.jobs.what_all'|trans }}{% elseif s.what.boxes %}{{ 'poste_backup.jobs.what_selected'|trans({'{count}': s.what.boxes}) }}{% endif %}</td>
             <td><code>{{ s.short }}</code></td>
             <td class="text-right" style="white-space:nowrap">
-                {% if s.what.all or s.what.boxes %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: s.id}) }}"><i class="fa fa-user"></i> {{ 'poste_backup.snapshots.restore_mailbox'|trans }}</a>{% endif %}
+                {% if s.what.all or s.what.boxes %}<a class="btn btn-default btn-xs" data-bk-wait href="{{ path('poste_backup_snapshot_restore', {dest: dest, snap: s.id}) }}"><i class="fa fa-user"></i> {{ 'poste_backup.snapshots.restore_mailbox'|trans }}</a>{% endif %}
                 {% if s.what.config %}<a class="btn btn-default btn-xs" href="{{ path('poste_backup_snapshot_server', {dest: dest, snap: s.id}) }}"><i class="fa fa-server"></i> {{ 'poste_backup.snapshots.restore_server'|trans }}</a>{% endif %}
             </td>
         </tr>
@@ -108,7 +109,8 @@
 
 {% block javascripts %}
 <script>
-    $('#bk-dest').chosen({width: '320px', disable_search_threshold: 10}).on('change', function () { this.form.submit(); });
+    // form.submit() fires no submit event: the waiting sign is shown here
+    $('#bk-dest').chosen({width: '320px', disable_search_threshold: 10}).on('change', function () { bkWait(document.getElementById('bk-show')); this.form.submit(); });
 </script>
 {% include 'Base/PosteBackup/_live.html.twig' %}
 {% endblock %}

@@ -350,8 +350,18 @@ def new_job(name, dests, extra):
     body = fields + list(data.items()) + [("destinations[]", d) for d in dests] + [("mailboxes[]", m) for m in extra.get("_boxes", [])]
     body = [(k, v) for k, v in body if k != "_boxes"]
     import urllib.parse
-    ADMIN._open(BASE + "/jobs/new", urllib.parse.urlencode(body).encode())
-    return [i for i, j in config()["jobs"].items() if j["name"] == name]
+    url, page = ADMIN._open(BASE + "/jobs/new", urllib.parse.urlencode(body).encode())
+    jobs = config()["jobs"]
+    found = [i for i, j in (jobs if isinstance(jobs, dict) else {}).items() if j["name"] == name]   # PHP writes no jobs as []
+    if not found:
+        # not expected (a setting not saved: seen a few times in many runs, never reproduced): everything about it
+        boxes = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", b)).strip()
+                 for b in re.findall(r'class="[^"]*alert-(?:danger|warning)[^"]*"[^>]*>(.*?)</div>', page, re.S)]
+        print("DIAG  job %r not saved: HTTP %s, %s, error boxes %s, list items %s, fields sent %s" % (name, ADMIN.status, url, boxes[:5],
+              re.findall(r"<li>([^<]{1,200})</li>", page)[:5], sorted({k for k, v in body})), flush=True)
+        for log in ("/data/log/s6/php-fpm/current", "/data/log/nginx/error.log"):
+            print("DIAG  %s:\n%s" % (log, sh(["tail", "-n", "15", log]).stdout), flush=True)
+    return found
 
 
 WHOLE = new_job("Whole server", [LOCAL, SMB, S3, SFTP, SFTPKEY], {"config": "1", "mail": "all"})
@@ -1135,6 +1145,19 @@ check("the backups of the other jobs on the same destination are untouched", len
 CS = Panel(E["ALICE"], E["PA"], lang="cs")
 url, html = CS.get(BASE + "/snapshots?dest=" + SMB)
 check("in Czech: the snapshots page", "Snímky a obnova" in html and "Obnovit schránku" in html, url)
+# the pages that read a snapshot answer when restic is done: the links and forms that open them show a
+# spinner and a note meanwhile (_wait.html.twig); the note is in the page, hidden until a click
+cs_note = 'id="bk-wait"' in html and "Čtení zálohy z cíle" in html
+url, html = ADMIN.get(BASE + "/snapshots?dest=" + SMB)
+restore_links = re.findall(r'<a [^>]*data-bk-wait[^>]*href="[^"]*/restore"', html)
+server_links = re.findall(r'<a [^>]*data-bk-wait[^>]*href="[^"]*/server"', html)
+url1, html1 = ADMIN.get(BASE + "/snapshots/%s/%s/restore" % (SMB, SNAP))
+choose = re.findall(r'<a [^>]*data-bk-wait[^>]*href="[^"]*/restore\?source=', html1)
+check("while a snapshot is read: the note (hidden until a click, in Czech too), the restore links and the destination form marked; "
+      "the server commands (read nothing) not marked",
+      re.search(r'id="bk-wait"[^>]*style="display:none"', html) is not None and "Reading the backup on the destination" in html and cs_note
+      and len(restore_links) >= 1 and not server_links and re.search(r'<form [^>]*data-bk-wait', html) is not None
+      and len(choose) >= 1 and 'id="bk-wait"' in html1 and "window.bkWait" in html1, (len(restore_links), len(server_links), len(choose), cs_note))
 
 # ===================================================================== verification, statistics, space warnings
 print("--- backup: verification, statistics, space warnings")
