@@ -4,7 +4,10 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-12
+
+Tested on Poste.io 2.5.17 (Pro #230 in production; open source image built and
+started in a test container).
 
 ### Added
 - **Documentation site, in English and Czech, HTML and PDF**, published on
@@ -14,15 +17,6 @@ All notable changes to this project are documented here. The format follows
   The English pages moved to `docs/en/docs/` (they are the source); a strict
   build stops on a broken link or anchor, and on a translation that lost a
   heading, a code block, a link or an image ([docs/README.md](docs/README.md)).
-- **Backup: the pages that read a snapshot show that they are working.** The
-  list of the snapshots and the first two steps of a restore are read from the
-  destination before the page answers, which takes a while on a large backup:
-  the link or button clicked shows a spinner and is held, and a note says what
-  is happening (English and Czech). The list of single messages shows a
-  spinner while a page of it loads, with its controls held. No percentage:
-  restic does not say how far it is. The spinners of these pages now turn:
-  the admin's Font Awesome 4.3.0 has a broken `fa-spin` animation ("0{" for
-  "0%{" in its minified CSS), defined again here.
 - **External Mailboxes: getmail errors in the admin.** `cron.sh` writes what
   getmail reports (errors and warnings) to `/data/log/getmail/errors.log`,
   with the time and the mailbox, shown as the new **Getmail Errors** log type
@@ -45,7 +39,6 @@ All notable changes to this project are documented here. The format follows
   **Existing mailboxes** get the filter when they are saved again from the
   admin (the password field can stay empty; see
   [installation](docs/en/docs/installation.md#3-existing-installations-the-data-volume)).
-
 - **External Mailboxes: log rotation, configurable.** `getmail.log` and
   `errors.log` were never rotated. They now are, by Poste.io's nightly
   logrotate, with settings in the logs page (**Rotation**): on/off, getmail
@@ -54,7 +47,6 @@ All notable changes to this project are documented here. The format follows
   `/data/var/getmail/log-rotation.ini`; a root script writes the logrotate rule
   from them every night at 00:00, accepting only the allowed values (see
   [docs](docs/en/docs/external-mailboxes.md#log-rotation)).
-
 - **New add-on: ActiveSync logs in the admin** (`activesync-logs`). A page
   right after *User logs* shows the Z-Push logs (`z-push.log`,
   `z-push-error.log`), newest first, with filters by level, account and text.
@@ -65,7 +57,6 @@ All notable changes to this project are documented here. The format follows
   start. No Clear button: the logs belong to Z-Push (`www-data`) and stay so.
   Independent of the other add-ons; nothing to do by hand on an existing
   installation (see [docs](docs/en/docs/activesync-logs.md)).
-
 - **New add-on: Backup** (`backup`). Encrypted, scheduled backups of the
   server, set up and watched from the admin (*Mailserver backup*, super administrators
   only): the configuration (accounts, domains, settings, certificates, DKIM
@@ -105,6 +96,11 @@ All notable changes to this project are documented here. The format follows
   snapshot. The backups can also be read from another machine with only the
   key file, and a whole server is rebuilt on a new installation: both
   procedures are run by the tests as written in the [docs](docs/en/docs/backup.md).
+  The pages that read a snapshot from the destination (which takes a while
+  on a large backup) show a spinner and a note while they wait, with the
+  command clicked held; no percentage, as restic does not say how far it is.
+  Their spinners turn: the admin's Font Awesome 4.3.0 has a broken `fa-spin`
+  animation ("0{" for "0%{" in its minified CSS), defined again here.
 
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
@@ -118,11 +114,6 @@ All notable changes to this project are documented here. The format follows
   this combination gets "Read all" off.
 
 ### Fixed
-- **Backup: a destination or a job, about one in 300, was not saved** ("a
-  destination with an invalid id left out"). Its new id is twelve random hex
-  digits, and when all twelve were digits PHP turned it, as an array key, into
-  an integer that the check of the settings refuses. A new id now always has a
-  letter; the tests check 5,000 of them.
 - **External Mailboxes: the English protocol labels** said "POP3" and "POP3
   with SSL" but "Simple IMAP Retriever" and "Simple IMAP SSL Retriever"; now
   "IMAP" and "IMAP with SSL", like the Czech ones.
