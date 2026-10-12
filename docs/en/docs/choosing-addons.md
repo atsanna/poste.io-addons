@@ -14,7 +14,7 @@ and lives in its own folder of the repository.
 | [Upstream fixes for spam learning](upstream-fixes.md) | `upstream-fixes` | — (in the Dockerfile) | permissions, recipient and temporary files of the Junk learning scripts |
 
 No add-on needs another one. The tests build the open source image with each
-add-on alone, as well as with all of them (see [testing.md](testing.md)).
+add-on alone, as well as with all of them (see [Tests](testing.md)).
 
 ## Option 1: `select-addons.sh`
 
@@ -40,7 +40,7 @@ Each section looks like this:
 ```dockerfile
 #######################################################################
 #  ADD-ON: Dark theme for the admin  [dark-theme]
-#  docs/dark-theme.md
+#  docs/en/docs/dark-theme.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 ...
@@ -60,7 +60,7 @@ Removing an add-on from the image does not clean up what it left in the
   longer need them.
 - **Calendars and contacts over ActiveSync**: adding or removing it changes
   the identifiers of the ActiveSync folders, so **every device must resync**
-  ([activesync-dav.md](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync)).
+  ([Calendars and contacts over ActiveSync](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync)).
   Calendars and contacts themselves stay on the DAV server.
 - **ActiveSync logs**: the rotation settings stay in `/data/var/activesync-logs`,
   the old copies of the Z-Push logs in `/data/log/z-push` (`*.log.1`,
@@ -68,5 +68,5 @@ Removing an add-on from the image does not clean up what it left in the
 - **Backup**: the settings (with the passwords of the destinations) and the
   encryption key stay in `/data/var/backup`. The backups on the destinations
   are not touched: keep the key as long as you may need them
-  ([backup.md](backup.md#removing-it)).
+  ([Backup and restore](backup.md#removing-it)).
 - **Dark theme** and **upstream fixes**: nothing to do.

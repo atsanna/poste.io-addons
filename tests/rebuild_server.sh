@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuilding the whole server: the commands of docs/backup.md ("Rebuilding
+# Rebuilding the whole server: the commands of docs/en/docs/backup.md ("Rebuilding
 # the whole server", step 3 to 5), run as written, as root, in a container of
 # the image with the new server's /data and the folder /restore, while the
 # new server is stopped. /restore holds key.txt (downloaded from the old

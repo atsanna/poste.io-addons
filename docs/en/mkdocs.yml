@@ -1,0 +1,94 @@
+# Documentation of poste.io-addons (English).
+# Written by docs/languages.py: change the table there, not this file.
+
+site_name: poste.io-addons
+site_description: "Add-ons for the Poste.io mail server"
+site_url: https://atsanna.github.io/poste.io-addons/en/
+site_dir: ../../site/en
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: addons
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: "Switch to dark mode"
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: "Switch to light mode"
+
+copyright: Copyright © 2026 Antonio Sanna
+
+extra_css:
+  - assets/css/theme.css
+  - assets/css/theme_dark_mode.css
+
+extra:
+  generator: false
+  # absolute links: a relative one would change meaning from page to page
+  alternate:
+    - name: "English"
+      link: https://atsanna.github.io/poste.io-addons/en/
+      lang: en
+    - name: "Čeština"
+      link: https://atsanna.github.io/poste.io-addons/cs/
+      lang: cs
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+      use_pygments: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+plugins:
+  - search:
+      lang:
+        - en
+  - mkpdfs:
+      company: poste.io-addons
+      author: Antonio Sanna
+      toc_title: poste.io-addons
+      output_path: pdf/poste.io-addons-en.pdf
+      design: ../design/report.css
+
+nav:
+  - "Home": index.md
+  - "Installation": installation.md
+  - "Choosing the add-ons": choosing-addons.md
+  - "External Mailboxes": external-mailboxes.md
+  - "Dark theme": dark-theme.md
+  - "Calendars and contacts over ActiveSync": activesync-dav.md
+  - "ActiveSync logs": activesync-logs.md
+  - "Backup and restore": backup.md
+  - "Upstream fixes": upstream-fixes.md
+  - "Tests": testing.md

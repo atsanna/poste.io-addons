@@ -271,7 +271,7 @@ poste_backup:
     server_step2: "Put the key file downloaded from Encryption key in a folder of the host, for example /root/restore, and open a shell in a container of the same image, with the new server's data folder and that folder:"
     server_step3: "In that shell (the key file is the one of {host}). If the configuration and the mail are backed up by two jobs, restore the latest snapshot of the other job the same way (restic snapshots lists them)."
     server_step4: "Start the new server and log in as an administrator of this server. Then add the destinations and the jobs again: their settings and passwords are not in the backups."
-    server_docs: "Every step is explained in docs/backup.md of poste.io-addons (Rebuilding the whole server) and is run by its tests as written there."
+    server_docs: "Every step is explained in the page Backup and restore of the poste.io-addons documentation (Rebuilding the whole server) and is run by its tests as written there."
     restore_of: "Snapshot of {time} on {destination}"
     another_mailbox: "another mailbox"
     step_mailbox: "Choose the mailbox to restore"

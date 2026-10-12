@@ -1,0 +1,10 @@
+# The tools of the documentation (docs/build.sh), pinned: the same versions in
+# the GitHub workflow and on a local machine.
+mkdocs==1.6.1
+mkdocs-material==9.6.9
+pymdown-extensions==10.14.3
+Markdown==3.7
+Pygments==2.19.1
+weasyprint==65.0
+pydyf==0.11.0
+mkpdfs2-mkdocs @ git+https://github.com/jurgenwigg/mkpdfs2-mkdocs-plugin@eccccc081e6c3f08049551562e09a699fef87bd6

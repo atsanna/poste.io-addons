@@ -3,7 +3,7 @@
 # ActiveSync logs in the admin, backup and restore, and three upstream fixes.
 # Each add-on is one section below, between the "ADD-ON" markers: delete a
 # section to leave that add-on out, or run select-addons.sh (see
-# docs/choosing-addons.md). See README.md and docs/installation.md.
+# docs/en/docs/choosing-addons.md). See README.md and docs/en/docs/installation.md.
 #
 #   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 #
@@ -20,7 +20,7 @@ LABEL org.opencontainers.image.title="poste.io-addons (open source)" \
 
 #######################################################################
 #  ADD-ON: External Mailboxes  [external-mailboxes]
-#  docs/external-mailboxes.md
+#  docs/en/docs/external-mailboxes.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -68,7 +68,7 @@ RUN sed -i '/^{% endif %}$/i\
 # Everything belongs to "mail": the admin (php-fpm, user mail) writes the .cfg
 # files (passwords in clear text, 0600) and cron runs getmail as mail, never root.
 # NOTE: /data is a volume; on an existing installation these folders and
-# cron.sh are hidden by it (see docs/installation.md).
+# cron.sh are hidden by it (see docs/en/docs/installation.md).
 RUN mkdir -p /data/var/getmail/5min /data/var/getmail/10min /data/var/getmail/15min \
              /data/var/getmail/30min /data/var/getmail/60min /data/var/getmail/disabled \
              /data/log/getmail && \
@@ -98,7 +98,7 @@ RUN chmod 0644 /etc/external-mailboxes.crontab && \
 
 #######################################################################
 #  ADD-ON: Dark theme for the admin  [dark-theme]
-#  docs/dark-theme.md
+#  docs/en/docs/dark-theme.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -113,7 +113,7 @@ RUN sh /tmp/dark-theme-install.sh /opt/admin /tmp && \
 
 #######################################################################
 #  ADD-ON: Calendars and contacts over ActiveSync  [activesync-dav]
-#  docs/activesync-dav.md
+#  docs/en/docs/activesync-dav.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -125,7 +125,7 @@ RUN sh /tmp/dark-theme-install.sh /opt/admin /tmp && \
 # still enabled per mailbox in the admin. The script checks the 19 Z-Push lines
 # it changes and FAILS the build if any of them is different.
 # libawl-php: library needed by Z-Push's CalDAV backend.
-# See docs/activesync-dav.md (existing installations: devices must resync).
+# See docs/en/docs/activesync-dav.md (existing installations: devices must resync).
 RUN apt-get update && \
     apt-get -y install --no-install-recommends libawl-php && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -135,7 +135,7 @@ RUN sh /tmp/activesync-dav/activesync-dav-install.sh /opt/z-push /tmp/activesync
 
 #######################################################################
 #  ADD-ON: ActiveSync (Z-Push) logs in the admin  [activesync-logs]
-#  docs/activesync-logs.md
+#  docs/en/docs/activesync-logs.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -151,7 +151,7 @@ RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt
 
 #######################################################################
 #  ADD-ON: Backup and restore  [backup]
-#  docs/backup.md
+#  docs/en/docs/backup.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -175,7 +175,7 @@ RUN sh /tmp/backup/backup-install.sh /tmp/backup /opt/admin && \
 
 #######################################################################
 #  ADD-ON: Upstream fixes for spam learning  [upstream-fixes]
-#  docs/upstream-fixes.md
+#  docs/en/docs/upstream-fixes.md
 #  To leave it out, delete this whole section (down to the next ADD-ON).
 #######################################################################
 #======================================================================#
@@ -184,7 +184,7 @@ RUN sh /tmp/backup/backup-install.sh /tmp/backup /opt/admin && \
 # In the base image /etc/dovecot/sieve and the "spam"/"ham" pipe scripts are
 # 0777; Dovecot refuses to run a world-writable program, so moving a message
 # to Junk teaches rspamd nothing. Remove when the base image ships them 0755.
-# See docs/upstream-fixes.md.
+# See docs/en/docs/upstream-fixes.md.
 RUN chmod 0755 /etc/dovecot/sieve && \
     chmod 0755 /etc/dovecot/sieve/spam /etc/dovecot/sieve/ham && \
     chmod 0644 /etc/dovecot/sieve/*.sieve
@@ -196,7 +196,7 @@ RUN chmod 0755 /etc/dovecot/sieve && \
 # without a recipient and learn into a per-address bucket nobody reads. Here
 # imapsieve passes the IMAP user to the scripts and rspamc uses --rcpt. The
 # final greps FAIL the build if Poste.io changes the scripts.
-# See docs/upstream-fixes.md.
+# See docs/en/docs/upstream-fixes.md.
 RUN set -e; D=/etc/dovecot/sieve; \
     for f in report-spam.sieve report-ham.sieve; do \
       sed -i 's|^if environment :matches "imap.cause" "\*" { set "IMAPCAUSE" "\${1}"; }$|&\nif environment :matches "imap.user" "*" { set "IMAPUSER" "${1}"; }|' $D/$f; \
@@ -220,7 +220,7 @@ RUN set -e; D=/etc/dovecot/sieve; \
 # never remove it: each message moved into or out of Junk stays in /tmp until
 # the container is recreated. Here the scripts remove it when they end, also
 # when they are stopped. The grep FAILS the build if Poste.io changes them.
-# See docs/upstream-fixes.md.
+# See docs/en/docs/upstream-fixes.md.
 RUN set -e; D=/etc/dovecot/sieve; \
     for c in spam ham; do \
       sed -i "s|^input_tmpfile=\$(mktemp)\$|&\ntrap 'rm -f \"\$input_tmpfile\"' EXIT\ntrap 'exit 1' HUP INT TERM|" $D/$c; \

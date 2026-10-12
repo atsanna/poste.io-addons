@@ -50,8 +50,8 @@ external_mailboxes:
     protocol: Protocol
     protocol_pop3: POP3
     protocol_pop3_ssl: POP3 with SSL
-    protocol_imap: Simple IMAP Retriever
-    protocol_imap_ssl: Simple IMAP SSL Retriever
+    protocol_imap: IMAP
+    protocol_imap_ssl: IMAP with SSL
     server: Server address
     port: Port
     port_help: Leave empty for the protocol default (110/995 POP3, 143/993 IMAP).

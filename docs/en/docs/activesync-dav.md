@@ -85,7 +85,7 @@ The Z-Push log then shows `the DAV server is not answering ... mail goes on`.
 
 ## Installing on an existing installation: devices must resync
 
-Build and run the image as described in [installation.md](installation.md).
+Build and run the image as described in [Installation](installation.md).
 The add-on changes Z-Push's configuration, and with it the identifiers of the
 mail folders; a phone that was already syncing would receive the new folders
 **without the old ones being removed** (duplicated mail folders). Right after

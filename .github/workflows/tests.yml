@@ -3,7 +3,7 @@
 # in the Dockerfile. Each job builds the image with all the add-ons, or with
 # one add-on only (select-addons.sh), and runs tests/run.sh: a throw-away
 # container, the admin driven like a browser, real IMAP and ActiveSync
-# requests. See docs/testing.md.
+# requests. See docs/en/docs/testing.md.
 name: tests
 
 on:

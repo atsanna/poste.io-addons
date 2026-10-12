@@ -14,7 +14,7 @@ the official Poste.io image, so you always know what is inside it.
   (`analogic/poste.io:2.5.17`) built and started in a test container. Other
   versions may work; the build
   stops on purpose if Poste.io changes the files the add-ons hook into (see
-  [Upgrading Poste.io](#upgrading-poste-io)).
+  [Upgrading Poste.io](#upgrading-posteio)).
 
 ## 1. Build the image
 
@@ -29,7 +29,7 @@ docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.i
 docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
 ```
 
-To build only some of the add-ons, see [choosing-addons.md](choosing-addons.md).
+To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md).
 
 The build, one Dockerfile section per add-on:
 
@@ -51,7 +51,7 @@ The build, one Dockerfile section per add-on:
 ## 2. Run it
 
 Use the image exactly like the official one. A minimal example is in
-[`docker-compose.example.yml`](../docker-compose.example.yml):
+[`docker-compose.example.yml`](https://github.com/atsanna/poste.io-addons/blob/main/docker-compose.example.yml):
 
 ```bash
 cp docker-compose.example.yml docker-compose.yml   # edit hostname, TZ, data path
@@ -94,7 +94,7 @@ and save. The CHANGELOG says when this is needed.
 With **calendars and contacts over ActiveSync**, the first start of the new
 image changes Z-Push's folder identifiers: ask every device for a resync,
 otherwise phones end up with duplicated mail folders. The commands are in
-[activesync-dav.md](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync).
+[Calendars and contacts over ActiveSync](activesync-dav.md#installing-on-an-existing-installation-devices-must-resync).
 Later rebuilds and Poste.io upgrades with the add-on inside do not need it.
 
 **ActiveSync logs** needs nothing by hand: its folder on the volume is created
@@ -104,7 +104,7 @@ by a start script at every container start.
 (`/data/var/backup`) and the encryption key are made by a start script (the
 key only once, at the first start). Then download the key from *Mailserver backup >
 Encryption key* and keep it outside the server (see
-[backup.md](backup.md#the-encryption-key)).
+[Backup and restore](backup.md#the-encryption-key)).
 
 ## 4. Check that it works
 
@@ -166,4 +166,4 @@ longer need them; keep the encryption key as long as you may need the
 backups.
 If you used calendars and contacts over ActiveSync, resync every device after
 the switch (the folder identifiers change back). To drop only some add-ons,
-see [choosing-addons.md](choosing-addons.md).
+see [Choosing the add-ons](choosing-addons.md).

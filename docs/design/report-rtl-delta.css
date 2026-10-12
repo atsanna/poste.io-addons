@@ -1,0 +1,64 @@
+/* ====================================================================
+ *  The right-to-left delta of the PDF design: Arabic, and any language
+ *  read from right to left.
+ *
+ *  Not used alone: the build appends it to `report.css` and makes
+ *  `report-rtl.css` (see docs/build.sh), so the design stays one file
+ *  and nothing depends on how WeasyPrint resolves an `@import` (with an
+ *  `@import` the shared design did not reach the PDF).
+ *
+ *  Why `theme.direction: rtl` is not enough: mkpdfs builds a document
+ *  of its own, `<html><head></head><body></body></html>` without
+ *  attributes, and moves the articles into it. So the direction of the
+ *  theme never reaches the PDF, and the `[dir="rtl"]` rules of
+ *  `report.css` have no `dir` to match. The plugin takes one style
+ *  sheet only.
+ *
+ *  No `@charset` here: it would come after the start of the joined
+ *  file, where it is not valid.
+ * ==================================================================== */
+
+/* ── The direction, the reason for this whole file ─────────────────── */
+html {
+  direction: rtl; }
+
+body, article {
+  text-align: right; }
+
+/* Lists are indented on the other side. */
+article ul, article ol {
+  padding-right: 2em;
+  padding-left: 0; }
+
+/* Admonitions get their coloured rule on the right: in `report.css`
+   `[dir="rtl"] article .admonition` does it, and it cannot match here. */
+article .admonition, article details {
+  border-right: 0.2rem solid #448aff;
+  border-left: none; }
+
+article .admonition > .admonition-title, article details > summary {
+  padding: 0.4rem 2rem 0.4rem 0.6rem; }
+
+article .admonition > .admonition-title::before,
+article details > summary::before {
+  right: 0.6rem;
+  left: auto; }
+
+/* Tables: headers and cells aligned to the right. */
+article table th, article table td {
+  text-align: right; }
+
+/* Code stays left to right: commands, paths and file contents are not
+   Arabic text, and turning them would make them unreadable. */
+article pre, article code, article pre > code, article .highlight {
+  direction: ltr;
+  text-align: left; }
+
+/* The table of contents of the PDF follows the text. */
+#contents, #contents ul, #contents li, #contents a {
+  text-align: right;
+  direction: rtl; }
+
+/* The cover stays centred: it has no direction. */
+#doc-cover, #doc-title, #toc-title {
+  text-align: center; }

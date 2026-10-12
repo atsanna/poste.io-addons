@@ -3,7 +3,7 @@
 A dark theme for the Poste.io administration pages (`/admin`), automatic and
 with a switch.
 
-![Dashboard, dark](screenshots/dashboard-dark.png)
+![Dashboard, dark](assets/screenshots/dashboard-dark.png)
 
 ## Behaviour
 
@@ -32,7 +32,7 @@ touched.
 The Poste.io admin is built on Bootstrap 5.3, whose dark colour mode only
 needs `data-bs-theme="dark"` on `<html>`: backgrounds, text, borders, tables,
 inputs and alerts follow. What remains are the colours Poste.io hard-codes for
-the light look, fixed in [`dark-theme/admin/public/dark-theme.css`](../dark-theme/admin/public/dark-theme.css):
+the light look, fixed in [`dark-theme/admin/public/dark-theme.css`](https://github.com/atsanna/poste.io-addons/blob/main/dark-theme/admin/public/dark-theme.css):
 
 - the top bar and the left menu, the "pretty" button gradients, pagination;
 - Chosen drop-down menus, help boxes, the dashboard section boxes and spinner;

@@ -1,0 +1,94 @@
+# Documentation of poste.io-addons (Čeština).
+# Written by docs/languages.py: change the table there, not this file.
+
+site_name: poste.io-addons
+site_description: "Doplňky pro poštovní server Poste.io"
+site_url: https://atsanna.github.io/poste.io-addons/cs/
+site_dir: ../../site/cs
+
+theme:
+  name: material
+  language: cs
+  features:
+    - navigation.instant
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: addons
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: "Přepnout na tmavý režim"
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: "Přepnout na světlý režim"
+
+copyright: Copyright © 2026 Antonio Sanna
+
+extra_css:
+  - assets/css/theme.css
+  - assets/css/theme_dark_mode.css
+
+extra:
+  generator: false
+  # absolute links: a relative one would change meaning from page to page
+  alternate:
+    - name: "English"
+      link: https://atsanna.github.io/poste.io-addons/en/
+      lang: en
+    - name: "Čeština"
+      link: https://atsanna.github.io/poste.io-addons/cs/
+      lang: cs
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+      use_pygments: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+plugins:
+  - search:
+      lang:
+        - en
+  - mkpdfs:
+      company: poste.io-addons
+      author: Antonio Sanna
+      toc_title: poste.io-addons
+      output_path: pdf/poste.io-addons-cs.pdf
+      design: ../design/report.css
+
+nav:
+  - "Úvod": index.md
+  - "Instalace": installation.md
+  - "Výběr doplňků": choosing-addons.md
+  - "Externí schránky": external-mailboxes.md
+  - "Tmavý motiv": dark-theme.md
+  - "Kalendáře a kontakty přes ActiveSync": activesync-dav.md
+  - "Logy ActiveSync": activesync-logs.md
+  - "Zálohování a obnova": backup.md
+  - "Opravy upstreamu": upstream-fixes.md
+  - "Testy": testing.md

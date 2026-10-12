@@ -6,7 +6,7 @@ SSL) and delivers it into Poste.io, on a schedule, with
 the Poste.io admin (super admins only): **External Mailboxes** and
 **External Mailbox Logs** in the left menu.
 
-![External mailboxes list](screenshots/external-mailboxes-list.png)
+![External mailboxes list](assets/screenshots/external-mailboxes-list.png)
 
 ## What it does
 
@@ -88,14 +88,14 @@ the Poste.io admin (super admins only): **External Mailboxes** and
 - **Translations**: English and Czech, like the rest of the Poste.io admin
   (the browser chooses).
 
-![Edit form](screenshots/external-mailbox-edit-dark.png)
+![Edit form](assets/screenshots/external-mailbox-edit-dark.png)
 
 The logs page: the default getmail view, with the red line on top when there
 are recent errors, and the **Getmail Errors** view (example data).
 
-![Getmail log with recent errors](screenshots/external-mailbox-logs.png)
+![Getmail log with recent errors](assets/screenshots/external-mailbox-logs.png)
 
-![Getmail Errors](screenshots/external-mailbox-errors.png)
+![Getmail Errors](assets/screenshots/external-mailbox-errors.png)
 
 ## How it works
 
@@ -126,7 +126,7 @@ runs as root. Each fetched message goes through the `getmail-rspamd` filter
 
 ### Log rotation
 
-![Log rotation settings](screenshots/external-mailbox-rotation.png)
+![Log rotation settings](assets/screenshots/external-mailbox-rotation.png)
 
 The admin runs as `mail` and cannot write logrotate rules, which must belong
 to root. So the settings are saved in `/data/var/getmail/log-rotation.ini`

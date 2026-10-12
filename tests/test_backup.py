@@ -105,9 +105,12 @@ def new_destination(values):
     url, html = post_form(BASE + "/destinations/new", values)
     m = re.search(r"/destinations/([a-f0-9]{12})/edit", url or "")
     if not m and values.get("name") not in ("bad",):
-        # not expected (seen twice in many runs, never reproduced): everything about it
-        print("DIAG  destination %r not saved: HTTP %s, %s, alerts %s, page %r" % (values.get("name"), ADMIN.status, url,
-              re.findall(r'alert-danger">([^<]*)', html)[:3], re.sub(r"\s+", " ", html)[:300]), flush=True)
+        # not expected (seen three times in many runs, never reproduced): everything about it.
+        # The text of the error boxes in full (it starts with an icon: up to the first tag it is empty)
+        boxes = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", b)).strip()
+                 for b in re.findall(r'class="[^"]*alert-danger[^"]*"[^>]*>(.*?)</div>', html, re.S)]
+        print("DIAG  destination %r not saved: HTTP %s, %s, error boxes %s, fields sent %s" % (values.get("name"), ADMIN.status, url,
+              boxes[:5], sorted(values)), flush=True)
         for log in ("/data/log/s6/php-fpm/current", "/data/log/nginx/error.log"):
             print("DIAG  %s:\n%s" % (log, sh(["tail", "-n", "15", log]).stdout), flush=True)
     return (m.group(1) if m else None), html
@@ -397,7 +400,7 @@ check("restore from SMB: the deleted message comes back identical", os.path.exis
 os.makedirs(os.path.dirname(alice_msg), exist_ok=True)
 open(alice_msg, "wb").write(saved)
 
-# the restore procedure of docs/backup.md, as written there: the mailbox restored
+# the restore procedure of docs/en/docs/backup.md, as written there: the mailbox restored
 # into a separate folder, then its messages put in a folder "Restored" of the mailbox
 alice_home = "%s/%s" % (dom, E["ALICE"].split("@")[0])
 shutil.rmtree("/tmp/restore", ignore_errors=True)

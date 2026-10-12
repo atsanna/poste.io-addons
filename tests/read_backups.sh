@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reading the backups without the server: the commands of docs/backup.md
+# Reading the backups without the server: the commands of docs/en/docs/backup.md
 # ("Reading the backups without the server"), run as written on a machine
 # with only restic, rclone and ssh (tests/backup-reader, Debian 12), for each
 # kind of destination. Only difference: the passwords come from restore.env

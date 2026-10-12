@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Documentation site, in English and Czech, HTML and PDF**, published on
+  GitHub Pages (<https://atsanna.github.io/poste.io-addons/>) by a new `docs`
+  workflow from `main`; built and checked on every push. MkDocs with the
+  Material theme, one site per language, a PDF of each with its own design.
+  The English pages moved to `docs/en/docs/` (they are the source); a strict
+  build stops on a broken link or anchor, and on a translation that lost a
+  heading, a code block, a link or an image ([docs/README.md](docs/README.md)).
 - **External Mailboxes: getmail errors in the admin.** `cron.sh` writes what
   getmail reports (errors and warnings) to `/data/log/getmail/errors.log`,
   with the time and the mailbox, shown as the new **Getmail Errors** log type
@@ -16,7 +23,7 @@ All notable changes to this project are documented here. The format follows
   configuration getmail rejected, for example, was visible nowhere in the
   admin. **Existing installations**: `cron.sh` lives on the `/data` volume,
   copy the new one there (see
-  [installation](docs/installation.md#3-existing-installations-the-data-volume)).
+  [installation](docs/en/docs/installation.md#3-existing-installations-the-data-volume)).
 - **External Mailboxes: fetched mail is checked by rspamd.** Until now it was
   not scanned at all: getmail delivers through Haraka's local submission
   socket, where the rspamd plugin skips local connections. A getmail filter
@@ -25,10 +32,10 @@ All notable changes to this project are documented here. The format follows
   threshold (filed into Junk by the mailbox's sieve rule), Bayes per domain of
   the recipient. If rspamd does not answer, the message is delivered unchanged
   and the reason goes to the Getmail Errors log. The connection-based checks do
-  not apply (no SMTP client): see [docs](docs/external-mailboxes.md).
+  not apply (no SMTP client): see [docs](docs/en/docs/external-mailboxes.md).
   **Existing mailboxes** get the filter when they are saved again from the
   admin (the password field can stay empty; see
-  [installation](docs/installation.md#3-existing-installations-the-data-volume)).
+  [installation](docs/en/docs/installation.md#3-existing-installations-the-data-volume)).
 
 - **External Mailboxes: log rotation, configurable.** `getmail.log` and
   `errors.log` were never rotated. They now are, by Poste.io's nightly
@@ -37,7 +44,7 @@ All notable changes to this project are documented here. The format follows
   kept compressed (defaults: weekly, 1 MB, 4). The admin saves the settings in
   `/data/var/getmail/log-rotation.ini`; a root script writes the logrotate rule
   from them every night at 00:00, accepting only the allowed values (see
-  [docs](docs/external-mailboxes.md#log-rotation)).
+  [docs](docs/en/docs/external-mailboxes.md#log-rotation)).
 
 - **New add-on: ActiveSync logs in the admin** (`activesync-logs`). A page
   right after *User logs* shows the Z-Push logs (`z-push.log`,
@@ -48,7 +55,7 @@ All notable changes to this project are documented here. The format follows
   settings, a root script writes the logrotate rule at 00:00 and at every
   start. No Clear button: the logs belong to Z-Push (`www-data`) and stay so.
   Independent of the other add-ons; nothing to do by hand on an existing
-  installation (see [docs](docs/activesync-logs.md)).
+  installation (see [docs](docs/en/docs/activesync-logs.md)).
 
 - **New add-on: Backup** (`backup`). Encrypted, scheduled backups of the
   server, set up and watched from the admin (*Mailserver backup*, super administrators
@@ -88,7 +95,7 @@ All notable changes to this project are documented here. The format follows
   deleted job), and the commands to rebuild the whole server filled in for a
   snapshot. The backups can also be read from another machine with only the
   key file, and a whole server is rebuilt on a new installation: both
-  procedures are run by the tests as written in the [docs](docs/backup.md).
+  procedures are run by the tests as written in the [docs](docs/en/docs/backup.md).
 
 ### Changed
 - **External Mailboxes: "Read all" only with "Delete message".** With "Read
@@ -102,12 +109,15 @@ All notable changes to this project are documented here. The format follows
   this combination gets "Read all" off.
 
 ### Fixed
+- **External Mailboxes: the English protocol labels** said "POP3" and "POP3
+  with SSL" but "Simple IMAP Retriever" and "Simple IMAP SSL Retriever"; now
+  "IMAP" and "IMAP with SSL", like the Czech ones.
 - **Upstream fixes: the spam learning scripts no longer leave every message in
   `/tmp`.** Poste.io's `spam` / `ham` scripts copy the message to a temporary
   file for `rspamc` and never remove it, so each message moved into or out of
   Junk stayed in the container's `/tmp` until the container was recreated. A
   third fix removes the file when the script ends, also when it is stopped
-  ([upstream fixes](docs/upstream-fixes.md#3-every-learned-message-stays-in-tmp)).
+  ([upstream fixes](docs/en/docs/upstream-fixes.md#3-every-learned-message-stays-in-tmp)).
 
 ## [1.1.0] - 2026-10-11
 

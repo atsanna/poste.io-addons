@@ -1302,7 +1302,7 @@ class PosteBackupController extends AbstractController
 
     /**
      * Restoring the whole server is done on a new installation, from the
-     * command line (docs/backup.md): the commands for this destination and
+     * command line (the documentation, Backup and restore): the commands for this destination and
      * this snapshot, ready to copy (passwords are asked when they run).
      *
      * @Route("/snapshots/{dest}/{snap}/server", name="poste_backup_snapshot_server", methods={"GET"},
@@ -1439,8 +1439,9 @@ class PosteBackupController extends AbstractController
               . "(poste.io-addons, backup add-on). Downloaded " . date('Y-m-d H:i T') . ".\n\n"
               . "Without this key the backups cannot be read. Keep it outside the server,\n"
               . "where you keep other passwords. The key is the last line of this file.\n"
-              . "To read the backups or to rebuild the server, see docs/backup.md of\n"
-              . "poste.io-addons (\"Reading the backups without the server\",\n"
+              . "To read the backups or to rebuild the server, see the page \"Backup and\n"
+              . "restore\" of the poste.io-addons documentation, https://atsanna.github.io/\n"
+              . "poste.io-addons/ (\"Reading the backups without the server\",\n"
               . "\"Rebuilding the whole server\").\n\n"
               . $key . "\n";
         return new Response($text, 200, [

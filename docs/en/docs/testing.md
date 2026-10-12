@@ -12,10 +12,10 @@ editions; the Pro image is tested by hand before each release.
 
 ## What runs
 
-[`.github/workflows/tests.yml`](../.github/workflows/tests.yml) runs seven jobs
+[`.github/workflows/tests.yml`](https://github.com/atsanna/poste.io-addons/blob/main/.github/workflows/tests.yml) runs seven jobs
 in parallel. Each builds the image from the `Dockerfile` with the Poste.io
 version pinned there (`ARG POSTE_IO_VERSION`), then runs
-[`tests/run.sh`](../tests/run.sh) on it:
+[`tests/run.sh`](https://github.com/atsanna/poste.io-addons/blob/main/tests/run.sh) on it:
 
 | Job | Image |
 |---|---|
@@ -45,20 +45,20 @@ others; the tests of the add-ons that are not in the image are reported as
    container; every check prints `PASS` or `FAIL` with what it found;
 5. with the backup add-on: starts two more throw-away containers on the same
    private network as backup destinations, a Samba + SFTP server
-   ([`tests/backup-dest`](../tests/backup-dest)) and an S3 server (rclone's
+   ([`tests/backup-dest`](https://github.com/atsanna/poste.io-addons/tree/main/tests/backup-dest)) and an S3 server (rclone's
    own, pinned image); a `tmpfs` at `/backup/local` plays a volume mounted by
    the host. It runs `tests/test_backup.py`, then
-   [`tests/test_restore.sh`](../tests/test_restore.sh), which reads the
+   [`tests/test_restore.sh`](https://github.com/atsanna/poste.io-addons/blob/main/tests/test_restore.sh), which reads the
    backups from another container with only restic, rclone and ssh
-   ([`tests/backup-reader`](../tests/backup-reader)) and rebuilds a whole
+   ([`tests/backup-reader`](https://github.com/atsanna/poste.io-addons/tree/main/tests/backup-reader)) and rebuilds a whole
    server from them in a new container of the same image;
 6. removes the containers, the volumes and the network. The exit code is the
    number of failed checks.
 
-The admin is driven like a browser ([`tests/panel.py`](../tests/panel.py)):
+The admin is driven like a browser ([`tests/panel.py`](https://github.com/atsanna/poste.io-addons/blob/main/tests/panel.py)):
 pages are loaded, forms are read from the page (including their CSRF token),
 filled in and submitted. The phone is simulated with real ActiveSync 14.0
-requests ([`tests/eas.py`](../tests/eas.py)): Provision, FolderSync, Sync and
+requests ([`tests/eas.py`](https://github.com/atsanna/poste.io-addons/blob/main/tests/eas.py)): Provision, FolderSync, Sync and
 Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 
 ## What is checked
@@ -175,7 +175,7 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
   the snapshot the database copies, redis, the DKIM keys and the mail, and
   **not** the key or the settings with the passwords; a deleted message
   restored identical; the mailbox restore of
-  [docs/backup.md](backup.md#restoring) run as written; the accounts database
+  [Backup and restore](backup.md#restoring) run as written; the accounts database
   restored intact from SFTP; keep rules per job; a selected mailbox only; one
   failing destination does not stop the others, a non-empty folder is never
   used; a file the backup cannot read gives a warning with how many;
@@ -259,7 +259,7 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 
 **Restore** (`tests/test_restore.sh`, `tests/read_backups.sh`,
 `tests/rebuild_server.sh`, `tests/test_restore.py`): the two procedures of
-[docs/backup.md](backup.md) for a lost server, run as written there.
+[Backup and restore](backup.md) for a lost server, run as written there.
 - reading the backups without the server, on a Debian 12 container with only
   restic, rclone and ssh and the key file downloaded from the admin: from
   SMB, SFTP (with the password, and with a key of one's own), S3 and a

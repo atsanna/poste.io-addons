@@ -1,6 +1,6 @@
 #!/bin/sh
 # The two restores that matter when the mail server is lost, run as
-# docs/backup.md describes them. Called by tests/run.sh after test_backup.py,
+# docs/en/docs/backup.md describes them. Called by tests/run.sh after test_backup.py,
 # with the image and the name of its containers (the server of the tests,
 # its destinations and its network are running):
 #

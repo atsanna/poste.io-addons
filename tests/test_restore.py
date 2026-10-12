@@ -7,7 +7,7 @@
       the destinations as entered in the admin to /tests/restore.env, and the
       key downloaded from the admin to /tests/key.txt
   python3 test_restore.py verify    in a NEW server rebuilt from that backup
-      with the procedure of docs/backup.md ("Rebuilding the whole server"):
+      with the procedure of docs/en/docs/backup.md ("Rebuilding the whole server"):
       everything compared with what was written before.
 
 Every check prints PASS or FAIL; the exit code is the number of failures."""

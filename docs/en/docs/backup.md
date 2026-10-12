@@ -9,7 +9,7 @@ mounted by the host such as NFS).
 > now. The add-on is being built in stages; what a stage does not do yet is
 > said where it matters (for example notifications, which come next).
 
-![Backup](screenshots/backup-dashboard.png)
+![Backup](assets/screenshots/backup-dashboard.png)
 
 The add-on is independent of the others and of anything outside the
 container: it does not need a backup system on the host. If the host already

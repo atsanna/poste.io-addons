@@ -1,3 +1,9 @@
 data/
 *.swp
 .DS_Store
+
+# documentation: the built site, and what docs/build.sh copies or composes
+/site/
+/docs/design/report-rtl.css
+/docs/*/docs/assets/
+!/docs/en/docs/assets/

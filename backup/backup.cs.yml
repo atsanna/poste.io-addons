@@ -271,7 +271,7 @@ poste_backup:
     server_step2: "Soubor s klíčem stažený v části Šifrovací klíč uložte do složky hostitele, například /root/restore, a otevřete shell v kontejneru stejného obrazu s datovou složkou nového serveru a touto složkou:"
     server_step3: "V tomto shellu (soubor s klíčem je ten ze serveru {host}). Pokud konfiguraci a poštu zálohují dvě úlohy, obnovte stejně i poslední snímek druhé úlohy (vypíše je restic snapshots)."
     server_step4: "Spusťte nový server a přihlaste se jako správce tohoto serveru. Pak znovu přidejte cíle a úlohy: jejich nastavení a hesla v zálohách nejsou."
-    server_docs: "Každý krok je vysvětlen v docs/backup.md projektu poste.io-addons (Rebuilding the whole server) a jeho testy ho spouštějí přesně tak, jak je tam napsán."
+    server_docs: "Každý krok je vysvětlen na stránce Backup and restore dokumentace poste.io-addons (Rebuilding the whole server) a jeho testy ho spouštějí přesně tak, jak je tam napsán."
     restore_of: "Snímek z {time} na cíli {destination}"
     another_mailbox: "jiná schránka"
     step_mailbox: "Vyberte schránku k obnovení"

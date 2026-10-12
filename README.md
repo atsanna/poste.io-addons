@@ -1,8 +1,8 @@
 # poste.io-addons
 
-[![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](docs/testing.md)
+[![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](docs/en/docs/testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tested with Poste.io 2.5.17](https://img.shields.io/badge/tested%20with-Poste.io%202.5.17%20(Pro%20%26%20open%20source)-2b9348.svg)](docs/installation.md)
+[![Tested with Poste.io 2.5.17](https://img.shields.io/badge/tested%20with-Poste.io%202.5.17%20(Pro%20%26%20open%20source)-2b9348.svg)](docs/en/docs/installation.md)
 
 Add-ons for the [Poste.io](https://poste.io) mail server, built as a Docker
 image on top of the official one:
@@ -22,24 +22,24 @@ image on top of the official one:
   without leaving a copy of each message in `/tmp`.
 
 Take all of them or only the ones you want: each add-on is one section of the
-Dockerfile ([choosing the add-ons](docs/choosing-addons.md)).
+Dockerfile ([choosing the add-ons](docs/en/docs/choosing-addons.md)).
 
 English and Czech, like the Poste.io admin. Dockerfiles for the Pro and the
 open source edition: in production on **Poste.io 2.5.17 PRO #230**; the open
 source image is built and tested end to end on every push, with all the
-add-ons and with each one alone ([tests](docs/testing.md)).
+add-ons and with each one alone ([tests](docs/en/docs/testing.md)).
 
 > Not affiliated with or endorsed by Poste.io / Analogic. "Poste.io" is a
 > trademark of its owners; this project only contains add-ons and no Poste.io
 > code.
 
-![External mailboxes, light](docs/screenshots/external-mailboxes-list.png)
+![External mailboxes, light](docs/en/docs/assets/screenshots/external-mailboxes-list.png)
 
 ## Features
 
 ### External Mailboxes
 
-![Edit form, dark theme](docs/screenshots/external-mailbox-edit-dark.png)
+![Edit form, dark theme](docs/en/docs/assets/screenshots/external-mailbox-edit-dark.png)
 
 - POP3, POP3 over SSL, IMAP and IMAP over SSL, via
   [getmail6](https://github.com/getmail6/getmail6), every 5–60 minutes.
@@ -62,13 +62,13 @@ add-ons and with each one alone ([tests](docs/testing.md)).
   TLS certificates verified; passwords never sent back to the browser; explicit
   CSRF tokens; strict validation of every value written to getmail.
 
-→ [docs/external-mailboxes.md](docs/external-mailboxes.md)
+→ [docs/en/docs/external-mailboxes.md](docs/en/docs/external-mailboxes.md)
 
-![Logs page](docs/screenshots/external-mailbox-logs.png)
+![Logs page](docs/en/docs/assets/screenshots/external-mailbox-logs.png)
 
 ### Dark theme
 
-![Dashboard, dark theme](docs/screenshots/dashboard-dark.png)
+![Dashboard, dark theme](docs/en/docs/assets/screenshots/dashboard-dark.png)
 
 - Follows the system setting, or force light/dark from the top bar (remembered
   by the browser).
@@ -76,7 +76,7 @@ add-ons and with each one alone ([tests](docs/testing.md)).
 - Charts are recoloured and redrawn when the theme changes.
 - The light theme is untouched: every rule applies to the dark theme only.
 
-→ [docs/dark-theme.md](docs/dark-theme.md)
+→ [docs/en/docs/dark-theme.md](docs/en/docs/dark-theme.md)
 
 ### Calendars and contacts over ActiveSync
 
@@ -91,7 +91,7 @@ add-ons and with each one alone ([tests](docs/testing.md)).
   server confirmed as saved, a crash on contacts without an address book,
   ActiveSync down with the DAV server).
 
-→ [docs/activesync-dav.md](docs/activesync-dav.md) (existing installations:
+→ [docs/en/docs/activesync-dav.md](docs/en/docs/activesync-dav.md) (existing installations:
 devices must resync once)
 
 ### ActiveSync logs
@@ -103,11 +103,11 @@ devices must resync once)
 - Read-only on purpose: the logs stay Z-Push's (`www-data`), as Poste.io
   wants them.
 
-→ [docs/activesync-logs.md](docs/activesync-logs.md)
+→ [docs/en/docs/activesync-logs.md](docs/en/docs/activesync-logs.md)
 
 ### Backup and restore
 
-![Backup dashboard](docs/screenshots/backup-dashboard.png)
+![Backup dashboard](docs/en/docs/assets/screenshots/backup-dashboard.png)
 
 - The **configuration** (accounts, domains, settings, certificates, DKIM keys,
   calendars and address books, webmail settings, spam filter training) and
@@ -135,7 +135,7 @@ devices must resync once)
   before use; SFTP only to a server whose SSH key was confirmed; passwords
   never sent back to the browser.
 
-→ [docs/backup.md](docs/backup.md)
+→ [docs/en/docs/backup.md](docs/en/docs/backup.md)
 
 ### Upstream fixes
 
@@ -144,7 +144,7 @@ are world-writable (Dovecot refuses to run them) and they learn into a Bayes
 bucket that scanning never reads. The Dockerfiles fix both, and the build fails
 if Poste.io changes the scripts, so the fixes never silently stop applying.
 
-→ [docs/upstream-fixes.md](docs/upstream-fixes.md)
+→ [docs/en/docs/upstream-fixes.md](docs/en/docs/upstream-fixes.md)
 
 ## Quick start
 
@@ -164,7 +164,7 @@ docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/post
 
 Run the image as you run the official one (see
 [`docker-compose.example.yml`](docker-compose.example.yml)). On an **existing**
-installation, read [docs/installation.md](docs/installation.md#3-existing-installations-the-data-volume)
+installation, read [docs/en/docs/installation.md](docs/en/docs/installation.md#3-existing-installations-the-data-volume)
 first: the `/data` volume hides the folders the image prepares, and phones
 using ActiveSync must resync once.
 
@@ -177,7 +177,7 @@ activesync-dav/        Z-Push backends and the script that configures Z-Push
 activesync-logs/       admin page (admin/), translations, the rotation script and its cron entry, a start script, the install script
 backup/                admin pages (admin/), the engine (engine/), translations, a start script, the install script
 tests/                 end-to-end tests (run.sh, the admin driven like a browser, an ActiveSync client, backup destinations, restore tests)
-docs/                  documentation and screenshots
+docs/                  documentation: one MkDocs site per language (docs/<lang>/), the PDF design (docs/design/), the build script
 Dockerfile             open source edition (analogic/poste.io), one section per add-on
 Dockerfile-pro         Pro edition (poste.io/mailserver), one section per add-on
 select-addons.sh       prints a Dockerfile with only the add-ons you name
@@ -185,15 +185,18 @@ select-addons.sh       prints a Dockerfile with only the add-ons you name
 
 ## Documentation
 
-- [Installation, upgrades and checks](docs/installation.md)
-- [Choosing the add-ons](docs/choosing-addons.md)
-- [External Mailboxes](docs/external-mailboxes.md)
-- [Dark theme](docs/dark-theme.md)
-- [Calendars and contacts over ActiveSync](docs/activesync-dav.md)
-- [ActiveSync logs in the admin](docs/activesync-logs.md)
-- [Backup and restore](docs/backup.md)
-- [Upstream fixes](docs/upstream-fixes.md)
-- [Tests](docs/testing.md)
+**Online, in HTML and PDF:** <https://atsanna.github.io/poste.io-addons/> —
+English and Čeština. The pages below are the English source of that site.
+
+- [Installation, upgrades and checks](docs/en/docs/installation.md)
+- [Choosing the add-ons](docs/en/docs/choosing-addons.md)
+- [External Mailboxes](docs/en/docs/external-mailboxes.md)
+- [Dark theme](docs/en/docs/dark-theme.md)
+- [Calendars and contacts over ActiveSync](docs/en/docs/activesync-dav.md)
+- [ActiveSync logs in the admin](docs/en/docs/activesync-logs.md)
+- [Backup and restore](docs/en/docs/backup.md)
+- [Upstream fixes](docs/en/docs/upstream-fixes.md)
+- [Tests](docs/en/docs/testing.md)
 - [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 Screenshots use demo data (`example.com`, documentation IP ranges).

@@ -6,7 +6,7 @@ these logs are only inside the container, and Poste.io never rotates them:
 on a server with a couple of phones `z-push.log` grows by a few megabytes a
 month, forever.
 
-![ActiveSync Logs](screenshots/activesync-logs.png)
+![ActiveSync Logs](assets/screenshots/activesync-logs.png)
 
 The add-on is independent of the others: Z-Push and its logs are part of every
 Poste.io, with or without [calendars and contacts over
