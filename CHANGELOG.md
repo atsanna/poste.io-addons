@@ -118,6 +118,11 @@ All notable changes to this project are documented here. The format follows
   this combination gets "Read all" off.
 
 ### Fixed
+- **Backup: a destination or a job, about one in 300, was not saved** ("a
+  destination with an invalid id left out"). Its new id is twelve random hex
+  digits, and when all twelve were digits PHP turned it, as an array key, into
+  an integer that the check of the settings refuses. A new id now always has a
+  letter; the tests check 5,000 of them.
 - **External Mailboxes: the English protocol labels** said "POP3" and "POP3
   with SSL" but "Simple IMAP Retriever" and "Simple IMAP SSL Retriever"; now
   "IMAP" and "IMAP with SSL", like the Czech ones.

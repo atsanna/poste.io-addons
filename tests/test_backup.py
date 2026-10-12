@@ -1349,7 +1349,7 @@ check("removing the backups of a job there: refused by the admin, and by the eng
       [t.get("error") for t in done])
 rv = verify_now(REST)
 check("a verification of the append-only server works", rv.get("status") == "ok" and (rv.get("note") or "").endswith("no errors"), (rv.get("note"), rv.get("error")))
-url, html = ADMIN.get(BASE + "/snapshots/%s/%s/server" % (REST, sorted(snaps or [{"id": "0" * 64}], key=lambda x: x["time"])[-1]["id"]))
+url, html = ADMIN.get(BASE + "/snapshots/%s/%s/server" % (REST, (sorted(snaps or [], key=lambda x: x["time"]) or [{"id": "0" * 64}])[-1]["id"]))
 check("restore the server from it: the commands with the confirmed certificate and --cacert, no password", "BEGIN CERTIFICATE" in html
       and "--cacert server.pem" in html and "rest:https://bk:" in html and B["DEST_PASSWORD"] not in html, ADMIN.status)
 # a server whose certificate is not the confirmed one: the backup fails, nothing is sent

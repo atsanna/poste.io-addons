@@ -104,6 +104,19 @@ foreach ($destOk as $what => $d) {
     check("destination accepted: $what", $v !== null && !$e, $e);
 }
 
+// --- new ids: a key of digits only becomes an integer in PHP, which isId() refuses
+$k = array_key_first(['123456789012' => 1]);
+check('an id of digits only, as an array key, is an integer and not an id', is_int($k) && !Config::isId($k), gettype($k));
+$lost = [];
+for ($i = 0; $i < 5000; $i++) {
+    $id = Config::newId();
+    [$c, $e] = Config::validate(['destinations' => [$id => $destOk['local']]]);
+    if (!isset($c['destinations'][$id]) || $e) {
+        $lost[] = $id;
+    }
+}
+check('5000 new ids: every destination saved with its id (one in 300 was lost)', $lost === [], array_slice($lost, 0, 3));
+
 // --- verification and space warnings
 [$v, $e] = Config::destination($destOk['local']);
 check('a destination without a verification setting: every Sunday at 04:00, a quarter of the data', ($v['verify'] ?? null) === Config::VERIFY_DEFAULT

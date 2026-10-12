@@ -52,9 +52,16 @@ final class Config
         return is_string($id) && preg_match('/^[a-f0-9]{12}$/', $id) === 1;
     }
 
+    // An id is also an array key, and PHP turns a key made of digits only
+    // ("123456789012": about one id in 300) into an integer, which isId()
+    // refuses: the destination or job with that id was not saved ("an invalid
+    // id left out"). So an id always has a letter.
     public static function newId(): string
     {
-        return bin2hex(random_bytes(6));
+        do {
+            $id = bin2hex(random_bytes(6));
+        } while (preg_match('/[a-f]/', $id) !== 1);
+        return $id;
     }
 
     /**
