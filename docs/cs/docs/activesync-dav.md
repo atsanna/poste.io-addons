@@ -198,7 +198,7 @@ ve dvou backendech bez úprav vlastních souborů Z-Push:
 
 ## Testováno {#tested}
 
-Poste.io 2.5.17 se Z-Push 2.7.5, Pro (v produkci) a open source (sestaveno
+Poste.io 2.5.20 se Z-Push 2.7.5, Pro (v produkci) a open source (sestaveno
 a otestováno v kontejneru). V testovacím kontejneru sestaveném z Dockerfile:
 typy složek a výchozí kalendář, server ↔ telefon pro události a kontakty,
 sdílení jen pro čtení, uživatelé bez zapnutých funkcí, adresář odstraněný,

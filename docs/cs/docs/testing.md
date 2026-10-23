@@ -20,7 +20,7 @@ pevně nastavena (`ARG POSTE_IO_VERSION`), a pak na něm spustí
 | Úloha | Image |
 |---|---|
 | `all` | Dockerfile tak, jak je, všechny doplňky |
-| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `backup`, `upstream-fixes` | jen jeden doplněk, vytvořený pomocí [`select-addons.sh`](choosing-addons.md) |
+| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `backup` | jen jeden doplněk, vytvořený pomocí [`select-addons.sh`](choosing-addons.md) |
 
 Úlohy s jediným doplňkem dokazují, že se každý doplněk sestaví a funguje bez
 ostatních; testy doplňků, které v image nejsou, se hlásí jako `SKIP`.
@@ -277,7 +277,7 @@ tam napsány.
 S Dockerem, z repozitáře:
 
 ```bash
-docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t poste-addons-test .
+docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.20 -t poste-addons-test .
 sh tests/run.sh poste-addons-test
 ```
 

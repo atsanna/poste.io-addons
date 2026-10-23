@@ -890,7 +890,7 @@ není složka vlastněná rootem.
   zpráv najednou vybraných ze seznamu. Celý server se obnovuje z příkazového
   řádku, na novou instalaci.
 - restic a rclone jsou ve verzích z vydání Debianu, na kterém je obraz postaven
-  (restic 0.14, rclone 1.60 v Poste.io 2.5.17).
+  (restic 0.14, rclone 1.60 v Poste.io 2.5.20).
 - První záloha velkého serveru chvíli trvá (vše je nové); další ukládají jen
   to, co se změnilo.
 - S3 neuvádí volné místo.

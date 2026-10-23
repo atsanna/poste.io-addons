@@ -3,7 +3,7 @@
 # ports (80, 443); host networking is what the Poste.io documentation suggests.
 services:
   mailserver:
-    image: my/poste.io:2.5.17          # the image built from this repository
+    image: my/poste.io:2.5.20          # the image built from this repository
     container_name: mailserver
     hostname: mail.example.com
     network_mode: host

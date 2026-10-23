@@ -6,12 +6,11 @@
 # "ADD-ON: ... [name]" in the Dockerfile:
 #
 #   external-mailboxes  dark-theme  activesync-dav  activesync-logs  backup
-#   upstream-fixes
 #
-# Example: only the dark theme and the upstream fixes, Pro edition
+# Example: only the dark theme and the backup, Pro edition
 #
-#   sh select-addons.sh Dockerfile-pro dark-theme upstream-fixes > Dockerfile.custom
-#   docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+#   sh select-addons.sh Dockerfile-pro dark-theme backup > Dockerfile.custom
+#   docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 set -eu
 
 F=${1:?usage: sh select-addons.sh <Dockerfile> <add-on>...}

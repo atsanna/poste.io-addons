@@ -20,7 +20,7 @@ version pinned there (`ARG POSTE_IO_VERSION`), then runs
 | Job | Image |
 |---|---|
 | `all` | the Dockerfile as it is, every add-on |
-| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `backup`, `upstream-fixes` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
+| `external-mailboxes`, `dark-theme`, `activesync-dav`, `activesync-logs`, `backup` | one add-on only, made with [`select-addons.sh`](choosing-addons.md) |
 
 The single-add-on jobs prove that each add-on builds and works without the
 others; the tests of the add-ons that are not in the image are reported as
@@ -282,7 +282,7 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 With Docker, from the repository:
 
 ```bash
-docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t poste-addons-test .
+docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.20 -t poste-addons-test .
 sh tests/run.sh poste-addons-test
 ```
 

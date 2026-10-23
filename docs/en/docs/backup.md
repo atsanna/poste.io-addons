@@ -909,7 +909,7 @@ something that is not a folder owned by root.
   messages at a time chosen from a list. The whole server is restored from
   the command line, on a new installation.
 - restic and rclone are the versions of the image's Debian release (restic
-  0.14, rclone 1.60 on Poste.io 2.5.17).
+  0.14, rclone 1.60 on Poste.io 2.5.20).
 - The first backup of a large server takes a while (everything is new); later
   ones store only what changed.
 - S3 does not report free space.

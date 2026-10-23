@@ -1,10 +1,18 @@
 # Opravy upstreamu {#upstream-fixes}
 
+> **Převzato upstreamem.** Poste.io **2.5.20** obsahuje všechny tři opravy
+> (učicí skripty volají `rspamc --rcpt`, mažou svůj dočasný soubor a už
+> nejsou zapisovatelné pro všechny), takže doplněk `upstream-fixes` z
+> Dockerfilů zmizel. Na základním image starším než 2.5.20 sestavujte z
+> [vydání 1.2.0](https://github.com/atsanna/poste.io-addons/releases/tag/v1.2.0).
+> End-to-end testy chování učení dál ověřují při každém sestavení.
+> Zbytek této stránky popisuje tři problémy tak, jak byly.
+
 Tři problémy image Poste.io kolem učení spamu: přesunutí zprávy do **Junk**
-(nebo z ní) má rspamd učit, a ve verzi 2.5.17 to nedělá (opravy 1 a 2); a
-každá naučená zpráva zůstane ležet v `/tmp` (oprava 3). První dva byly
-nahlášeny Poste.io; Dockerfily obsahují obejití, označené `UPSTREAM-FIX`,
-které se odstraní, až je základní image opraví.
+(nebo z ní) má rspamd učit, a do verze 2.5.19 to nedělalo (opravy 1 a 2); a
+každá naučená zpráva zůstala ležet v `/tmp` (oprava 3). První dva byly
+nahlášeny Poste.io; vydání do 1.2.0 obsahovala obejití, označené
+`UPSTREAM-FIX`, odstraněné teď, když je základní image opravuje.
 
 ## 1. Učicí skripty jsou zapisovatelné pro všechny {#1-the-learning-scripts-are-world-writable}
 
@@ -50,7 +58,9 @@ změní.
 
 ## Jsou ještě potřeba? {#are-they-still-needed}
 
-Před sestavením nové verze Poste.io se podívejte do základního image:
+Ne, od Poste.io 2.5.20 (ověřeno na `poste.io/mailserver:2.5.20` a
+`analogic/poste.io:2.5.20`, skripty z 2026-10-21). Na starším základním
+image se podívejte do základního image:
 
 ```bash
 docker run --rm --entrypoint sh poste.io/mailserver:<VERSION> -c \

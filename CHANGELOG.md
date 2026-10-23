@@ -4,6 +4,37 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-10-23
+
+Tested on Poste.io **2.5.20** (Pro in production; open source image built and
+tested end to end in CI). 2.5.20 brings the PHP 8.2.35 security upgrade.
+
+### Removed
+- **The `upstream-fixes` add-on.** Poste.io 2.5.20 ships all three fixes the
+  add-on carried — the Junk learning scripts call `rspamc --rcpt` (learning
+  lands in the domain's Bayes bucket), remove their temporary file, and are no
+  longer world-writable — so the add-on's guards would correctly fail the
+  build on the new base. **On a base older than 2.5.20, build from release
+  [1.2.0](https://github.com/atsanna/poste.io-addons/releases/tag/v1.2.0)**: this is why the major version changes. The
+  [upstream fixes page](docs/en/docs/upstream-fixes.md) stays as the record of
+  the three problems.
+
+### Fixed
+- **Open source on 2.5.20: the admin was a fatal error on every page.** Since
+  2.5.20 the open source admin too ships a classmap-authoritative Composer
+  autoloader (before, only the Pro did): classes added by the add-ons were
+  invisible. The open source Dockerfile now rebuilds the classmap after every
+  section that adds classes, exactly like the Pro one.
+
+### Changed
+- Default and documented base version is 2.5.20 everywhere (Dockerfiles,
+  `select-addons.sh`, compose example, docs in both languages).
+- **Tests**: the spam-learning checks (move to Junk → rspamd learns in the
+  domain bucket, no copy left in `/tmp`) are kept and now verify the **base
+  image's own behaviour** on every build, instead of the add-on; the
+  permissions check accepts anything not world-writable (2.5.20 ships 775).
+  The CI matrix loses the `upstream-fixes` entry.
+
 ## [1.2.0] - 2026-10-12
 
 Tested on Poste.io 2.5.17 (Pro #230 in production; open source image built and

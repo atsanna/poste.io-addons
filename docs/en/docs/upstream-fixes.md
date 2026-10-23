@@ -1,10 +1,19 @@
 # Upstream fixes
 
+> **Adopted upstream.** Poste.io **2.5.20** ships all three fixes (the
+> learning scripts call `rspamc --rcpt`, remove their temporary file and are
+> no longer world-writable), so the `upstream-fixes` add-on is gone from the
+> Dockerfiles. On a base older than 2.5.20, build from
+> [release 1.2.0](https://github.com/atsanna/poste.io-addons/releases/tag/v1.2.0).
+> The end-to-end tests still verify the learning behaviour on every build.
+> The rest of this page documents the three problems as they were.
+
 Three problems of the Poste.io image around spam learning: moving a message
-to **Junk** (or out of it) is supposed to teach rspamd, and on 2.5.17 it does
-not (fixes 1 and 2); and every message learned stays behind in `/tmp` (fix 3).
-The first two were reported to Poste.io; the Dockerfiles carry a workaround,
-marked `UPSTREAM-FIX`, to be removed when the base image fixes them.
+to **Junk** (or out of it) is supposed to teach rspamd, and up to 2.5.19 it
+did not (fixes 1 and 2); and every message learned stayed behind in `/tmp`
+(fix 3). The first two were reported to Poste.io; releases up to 1.2.0 carried
+a workaround, marked `UPSTREAM-FIX`, removed now that the base image fixes
+them.
 
 ## 1. The learning scripts are world-writable
 
@@ -49,7 +58,9 @@ fix 2, a `grep` check fails the build if the scripts change.
 
 ## Are they still needed?
 
-Before building a new Poste.io version, look at the base image:
+No, from Poste.io 2.5.20 (checked on `poste.io/mailserver:2.5.20` and
+`analogic/poste.io:2.5.20`, scripts of 2026-10-21). On an older base, look at
+the base image:
 
 ```bash
 docker run --rm --entrypoint sh poste.io/mailserver:<VERSION> -c \

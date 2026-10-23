@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/atsanna/poste.io-addons/blob/main/LICENSE)
-[![Tested with Poste.io 2.5.17](https://img.shields.io/badge/tested%20with-Poste.io%202.5.17%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
+[![Tested with Poste.io 2.5.20](https://img.shields.io/badge/tested%20with-Poste.io%202.5.20%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
 
 Doplňky pro poštovní server [Poste.io](https://poste.io), sestavené jako image
 Dockeru nad oficiálním image:
@@ -17,14 +17,15 @@ Dockeru nad oficiálním image:
   rotace (Poste.io je nikdy nerotuje).
 - **Zálohování a obnova** — šifrované, plánované zálohy konfigurace a pošty na
   SMB, SFTP, S3 nebo připojený svazek, nastavované a sledované z administrace.
-- **Tři opravy upstreamu**, díky nimž „přesunout do Junk“ rspamd skutečně učí,
-  aniž by v `/tmp` zůstávala kopie každé zprávy.
+- Do verze 2.5.19 **tři opravy upstreamu**, díky nimž „přesunout do Junk“
+  rspamd skutečně učí, aniž by v `/tmp` zůstávala kopie každé zprávy —
+  převzato Poste.io ve 2.5.20, doplněk tedy skončil s vydáním 1.2.0.
 
 Vezměte všechny, nebo jen ty, které chcete: každý doplněk je jedna sekce
 Dockerfilu ([výběr doplňků](choosing-addons.md)).
 
 V angličtině a češtině, stejně jako administrace Poste.io. Dockerfily pro edici
-Pro i open source: v produkci na **Poste.io 2.5.17 PRO #230**; image open source
+Pro i open source: v produkci na **Poste.io 2.5.20 PRO**; image open source
 se při každém push sestavuje a celý testuje, se všemi doplňky i s každým
 zvlášť ([testy](testing.md)).
 
@@ -141,11 +142,12 @@ zařízení se musí jednou znovu synchronizovat)
 
 ### Opravy upstreamu {#upstream-fixes}
 
-Ve verzi 2.5.17 přesunutí zprávy do Junk rspamd neučí: učicí skripty jsou
-zapisovatelné pro všechny (Dovecot je odmítá spustit) a učí do Bayesova
-úložiště, které kontrola pošty nikdy nečte. Dockerfily opravují obojí a
-sestavení selže, pokud Poste.io skripty změní, takže opravy nikdy nepřestanou
-platit bez povšimnutí.
+Do verze 2.5.19 přesunutí zprávy do Junk rspamd neučilo: učicí skripty byly
+zapisovatelné pro všechny (Dovecot je odmítá spustit), učily do Bayesova
+úložiště, které kontrola pošty nikdy nečte, a nechávaly v `/tmp` kopii každé
+zprávy. **Poste.io 2.5.20 obsahuje všechny tři opravy**, doplněk tedy zmizel;
+na starším základním image sestavujte z vydání 1.2.0. End-to-end testy
+chování učení dál ověřují při každém sestavení.
 
 → [Opravy upstreamu](upstream-fixes.md)
 
@@ -156,13 +158,13 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # Pro (requires docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 # or open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 
 # only some add-ons, e.g. the dark theme and calendars/contacts
 sh select-addons.sh Dockerfile-pro dark-theme activesync-dav > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 ```
 
 Image spouštějte stejně jako oficiální (viz

@@ -10,8 +10,8 @@ the official Poste.io image, so you always know what is inside it.
 - **Pro edition**: a Poste.io Pro licence and access to the Poste.io registry
   (`docker login` with the credentials Poste.io gives you), because the base
   image is `poste.io/mailserver`.
-- Tested with **Poste.io 2.5.17**: Pro #230 in production, open source
-  (`analogic/poste.io:2.5.17`) built and started in a test container. Other
+- Tested with **Poste.io 2.5.20**: Pro in production, open source
+  (`analogic/poste.io:2.5.20`) built and started in a test container. Other
   versions may work; the build
   stops on purpose if Poste.io changes the files the add-ons hook into (see
   [Upgrading Poste.io](#upgrading-posteio)).
@@ -23,10 +23,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 ```
 
 To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md).
@@ -34,19 +34,21 @@ To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md
 The build, one Dockerfile section per add-on:
 
 1. **External Mailboxes**: installs `getmail6`, copies the admin pages into
-   `/opt/admin` (new files only: no Poste.io file is replaced), on Pro rebuilds
-   the Composer classmap (the Pro admin uses a classmap-authoritative
-   autoloader, new classes are invisible without it), appends the English and
+   `/opt/admin` (new files only: no Poste.io file is replaced), rebuilds
+   the Composer classmap (since 2.5.20 both editions use a
+   classmap-authoritative autoloader, new classes are invisible without
+   it), appends the English and
    Czech translations, adds the two menu entries, prepares the getmail
    folders, `cron.sh` and the crontab of the `mail` user;
 2. **Dark theme**: copies its files into `/opt/admin` and hooks them into
    `base.html.twig`;
 3. **Calendars and contacts over ActiveSync**: installs `libawl-php`,
    configures Z-Push and adds its two backends;
-4. **ActiveSync logs**: copies its page into `/opt/admin` (on Pro rebuilds the
+4. **ActiveSync logs**: copies its page into `/opt/admin` (and rebuilds the
    classmap), adds its menu entry and translations, the rotation script, its
    nightly cron entry and a start script;
-5. **Upstream fixes**: applies the two [upstream fixes](upstream-fixes.md).
+5. **Upstream fixes**: adopted by Poste.io in 2.5.20, nothing is applied any
+   more ([upstream fixes](upstream-fixes.md)); on an older base use release 1.2.0.
 
 ## 2. Run it
 
@@ -141,7 +143,6 @@ image:
 
 - `dark-theme-install.sh` stops if `base.html.twig` no longer has `</head>` on
   its own line or the right navbar list exactly once;
-- the Bayes upstream fix stops if Poste.io changed the Junk learning scripts
   (`grep -q` checks at the end of the block);
 - `activesync-dav-install.sh` stops if any of the 19 Z-Push configuration
   lines it changes is not exactly as expected;

@@ -1,7 +1,8 @@
-"""End-to-end tests of the External Mailboxes, ActiveSync Logs, dark theme and
-upstream-fixes add-ons, run inside a test container by run.sh. An add-on that is not in the
-image is reported as SKIP. Every check prints PASS or FAIL with what it found;
-the exit code is the number of failures."""
+"""End-to-end tests of the External Mailboxes, ActiveSync Logs and dark theme
+add-ons, plus the spam learning of the base image (fixes adopted upstream in
+Poste.io 2.5.20), run inside a test container by run.sh. An add-on that is not
+in the image is reported as SKIP. Every check prints PASS or FAIL with what it
+found; the exit code is the number of failures."""
 import imaplib, os, pwd, re, ssl, stat, subprocess, sys, time, urllib.parse
 sys.path.insert(0, "/tests")
 from panel import Panel, env
@@ -435,14 +436,16 @@ def dark_theme():
     check("translations and templates are valid (lint)", "ERROR" not in out and out.count("[OK]") == 2, out.count("[OK]"))
 
 
-def upstream_fixes():
+def spam_learning():
+    # Fixed upstream in Poste.io 2.5.20 (the former upstream-fixes add-on,
+    # release <= 1.2.0): kept as a regression test of the base image.
     sieve = "/etc/dovecot/sieve/report-spam.sieve"
     if not (os.path.exists(sieve) and "IMAPUSER" in open(sieve).read()):
-        print("SKIP  upstream fixes: not in this image")
+        print("SKIP  spam learning: scripts without the recipient (base older than 2.5.20 without the upstream-fixes add-on)")
         return
-    print("--- upstream fixes (spam learning)")
+    print("--- spam learning (base image, fixes adopted upstream in 2.5.20)")
     modes = {p: mode(p).split()[0] for p in ("/etc/dovecot/sieve", "/etc/dovecot/sieve/spam", "/etc/dovecot/sieve/ham")}
-    check("fix 1: sieve folder and learning scripts not world-writable (755)", set(modes.values()) == {"755"}, modes)
+    check("sieve folder and learning scripts not world-writable", all(int(m, 8) & 0o002 == 0 for m in modes.values()), modes)
     body = " ".join("word%d lorem ipsum dolor sit amet consectetur" % i for i in range(40))
     def learn_tmp():
         """The temporary files of the learning scripts (mktemp, owned by mail) now in /tmp."""
@@ -463,11 +466,11 @@ def upstream_fixes():
             break
         time.sleep(3)
     run = sh("grep -a 'rspamc --rcpt %s learn_spam' /data/log/mail.log" % E["ALICE"])
-    check("fix 1: moving to Junk runs the learning script", run != "", run.strip()[-80:])
-    check("fix 2: rspamc gets the recipient (--rcpt) and rspamd learns", run != "" and learned != "", learned.strip()[-60:])
+    check("moving to Junk runs the learning script", run != "", run.strip()[-80:])
+    check("rspamc gets the recipient (--rcpt) and rspamd learns", run != "" and learned != "", learned.strip()[-60:])
     redis = "redis-cli -s /var/run/redis/redis.sock --scan --pattern '%s'"
     dom, user = sh(redis % "RSexample.test_*").split(), sh(redis % ("RS%s*" % E["ALICE"])).split()
-    check("fix 2: learned into the domain's Bayes bucket, the one used for scanning", len(dom) > 0 and len(user) == 0,
+    check("learned into the domain's Bayes bucket, the one used for scanning", len(dom) > 0 and len(user) == 0,
           "domain keys %d, per-address keys %d" % (len(dom), len(user)))
     # the script goes on after learning (fuzzy_add): its file must be gone once it ends
     left = learn_tmp() - tmp_before
@@ -476,10 +479,10 @@ def upstream_fixes():
             break
         time.sleep(2)
         left = learn_tmp() - tmp_before
-    check("fix 3: the learning script leaves no copy of the message in /tmp", learned != "" and not left, sorted(left))
+    check("the learning script leaves no copy of the message in /tmp", learned != "" and not left, sorted(left))
 
 
-for group in (external_mailboxes, activesync_logs, dark_theme, upstream_fixes):
+for group in (external_mailboxes, activesync_logs, dark_theme, spam_learning):
     try:
         group()
     except Exception as ex:          # a surprise is a failure of that group, the others still run

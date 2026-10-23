@@ -11,7 +11,6 @@ v repozitáři vlastní složku.
 | [Kalendáře a kontakty přes ActiveSync](activesync-dav.md) | `activesync-dav` | `activesync-dav/` | 19 řádků konfigurace Z-Push, dva backendy Z-Push, instaluje `libawl-php` |
 | [Logy ActiveSync v administraci](activesync-logs.md) | `activesync-logs` | `activesync-logs/` | přidává stránku administrace a jednu položku menu (za *User logs*), spouštěcí skript (`/etc/cont-init.d`) a noční rotaci logů Z-Push (`/etc/cron.d`, `/etc/logrotate.d`) |
 | [Zálohování a obnova](backup.md) | `backup` | `backup/` | přidává stránky administrace a jednu položku menu, modul (`/usr/local/bin/poste-backup` a jeho knihovnu), položku cronu a spouštěcí skript (`/etc/cron.d`, `/etc/cont-init.d`), instaluje restic, rclone, klienta OpenSSH a smbclient |
-| [Opravy upstreamu pro učení spamu](upstream-fixes.md) | `upstream-fixes` | — (v Dockerfilu) | oprávnění, příjemce a dočasné soubory učicích skriptů pro Junk |
 
 Žádný doplněk nepotřebuje jiný. Testy sestavují image open source s každým
 doplňkem zvlášť i se všemi dohromady (viz [Testy](testing.md)).
@@ -22,9 +21,9 @@ Skript vypíše Dockerfile jen s doplňky, které uvedete, vše ostatní beze
 změny:
 
 ```bash
-# Pro edition, only the dark theme and the upstream fixes
-sh select-addons.sh Dockerfile-pro dark-theme upstream-fixes > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+# Pro edition, only the dark theme and the backup
+sh select-addons.sh Dockerfile-pro dark-theme backup > Dockerfile.custom
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 
 # open source edition, only External Mailboxes
 sh select-addons.sh Dockerfile external-mailboxes > Dockerfile.custom
@@ -70,4 +69,4 @@ některé doplňky při přidání nebo odebrání vyžadují krok navíc:
   v `/data/var/backup`. Zálohy v cílech zůstanou nedotčeny: klíč si ponechte,
   dokud je můžete potřebovat
   ([Zálohování a obnova](backup.md#removing-it)).
-- **Tmavý motiv** a **opravy upstreamu**: není třeba nic dělat.
+- **Tmavý motiv**: není třeba nic dělat.

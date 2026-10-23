@@ -1,20 +1,20 @@
 # Poste.io open source image with the add-ons of this repository: External
 # Mailboxes, admin dark theme, calendars and contacts over ActiveSync,
-# ActiveSync logs in the admin, backup and restore, and three upstream fixes.
+# ActiveSync logs in the admin, and backup and restore.
 # Each add-on is one section below, between the "ADD-ON" markers: delete a
 # section to leave that add-on out, or run select-addons.sh (see
 # docs/en/docs/choosing-addons.md). See README.md and docs/en/docs/installation.md.
 #
-#   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+#   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 #
-# Tested with Poste.io 2.5.17 (Pro #230 and open source).
-ARG POSTE_IO_VERSION=2.5.17
+# Tested with Poste.io 2.5.20 (Pro and open source). Since 2.5.20 the former "upstream-fixes" add-on is no longer needed: Poste.io adopted the fixes; for an older base use release 1.2.0.
+ARG POSTE_IO_VERSION=2.5.20
 FROM analogic/poste.io:${POSTE_IO_VERSION}
 ARG POSTE_IO_VERSION
 ENV POSTE_IO_VERSION="${POSTE_IO_VERSION}"
 
 LABEL org.opencontainers.image.title="poste.io-addons (open source)" \
-      org.opencontainers.image.description="Poste.io with External Mailboxes (getmail), admin dark theme, ActiveSync calendars/contacts and upstream fixes" \
+      org.opencontainers.image.description="Poste.io with External Mailboxes (getmail), admin dark theme, ActiveSync calendars/contacts and backup" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.authors="Antonio Sanna"
 
@@ -34,6 +34,16 @@ RUN apt-get update && \
 #  Admin pages (new files only)
 #======================================================================#
 COPY external-mailboxes/admin /opt/admin
+
+#======================================================================#
+#  Rebuild the Composer classmap
+#======================================================================#
+# Since 2.5.20 the open source admin too uses a classmap-authoritative
+# autoloader: new classes copied into src/ are not found until the
+# classmap is rebuilt (fatal error on every admin page).
+RUN cd /opt/admin && \
+    php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
+    rm -rf var/cache/prod
 
 #======================================================================#
 #  Translations (en, cs)
@@ -149,6 +159,16 @@ COPY activesync-logs /tmp/activesync-logs
 RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt/admin && \
     rm -rf /tmp/activesync-logs
 
+#======================================================================#
+#  Rebuild the Composer classmap
+#======================================================================#
+# Since 2.5.20 the open source admin too uses a classmap-authoritative
+# autoloader: new classes copied into src/ are not found until the
+# classmap is rebuilt (fatal error on every admin page).
+RUN cd /opt/admin && \
+    php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
+    rm -rf var/cache/prod
+
 #######################################################################
 #  ADD-ON: Backup and restore  [backup]
 #  docs/en/docs/backup.md
@@ -173,57 +193,12 @@ COPY backup /tmp/backup
 RUN sh /tmp/backup/backup-install.sh /tmp/backup /opt/admin && \
     rm -rf /tmp/backup
 
-#######################################################################
-#  ADD-ON: Upstream fixes for spam learning  [upstream-fixes]
-#  docs/en/docs/upstream-fixes.md
-#  To leave it out, delete this whole section (down to the next ADD-ON).
-#######################################################################
 #======================================================================#
-#  UPSTREAM-FIX 1: spam-learning scripts are world-writable
+#  Rebuild the Composer classmap
 #======================================================================#
-# In the base image /etc/dovecot/sieve and the "spam"/"ham" pipe scripts are
-# 0777; Dovecot refuses to run a world-writable program, so moving a message
-# to Junk teaches rspamd nothing. Remove when the base image ships them 0755.
-# See docs/en/docs/upstream-fixes.md.
-RUN chmod 0755 /etc/dovecot/sieve && \
-    chmod 0755 /etc/dovecot/sieve/spam /etc/dovecot/sieve/ham && \
-    chmod 0644 /etc/dovecot/sieve/*.sieve
-
-#======================================================================#
-#  UPSTREAM-FIX 2: Junk learning goes to the wrong Bayes bucket
-#======================================================================#
-# rspamd's per_user is the recipient domain, but the Junk scripts call rspamc
-# without a recipient and learn into a per-address bucket nobody reads. Here
-# imapsieve passes the IMAP user to the scripts and rspamc uses --rcpt. The
-# final greps FAIL the build if Poste.io changes the scripts.
-# See docs/en/docs/upstream-fixes.md.
-RUN set -e; D=/etc/dovecot/sieve; \
-    for f in report-spam.sieve report-ham.sieve; do \
-      sed -i 's|^if environment :matches "imap.cause" "\*" { set "IMAPCAUSE" "\${1}"; }$|&\nif environment :matches "imap.user" "*" { set "IMAPUSER" "${1}"; }|' $D/$f; \
-      sed -i 's|imap.cause=\${IMAPCAUSE}: |imap.cause=${IMAPCAUSE} user=${IMAPUSER}: |' $D/$f; \
-    done; \
-    sed -i 's|^pipe :copy "spam";$|pipe :copy "spam" ["${IMAPUSER}"];|' $D/report-spam.sieve; \
-    sed -i 's|^pipe :copy "ham";$|pipe :copy "ham" ["${IMAPUSER}"];|' $D/report-ham.sieve; \
-    for c in spam ham; do \
-      sed -i "s|^logger -i -t sieve -p mail.debug \"Starting /usr/bin/rspamc learn_$c < \$input_tmpfile\"$|logger -i -t sieve -p mail.debug \"Starting /usr/bin/rspamc --rcpt \$1 learn_$c < \$input_tmpfile\"|" $D/$c; \
-      sed -i "s|^RES=\$(/usr/bin/rspamc learn_$c < \"\$input_tmpfile\")$|RES=\$(/usr/bin/rspamc \${1:+--rcpt \"\$1\"} learn_$c < \"\$input_tmpfile\")|" $D/$c; \
-      grep -qF "\${1:+--rcpt \"\$1\"} learn_$c" $D/$c; \
-      grep -qF 'if environment :matches "imap.user" "*" { set "IMAPUSER" "${1}"; }' $D/report-$c.sieve; \
-      grep -qF "pipe :copy \"$c\" [\"\${IMAPUSER}\"];" $D/report-$c.sieve; \
-    done; \
-    chmod 0644 $D/report-spam.sieve $D/report-ham.sieve; chmod 0755 $D/spam $D/ham
-
-#======================================================================#
-#  UPSTREAM-FIX 3: the learning scripts leave every message in /tmp
-#======================================================================#
-# The "spam"/"ham" scripts copy the message to a mktemp file for rspamc and
-# never remove it: each message moved into or out of Junk stays in /tmp until
-# the container is recreated. Here the scripts remove it when they end, also
-# when they are stopped. The grep FAILS the build if Poste.io changes them.
-# See docs/en/docs/upstream-fixes.md.
-RUN set -e; D=/etc/dovecot/sieve; \
-    for c in spam ham; do \
-      sed -i "s|^input_tmpfile=\$(mktemp)\$|&\ntrap 'rm -f \"\$input_tmpfile\"' EXIT\ntrap 'exit 1' HUP INT TERM|" $D/$c; \
-      grep -qF "trap 'rm -f \"\$input_tmpfile\"' EXIT" $D/$c; \
-    done; \
-    chmod 0755 $D/spam $D/ham
+# Since 2.5.20 the open source admin too uses a classmap-authoritative
+# autoloader: new classes copied into src/ are not found until the
+# classmap is rebuilt (fatal error on every admin page).
+RUN cd /opt/admin && \
+    php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
+    rm -rf var/cache/prod

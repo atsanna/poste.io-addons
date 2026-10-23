@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](docs/en/docs/testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Tested with Poste.io 2.5.17](https://img.shields.io/badge/tested%20with-Poste.io%202.5.17%20(Pro%20%26%20open%20source)-2b9348.svg)](docs/en/docs/installation.md)
+[![Tested with Poste.io 2.5.20](https://img.shields.io/badge/tested%20with-Poste.io%202.5.20%20(Pro%20%26%20open%20source)-2b9348.svg)](docs/en/docs/installation.md)
 
 Add-ons for the [Poste.io](https://poste.io) mail server, built as a Docker
 image on top of the official one:
@@ -18,14 +18,15 @@ image on top of the official one:
 - **Backup and restore** — encrypted, scheduled backups of the configuration
   and the mail to SMB, SFTP, S3 or a mounted volume, set up and watched from
   the admin.
-- **Three upstream fixes** that make "move to Junk" actually teach rspamd,
-  without leaving a copy of each message in `/tmp`.
+- Up to 2.5.19, **three upstream fixes** that make "move to Junk" actually
+  teach rspamd, without leaving a copy of each message in `/tmp` — adopted by
+  Poste.io in 2.5.20, so the add-on retired with release 1.2.0.
 
 Take all of them or only the ones you want: each add-on is one section of the
 Dockerfile ([choosing the add-ons](docs/en/docs/choosing-addons.md)).
 
 English and Czech, like the Poste.io admin. Dockerfiles for the Pro and the
-open source edition: in production on **Poste.io 2.5.17 PRO #230**; the open
+open source edition: in production on **Poste.io 2.5.20 PRO**; the open
 source image is built and tested end to end on every push, with all the
 add-ons and with each one alone ([tests](docs/en/docs/testing.md)).
 
@@ -137,12 +138,15 @@ devices must resync once)
 
 → [docs/en/docs/backup.md](docs/en/docs/backup.md)
 
-### Upstream fixes
+### Upstream fixes — adopted by Poste.io in 2.5.20
 
-On 2.5.17 moving a message to Junk does not train rspamd: the learning scripts
-are world-writable (Dovecot refuses to run them) and they learn into a Bayes
-bucket that scanning never reads. The Dockerfiles fix both, and the build fails
-if Poste.io changes the scripts, so the fixes never silently stop applying.
+Up to 2.5.19 moving a message to Junk did not train rspamd: the learning
+scripts were world-writable (Dovecot refuses to run them), they learned into a
+Bayes bucket that scanning never reads, and they left a copy of every message
+in `/tmp`. This repository carried the fixes as the `upstream-fixes` add-on;
+**Poste.io 2.5.20 ships all three**, so the add-on is gone. On an older base,
+build from [release 1.2.0](https://github.com/atsanna/poste.io-addons/releases/tag/v1.2.0).
+The end-to-end tests still verify the learning behaviour on every build.
 
 → [docs/en/docs/upstream-fixes.md](docs/en/docs/upstream-fixes.md)
 
@@ -153,13 +157,13 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # Pro (requires docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 # or open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 
 # only some add-ons, e.g. the dark theme and calendars/contacts
 sh select-addons.sh Dockerfile-pro dark-theme activesync-dav > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.17 -t my/poste.io:2.5.17 .
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
 ```
 
 Run the image as you run the official one (see
