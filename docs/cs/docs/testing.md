@@ -277,7 +277,7 @@ tam napsány.
 S Dockerem, z repozitáře:
 
 ```bash
-docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.20 -t poste-addons-test .
+docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.21 -t poste-addons-test .
 sh tests/run.sh poste-addons-test
 ```
 

@@ -10,8 +10,8 @@ oficiálním image Poste.io, takže vždy víte, co v něm je.
 - **Edice Pro**: licence Poste.io Pro a přístup do registru Poste.io
   (`docker login` s přihlašovacími údaji, které vám Poste.io poskytne), protože
   základní image je `poste.io/mailserver`.
-- Testováno s **Poste.io 2.5.20**: Pro v produkci, open source
-  (`analogic/poste.io:2.5.20`) sestavený a spuštěný v testovacím kontejneru.
+- Testováno s **Poste.io 2.5.21**: Pro v produkci, open source
+  (`analogic/poste.io:2.5.21`) sestavený a spuštěný v testovacím kontejneru.
   Jiné verze mohou fungovat; sestavení se
   záměrně zastaví, pokud Poste.io změní soubory, do kterých se doplňky
   zapojují (viz [Aktualizace Poste.io](#upgrading-posteio)).
@@ -23,10 +23,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 ```
 
 Jak sestavit jen některé doplňky, viz [Výběr doplňků](choosing-addons.md).
@@ -35,8 +35,8 @@ Sestavení, jedna sekce Dockerfilu na každý doplněk:
 
 1. **Externí schránky**: nainstaluje `getmail6`, zkopíruje stránky
    administrace do `/opt/admin` (jen nové soubory: žádný soubor Poste.io se
-   nenahrazuje), znovu sestaví classmap Composeru (od 2.5.20 používají
-   obě edice autoloader typu classmap-authoritative, bez toho jsou nové
+   nenahrazuje), znovu sestaví classmap Composeru (Pro a open source 2.5.20 používají
+   autoloader typu classmap-authoritative, bez toho jsou nové
    třídy neviditelné), připojí anglické a české překlady, přidá dvě položky
    menu, připraví složky getmailu, `cron.sh` a crontab uživatele `mail`;
 2. **Tmavý motiv**: zkopíruje své soubory do `/opt/admin` a zapojí je do

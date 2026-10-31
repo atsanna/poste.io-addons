@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-10-31
+
+Tested on Poste.io **2.5.21** (Pro #303 in production; open source #303 built
+and tested end to end in CI).
+
+### Changed
+- Default and documented base version is 2.5.21 (Dockerfiles,
+  `select-addons.sh`, compose example, docs in both languages). Nothing else
+  changes: on 2.5.21 the spam-learning scripts are the same as on 2.5.20 and
+  the add-ons apply unchanged.
+- The open source admin of 2.5.21 went back to a plain (not
+  classmap-authoritative) Composer autoloader. The Dockerfile still rebuilds
+  the classmap after the sections that add classes: harmless on 2.5.21, and
+  the guard against the 500 seen on 2.5.20 if it comes back. Comments and the
+  installation page now say so.
+
 ## [2.0.0] - 2026-10-23
 
 Tested on Poste.io **2.5.20** (Pro in production; open source image built and

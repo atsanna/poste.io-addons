@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/atsanna/poste.io-addons/blob/main/LICENSE)
-[![Tested with Poste.io 2.5.20](https://img.shields.io/badge/tested%20with-Poste.io%202.5.20%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
+[![Tested with Poste.io 2.5.21](https://img.shields.io/badge/tested%20with-Poste.io%202.5.21%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
 
 Add-ons for the [Poste.io](https://poste.io) mail server, built as a Docker
 image on top of the official one:
@@ -26,7 +26,7 @@ Take all of them or only the ones you want: each add-on is one section of the
 Dockerfile ([choosing the add-ons](choosing-addons.md)).
 
 English and Czech, like the Poste.io admin. Dockerfiles for the Pro and the
-open source edition: in production on **Poste.io 2.5.20 PRO**; the open
+open source edition: in production on **Poste.io 2.5.21 PRO**; the open
 source image is built and tested end to end on every push, with all the
 add-ons and with each one alone ([tests](testing.md)).
 
@@ -156,13 +156,13 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # Pro (requires docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 # or open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 
 # only some add-ons, e.g. the dark theme and calendars/contacts
 sh select-addons.sh Dockerfile-pro dark-theme activesync-dav > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 ```
 
 Run the image as you run the official one (see

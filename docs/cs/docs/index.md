@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/atsanna/poste.io-addons/actions/workflows/tests.yml/badge.svg)](testing.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/atsanna/poste.io-addons/blob/main/LICENSE)
-[![Tested with Poste.io 2.5.20](https://img.shields.io/badge/tested%20with-Poste.io%202.5.20%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
+[![Tested with Poste.io 2.5.21](https://img.shields.io/badge/tested%20with-Poste.io%202.5.21%20(Pro%20%26%20open%20source)-2b9348.svg)](installation.md)
 
 Doplňky pro poštovní server [Poste.io](https://poste.io), sestavené jako image
 Dockeru nad oficiálním image:
@@ -25,7 +25,7 @@ Vezměte všechny, nebo jen ty, které chcete: každý doplněk je jedna sekce
 Dockerfilu ([výběr doplňků](choosing-addons.md)).
 
 V angličtině a češtině, stejně jako administrace Poste.io. Dockerfily pro edici
-Pro i open source: v produkci na **Poste.io 2.5.20 PRO**; image open source
+Pro i open source: v produkci na **Poste.io 2.5.21 PRO**; image open source
 se při každém push sestavuje a celý testuje, se všemi doplňky i s každým
 zvlášť ([testy](testing.md)).
 
@@ -158,13 +158,13 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # Pro (requires docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 # or open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 
 # only some add-ons, e.g. the dark theme and calendars/contacts
 sh select-addons.sh Dockerfile-pro dark-theme activesync-dav > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 ```
 
 Image spouštějte stejně jako oficiální (viz

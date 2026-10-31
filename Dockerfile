@@ -5,10 +5,10 @@
 # section to leave that add-on out, or run select-addons.sh (see
 # docs/en/docs/choosing-addons.md). See README.md and docs/en/docs/installation.md.
 #
-#   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.20 -t my/poste.io:2.5.20 .
+#   docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
 #
-# Tested with Poste.io 2.5.20 (Pro and open source). Since 2.5.20 the former "upstream-fixes" add-on is no longer needed: Poste.io adopted the fixes; for an older base use release 1.2.0.
-ARG POSTE_IO_VERSION=2.5.20
+# Tested with Poste.io 2.5.21 (Pro and open source). Since 2.5.20 the former "upstream-fixes" add-on is no longer needed: Poste.io adopted the fixes; for an older base use release 1.2.0.
+ARG POSTE_IO_VERSION=2.5.21
 FROM analogic/poste.io:${POSTE_IO_VERSION}
 ARG POSTE_IO_VERSION
 ENV POSTE_IO_VERSION="${POSTE_IO_VERSION}"
@@ -38,9 +38,10 @@ COPY external-mailboxes/admin /opt/admin
 #======================================================================#
 #  Rebuild the Composer classmap
 #======================================================================#
-# Since 2.5.20 the open source admin too uses a classmap-authoritative
-# autoloader: new classes copied into src/ are not found until the
-# classmap is rebuilt (fatal error on every admin page).
+# The open source admin of 2.5.20 too used a classmap-authoritative
+# autoloader (2.5.21 went back to the plain one): new classes copied into
+# src/ were not found until the classmap was rebuilt (fatal error on every
+# admin page). Kept on every version: harmless, and safe if it comes back.
 RUN cd /opt/admin && \
     php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
     rm -rf var/cache/prod
@@ -162,9 +163,10 @@ RUN sh /tmp/activesync-logs/activesync-logs-install.sh /tmp/activesync-logs /opt
 #======================================================================#
 #  Rebuild the Composer classmap
 #======================================================================#
-# Since 2.5.20 the open source admin too uses a classmap-authoritative
-# autoloader: new classes copied into src/ are not found until the
-# classmap is rebuilt (fatal error on every admin page).
+# The open source admin of 2.5.20 too used a classmap-authoritative
+# autoloader (2.5.21 went back to the plain one): new classes copied into
+# src/ were not found until the classmap was rebuilt (fatal error on every
+# admin page). Kept on every version: harmless, and safe if it comes back.
 RUN cd /opt/admin && \
     php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
     rm -rf var/cache/prod
@@ -196,9 +198,10 @@ RUN sh /tmp/backup/backup-install.sh /tmp/backup /opt/admin && \
 #======================================================================#
 #  Rebuild the Composer classmap
 #======================================================================#
-# Since 2.5.20 the open source admin too uses a classmap-authoritative
-# autoloader: new classes copied into src/ are not found until the
-# classmap is rebuilt (fatal error on every admin page).
+# The open source admin of 2.5.20 too used a classmap-authoritative
+# autoloader (2.5.21 went back to the plain one): new classes copied into
+# src/ were not found until the classmap was rebuilt (fatal error on every
+# admin page). Kept on every version: harmless, and safe if it comes back.
 RUN cd /opt/admin && \
     php composer.phar dump-autoload --optimize --classmap-authoritative --no-scripts && \
     rm -rf var/cache/prod
