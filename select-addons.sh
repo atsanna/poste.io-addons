@@ -10,7 +10,7 @@
 # Example: only the dark theme and the backup, Pro edition
 #
 #   sh select-addons.sh Dockerfile-pro dark-theme backup > Dockerfile.custom
-#   docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+#   docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 set -eu
 
 F=${1:?usage: sh select-addons.sh <Dockerfile> <add-on>...}

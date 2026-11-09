@@ -10,8 +10,8 @@ oficiálním image Poste.io, takže vždy víte, co v něm je.
 - **Edice Pro**: licence Poste.io Pro a přístup do registru Poste.io
   (`docker login` s přihlašovacími údaji, které vám Poste.io poskytne), protože
   základní image je `poste.io/mailserver`.
-- Testováno s **Poste.io 2.5.21**: Pro v produkci, open source
-  (`analogic/poste.io:2.5.21`) sestavený a spuštěný v testovacím kontejneru.
+- Testováno s **Poste.io 2.5.22**: Pro v produkci, open source
+  (`analogic/poste.io:2.5.22`) sestavený a spuštěný v testovacím kontejneru.
   Jiné verze mohou fungovat; sestavení se
   záměrně zastaví, pokud Poste.io změní soubory, do kterých se doplňky
   zapojují (viz [Aktualizace Poste.io](#upgrading-posteio)).
@@ -23,10 +23,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 ```
 
 Jak sestavit jen některé doplňky, viz [Výběr doplňků](choosing-addons.md).

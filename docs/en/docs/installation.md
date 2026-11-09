@@ -10,8 +10,8 @@ the official Poste.io image, so you always know what is inside it.
 - **Pro edition**: a Poste.io Pro licence and access to the Poste.io registry
   (`docker login` with the credentials Poste.io gives you), because the base
   image is `poste.io/mailserver`.
-- Tested with **Poste.io 2.5.21**: Pro in production, open source
-  (`analogic/poste.io:2.5.21`) built and started in a test container. Other
+- Tested with **Poste.io 2.5.22**: Pro in production, open source
+  (`analogic/poste.io:2.5.22`) built and started in a test container. Other
   versions may work; the build
   stops on purpose if Poste.io changes the files the add-ons hook into (see
   [Upgrading Poste.io](#upgrading-posteio)).
@@ -23,10 +23,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 ```
 
 To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md).

@@ -5,10 +5,10 @@
 # section to leave that add-on out, or run select-addons.sh (see
 # docs/en/docs/choosing-addons.md). See README.md and docs/en/docs/installation.md.
 #
-#   docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+#   docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 #
-# Tested with Poste.io 2.5.21 (Pro and open source). Since 2.5.20 the former "upstream-fixes" add-on is no longer needed: Poste.io adopted the fixes; for an older base use release 1.2.0. The Pro base image comes from the Poste.io registry (licence required).
-ARG POSTE_IO_VERSION=2.5.21
+# Tested with Poste.io 2.5.22 (Pro and open source). Since 2.5.20 the former "upstream-fixes" add-on is no longer needed: Poste.io adopted the fixes; for an older base use release 1.2.0. The Pro base image comes from the Poste.io registry (licence required).
+ARG POSTE_IO_VERSION=2.5.22
 FROM poste.io/mailserver:${POSTE_IO_VERSION}
 ARG POSTE_IO_VERSION
 ENV POSTE_IO_VERSION="${POSTE_IO_VERSION}"

@@ -282,7 +282,7 @@ Ping, as a device sends them. Nothing is configured behind Poste.io's back.
 With Docker, from the repository:
 
 ```bash
-docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.21 -t poste-addons-test .
+docker build -f Dockerfile --build-arg POSTE_IO_VERSION=2.5.22 -t poste-addons-test .
 sh tests/run.sh poste-addons-test
 ```
 

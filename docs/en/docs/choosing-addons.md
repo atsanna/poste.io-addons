@@ -23,7 +23,7 @@ else unchanged:
 ```bash
 # Pro edition, only the dark theme and the backup
 sh select-addons.sh Dockerfile-pro dark-theme backup > Dockerfile.custom
-docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.21 -t my/poste.io:2.5.21 .
+docker build -f Dockerfile.custom --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
 
 # open source edition, only External Mailboxes
 sh select-addons.sh Dockerfile external-mailboxes > Dockerfile.custom

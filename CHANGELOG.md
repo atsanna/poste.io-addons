@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] - 2026-11-08
+
+Tested on Poste.io **2.5.22** (Pro #338 in production; open source #338 built
+and tested end to end in CI).
+
+### Changed
+- Default and documented base version is 2.5.22 (Dockerfiles,
+  `select-addons.sh`, compose example, docs in both languages). Nothing else
+  changes: on 2.5.22 the spam-learning scripts are the same as on 2.5.20 and
+  2.5.21, PHP is still 8.2.35, and the add-ons apply unchanged.
+
 ## [2.0.1] - 2026-10-31
 
 Tested on Poste.io **2.5.21** (Pro #303 in production; open source #303 built
