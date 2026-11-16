@@ -123,6 +123,27 @@ status=0
 echo "== External Mailboxes, ActiveSync Logs, dark theme, spam learning"
 docker exec "$NAME" python3 /tests/test_addons.py || status=$((status + $?))
 echo "== calendars and contacts over ActiveSync"
+if docker exec "$NAME" test -d /opt/z-push/backend/postecaldav; then
+    # Since 2.5.24 Poste.io picks the ActiveSync backend (IMAP, or IMAP +
+    # calendars and contacts) when the container starts, from the DAV
+    # setting: like an administrator, switch DAV on and restart.
+    docker exec "$NAME" python3 -c '
+import secrets, sys; sys.path.insert(0, "/tests")
+from panel import Panel, env
+E = env()
+Panel(E["ALICE"], E["PA"]).submit("/admin/settings/", {"config[server][hostname]": "mail.example.test",
+    "config[server][alertsEmail]": E["ALICE"], "config[srs][secret]": secrets.token_hex(16), "config[dav][enabled]": "1"})
+assert "dav_enabled = 1" in open("/data/server.ini").read(), "DAV not enabled"'
+    docker restart "$NAME" >/dev/null
+    i=0
+    until docker exec "$NAME" sh -c 'curl -skf -o /dev/null https://localhost/admin/login &&
+            curl -sk -o /dev/null -w "%{http_code}" -X OPTIONS https://localhost/Microsoft-Server-ActiveSync | grep -qE "^(200|401)$" &&
+            python3 -c "import socket; socket.create_connection((\"localhost\", 993), 5)"' 2>/dev/null; do
+        i=$((i + 1))
+        [ "$i" -lt 60 ] || { echo "the container did not come back in 5 minutes"; docker logs --tail 50 "$NAME"; exit 1; }
+        sleep 5
+    done
+fi
 docker exec "$NAME" python3 /tests/test_activesync.py || status=$((status + $?))
 echo "== backup"
 docker exec "$NAME" python3 /tests/test_backup.py || status=$((status + $?))

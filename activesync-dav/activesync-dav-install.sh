@@ -1,17 +1,25 @@
 #!/bin/sh
 # activesync-dav-install.sh <z-push dir> <add-on dir>
 #
-# Turns Z-Push (ActiveSync) from mail only into mail + calendar + contacts:
-# BackendCombined with IMAP for mail, BackendPosteCalDAV (postecaldav.php)
-# for calendars and BackendPosteCardDAV (postecarddav.php) for contacts,
-# both on the Poste.io DAV server at https://localhost/dav/ (postedav.php
-# is their shared PROPFIND helper). Calendars and address books are still
-# created from the admin (DAV section of the mailbox): a user without them
-# keeps mail only.
+# Since 2.5.24 Poste.io itself serves calendars and contacts over ActiveSync:
+# BackendCombined with IMAP for mail and Z-Push's own BackendCalDAV and
+# BackendCardDAV on the Poste.io DAV server (cont-init.d/20-apply-server-config
+# switches BACKEND_PROVIDER to BackendCombined at every start while DAV is
+# enabled). This add-on keeps that layout and only swaps the two DAV backends
+# for BackendPosteCalDAV (postecaldav.php) and BackendPosteCardDAV
+# (postecarddav.php), which fix what the stock ones still get wrong
+# (docs/en/docs/activesync-dav.md, "Z-Push issues worked around"):
 #
-# Every line to change must be found exactly once, as it is in Z-Push
-# 2.7.5 shipped with Poste.io 2.5.17; otherwise the script STOPS before
-# touching anything (in a Docker build: the build fails).
+#   - an event refused by the server (read-only shared calendar) is reported
+#     to the phone as an error instead of "saved";
+#   - the DAV server switched off at runtime does not take ActiveSync down.
+#
+# postedav.php is their shared PROPFIND helper. They use the server, port and
+# paths that Poste.io writes in backend/caldav and backend/carddav/config.php.
+#
+# Every line to change must be found exactly once, as it is in Poste.io
+# 2.5.24; otherwise the script STOPS before touching anything (in a Docker
+# build: the build fails).
 set -eu
 
 Z=${1:?z-push dir}
@@ -45,44 +53,34 @@ swap() {
     [ "$(count "$1" "$3")" = 1 ] || stop "$1: not replaced: $3"
 }
 
+# same <file> <line>: the line Poste.io must already have, untouched
+same() { [ "$(count "$1" "$2")" = 1 ] || stop "$1: expected once: $2"; }
+
 C=$Z/backend/combined/config.php
 CAL=$Z/backend/caldav/config.php
 CARD=$Z/backend/carddav/config.php
 F='                SYNC_FOLDER_TYPE_'
 
+# what Poste.io 2.5.24 already sets, and the backends rely on
+same "$CAL"  "define('CALDAV_SERVER', '127.0.0.1');"
+same "$CAL"  "define('CALDAV_PATH', '/dav/calendars/%u/');"
+same "$CARD" "define('CARDDAV_SERVER', '127.0.0.1');"
+same "$CARD" "define('CARDDAV_PATH', '/dav/addressbooks/%u/');"
+for t in "APPOINTMENT => 'c'," "TASK => 'c'," "CONTACT => 'd'," "USER_APPOINTMENT => 'c'," "USER_CONTACT => 'd'," "USER_TASK => 'c',"; do
+    same "$C" "$F$t"
+done
+grep -q "^define('CARDDAV_GAL_PATH'" "$CARD" && stop "$CARD: a global address list is configured"
+
 edits() {
-    "$1" "$Z/config.php" "define('BACKEND_PROVIDER', 'BackendIMAP');" "define('BACKEND_PROVIDER', 'BackendCombined');"
-
-    "$1" "$C" "                    'name' => 'BackendCardDAV'," "                    'name' => 'BackendPosteCardDAV',"
-    "$1" "$C" "                    'name' => 'BackendCalDAV'," "                    'name' => 'BackendPosteCalDAV',"
-    "$1" "$C" "${F}TASK => 'z',"             "${F}TASK => 'c',"
-    "$1" "$C" "${F}APPOINTMENT => 'z',"      "${F}APPOINTMENT => 'c',"
-    "$1" "$C" "${F}CONTACT => 'z',"          "${F}CONTACT => 'd',"
-    "$1" "$C" "${F}NOTE => 'z',"             "${F}NOTE => 'i',"
-    "$1" "$C" "${F}JOURNAL => 'z',"          "${F}JOURNAL => 'i',"
-    "$1" "$C" "${F}USER_APPOINTMENT => 'z'," "${F}USER_APPOINTMENT => 'c',"
-    "$1" "$C" "${F}USER_CONTACT => 'z',"     "${F}USER_CONTACT => 'd',"
-    "$1" "$C" "${F}USER_TASK => 'z',"        "${F}USER_TASK => 'c',"
-    "$1" "$C" "${F}USER_JOURNAL => 'z',"     "${F}USER_JOURNAL => 'i',"
-    "$1" "$C" "${F}USER_NOTE => 'z',"        "${F}USER_NOTE => 'i',"
-    "$1" "$C" "${F}UNKNOWN => 'z',"          "${F}UNKNOWN => 'i',"
-
-    "$1" "$CAL" "define('CALDAV_SERVER', 'caldavserver.domain.com');" "define('CALDAV_SERVER', 'localhost');"
-    "$1" "$CAL" "define('CALDAV_PATH', '/caldav.php/%u/');"           "define('CALDAV_PATH', '/dav/calendars/%u/');"
-
-    "$1" "$CARD" "define('CARDDAV_PATH', '/caldav.php/%u/');"                   "define('CARDDAV_PATH', '/dav/addressbooks/%u/');"
+    "$1" "$C" "                'c' => array('name' => 'BackendCalDAV'),"  "                'c' => array('name' => 'BackendPosteCalDAV'),"
+    "$1" "$C" "                'd' => array('name' => 'BackendCardDAV')," "                'd' => array('name' => 'BackendPosteCardDAV'),"
     # no fixed default address book in Poste.io: new contacts go to the
-    # first address book found (backend/carddav/carddav.php, ChangeMessage)
-    "$1" "$CARD" "define('CARDDAV_DEFAULT_PATH', '/caldav.php/%u/addresses/');" "define('CARDDAV_DEFAULT_PATH', '/dav/addressbooks/%u/');"
-    # no global address list in Poste.io
-    "$1" "$CARD" "define('CARDDAV_GAL_PATH', '/caldav.php/%d/GAL/');"           "// define('CARDDAV_GAL_PATH', '/caldav.php/%d/GAL/');"
+    # first address book of the user (the stock path would create "default")
+    "$1" "$CARD" "define('CARDDAV_DEFAULT_PATH', '/dav/addressbooks/%u/default/');" "define('CARDDAV_DEFAULT_PATH', '/dav/addressbooks/%u/');"
 }
 
 edits check
 edits swap
-
-# nothing may still point to the Kopano backend, which is not installed
-[ "$(grep -c "=> 'z'," "$C" || true)" = 0 ] || stop "$C: a folder type still maps to 'z'"
 
 mkdir "$Z/backend/postecaldav" "$Z/backend/postecarddav"
 cp "$A/postecaldav.php" "$A/postedav.php" "$Z/backend/postecaldav/"
@@ -90,7 +88,7 @@ cp "$A/postecarddav.php" "$Z/backend/postecarddav/"
 chmod 0755 "$Z/backend/postecaldav" "$Z/backend/postecarddav"
 chmod 0644 "$Z/backend/postecaldav/postecaldav.php" "$Z/backend/postecaldav/postedav.php" "$Z/backend/postecarddav/postecarddav.php"
 
-for f in "$Z/config.php" "$C" "$CAL" "$CARD" "$Z/backend/postecaldav/postecaldav.php" \
+for f in "$C" "$CAL" "$CARD" "$Z/backend/postecaldav/postecaldav.php" \
          "$Z/backend/postecaldav/postedav.php" "$Z/backend/postecarddav/postecarddav.php"; do
     php -l "$f" > /dev/null || stop "$f: PHP syntax error"
 done

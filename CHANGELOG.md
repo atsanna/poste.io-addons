@@ -4,16 +4,51 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [2.0.2] - 2026-11-08
+## [3.0.0] - 2026-11-16
 
-Tested on Poste.io **2.5.22** (Pro #338 in production; open source #338 built
-and tested end to end in CI).
+Tested on Poste.io **2.5.24** (Pro #425 in production; open source #425 built
+and tested end to end in CI). **Requires Poste.io 2.5.24 or later**: for an
+older base, use release [2.0.1](https://github.com/atsanna/poste.io-addons/releases/tag/v2.0.1).
 
 ### Changed
-- Default and documented base version is 2.5.22 (Dockerfiles,
-  `select-addons.sh`, compose example, docs in both languages). Nothing else
-  changes: on 2.5.22 the spam-learning scripts are the same as on 2.5.20 and
-  2.5.21, PHP is still 8.2.35, and the add-ons apply unchanged.
+- **The admin pages work on the Symfony 7 admin of Poste.io 2.5.24.** 2.5.24
+  moved its admin from Symfony 5.4 to 7.4, which no longer reads Doctrine
+  annotations and no longer ships SensioFrameworkExtraBundle: the pages of
+  External Mailboxes, ActiveSync Logs and Backup were not registered at all
+  (404). Their four controllers now use PHP attributes (`#[Route]`,
+  `#[Template]`, `#[IsGranted]`), as the admin of Poste.io itself does. This
+  is why the major version changes: these controllers no longer load on
+  Poste.io 2.5.23 or earlier.
+- **Calendars and contacts over ActiveSync, on top of what Poste.io now does
+  itself.** Since 2.5.24 Poste.io serves calendars and contacts over
+  ActiveSync with the stock CalDAV/CardDAV backends of Z-Push. Tested against
+  them, they still report to the phone as saved an event the server refused
+  (read-only shared calendar: lost without a word). The add-on now keeps
+  Poste.io's layout and swaps only those two backends for its own:
+  `activesync-dav-install.sh` changes 3 lines in 2 files instead of 19 in 4.
+  As Poste.io decides, the ActiveSync backend is chosen when the container
+  starts: **after switching DAV on or off, restart the container**. Also new
+  in 2.5.24, and not up to the add-on: Poste.io's DAV server gives every
+  mailbox without one an empty "Calendar" and "Contacts" at its first DAV
+  access, so a mailbox with nothing created in the admin no longer has mail
+  only on the phone.
+- Default and documented base version is 2.5.24 everywhere.
+- 2.5.22 was the default base on `main` from 2026-11-09 and was never
+  released: by the time of the release its open source image had already left
+  Docker Hub, so a tag on it could no longer be built.
+
+### Documentation
+- **Older versions of the open source edition cannot be rebuilt from Docker
+  Hub**: it keeps only the latest `analogic/poste.io` tag. The installation
+  page says so; the Pro registry keeps every version. (This is also why the
+  tests of the `v2.0.1` tag failed in a few seconds: `analogic/poste.io:2.5.21`
+  was already gone.)
+
+### Tests
+- `tests/run.sh` switches DAV on and restarts the container before the
+  ActiveSync tests, as an administrator does on 2.5.24. The ActiveSync checks
+  follow 2.5.24: the "Calendar" and "Contacts" Poste.io creates, the address
+  book it recreates after a deletion, calendar and card data stored as BLOB.
 
 ## [2.0.1] - 2026-10-31
 

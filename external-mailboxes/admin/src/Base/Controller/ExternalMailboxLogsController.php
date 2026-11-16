@@ -7,16 +7,15 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Contracts\Translation\TranslatorInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Bridge\Twig\Attribute\Template;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * External mailbox logs controller.
- *
- * @Route("/external-mailbox-logs")
- * @Security("is_granted('ROLE_SUPER_ADMIN')")
  */
+#[Route(path: '/external-mailbox-logs')]
+#[IsGranted('ROLE_SUPER_ADMIN')]
 class ExternalMailboxLogsController extends AbstractController
 {
     // External mailboxes schedule: the same crontab installed for the "mail"
@@ -74,10 +73,9 @@ class ExternalMailboxLogsController extends AbstractController
 
     /**
      * Lists external mailbox logs.
-     *
-     * @Route("/", name="external_mailbox_logs")
-     * @Template("Base/ExternalMailboxLogs/list.html.twig")
      */
+    #[Route(path: '/', name: 'external_mailbox_logs')]
+    #[Template('Base/ExternalMailboxLogs/list.html.twig')]
     public function indexAction(Request $request)
     {
         try {
@@ -655,9 +653,8 @@ class ExternalMailboxLogsController extends AbstractController
 
     /**
      * Clear logs
-     *
-     * @Route("/clear", name="external_mailbox_logs_clear", methods={"POST"})
      */
+    #[Route(path: '/clear', name: 'external_mailbox_logs_clear', methods: ['POST'])]
     public function clearAction(Request $request)
     {
         // without a token an external page could clear the log (CSRF)
@@ -697,9 +694,8 @@ class ExternalMailboxLogsController extends AbstractController
 
     /**
      * Saves the log rotation settings; the nightly rotation applies them
-     *
-     * @Route("/rotation", name="external_mailbox_logs_rotation", methods={"POST"})
      */
+    #[Route(path: '/rotation', name: 'external_mailbox_logs_rotation', methods: ['POST'])]
     public function rotationAction(Request $request)
     {
         if (!$this->isCsrfTokenValid('external_mailbox_logs_rotation', $request->request->get('_token'))) {

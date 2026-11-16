@@ -10,11 +10,18 @@ the official Poste.io image, so you always know what is inside it.
 - **Pro edition**: a Poste.io Pro licence and access to the Poste.io registry
   (`docker login` with the credentials Poste.io gives you), because the base
   image is `poste.io/mailserver`.
-- Tested with **Poste.io 2.5.22**: Pro in production, open source
-  (`analogic/poste.io:2.5.22`) built and started in a test container. Other
+- **Poste.io 2.5.24 or later**: its admin runs on Symfony 7, which the add-ons'
+  pages are written for. For an older Poste.io use release 2.0.1.
+- Tested with **Poste.io 2.5.24**: Pro in production, open source
+  (`analogic/poste.io:2.5.24`) built and started in a test container. Other
   versions may work; the build
   stops on purpose if Poste.io changes the files the add-ons hook into (see
   [Upgrading Poste.io](#upgrading-posteio)).
+- **Older versions, open source**: Docker Hub keeps only the latest
+  `analogic/poste.io` tag, the previous ones disappear when a new version is
+  out. To build an older release of this repository for the open source
+  edition you need its base image still in your local Docker cache. The Pro
+  registry keeps every version.
 
 ## 1. Build the image
 
@@ -23,10 +30,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
 ```
 
 To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md).

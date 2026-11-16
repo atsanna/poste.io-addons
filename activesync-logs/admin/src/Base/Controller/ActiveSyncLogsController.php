@@ -5,19 +5,18 @@ namespace App\Base\Controller;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Contracts\Translation\TranslatorInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Bridge\Twig\Attribute\Template;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * ActiveSync (Z-Push) logs: read them, and configure their rotation.
  *
  * The logs belong to Z-Push (www-data, 0644) and Poste.io gives them back to
  * www-data at every start: the admin (user mail) can read them, not clear them.
- *
- * @Route("/activesync-logs")
- * @Security("is_granted('ROLE_SUPER_ADMIN')")
  */
+#[Route(path: '/activesync-logs')]
+#[IsGranted('ROLE_SUPER_ADMIN')]
 class ActiveSyncLogsController extends AbstractController
 {
     // LOGFILEDIR of /opt/z-push/config.php is /var/log/z-push/, a link to /data/log
@@ -56,10 +55,9 @@ class ActiveSyncLogsController extends AbstractController
 
     /**
      * Lists the ActiveSync logs.
-     *
-     * @Route("/", name="activesync_logs")
-     * @Template("Base/ActiveSyncLogs/list.html.twig")
      */
+    #[Route(path: '/', name: 'activesync_logs')]
+    #[Template('Base/ActiveSyncLogs/list.html.twig')]
     public function indexAction(Request $request)
     {
         // every parameter is checked against what the page offers
@@ -223,9 +221,8 @@ class ActiveSyncLogsController extends AbstractController
 
     /**
      * Saves the log rotation settings; the nightly rotation applies them
-     *
-     * @Route("/rotation", name="activesync_logs_rotation", methods={"POST"})
      */
+    #[Route(path: '/rotation', name: 'activesync_logs_rotation', methods: ['POST'])]
     public function rotationAction(Request $request)
     {
         if (!$this->isCsrfTokenValid('activesync_logs_rotation', $request->request->get('_token'))) {

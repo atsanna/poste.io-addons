@@ -12,8 +12,8 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Contracts\Translation\TranslatorInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 // the backup engine's library (outside src/: shared with the engine, which
 // validates the same settings again before using them)
@@ -26,10 +26,9 @@ foreach (['Config', 'Store', 'Schedule', 'Proc', 'Destination', 'Engine', 'Index
  * requests; backups are made by the engine (cron, as the user mail like the
  * admin), see /usr/local/lib/poste-backup. The engine's messages are in
  * English; msg() shows them in the user's language (Messages).
- *
- * @Route("/backup")
- * @Security("is_granted('ROLE_SUPER_ADMIN')")
  */
+#[Route(path: '/backup')]
+#[IsGranted('ROLE_SUPER_ADMIN')]
 class PosteBackupController extends AbstractController
 {
     private $translator;
@@ -239,9 +238,7 @@ class PosteBackupController extends AbstractController
 
     // ================================================================ dashboard
 
-    /**
-     * @Route("/", name="poste_backup", methods={"GET"})
-     */
+    #[Route(path: '/', name: 'poste_backup', methods: ['GET'])]
     public function dashboardAction(Request $request)
     {
         $cfg = Panel::config();
@@ -334,9 +331,8 @@ class PosteBackupController extends AbstractController
 
     /**
      * The open pages ask this every few seconds (JSON).
-     *
-     * @Route("/status", name="poste_backup_status", methods={"GET"})
      */
+    #[Route(path: '/status', name: 'poste_backup_status', methods: ['GET'])]
     public function statusAction(): JsonResponse
     {
         return new JsonResponse($this->live(Panel::config(), Panel::state()));
@@ -344,9 +340,7 @@ class PosteBackupController extends AbstractController
 
     // ================================================================ logs
 
-    /**
-     * @Route("/logs", name="poste_backup_logs", methods={"GET"})
-     */
+    #[Route(path: '/logs', name: 'poste_backup_logs', methods: ['GET'])]
     public function logsAction()
     {
         $cfg = Panel::config();
@@ -368,9 +362,7 @@ class PosteBackupController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/logs/{name}", name="poste_backup_log", methods={"GET"}, requirements={"name"="[0-9]{8}-[0-9]{6}-[a-f0-9]{12}[.]log"})
-     */
+    #[Route(path: '/logs/{name}', name: 'poste_backup_log', methods: ['GET'], requirements: ['name' => '[0-9]{8}-[0-9]{6}-[a-f0-9]{12}[.]log'])]
     public function logAction(string $name)
     {
         $path = Store::LOGS . '/' . $name;
@@ -404,9 +396,7 @@ class PosteBackupController extends AbstractController
 
     // ================================================================ destinations
 
-    /**
-     * @Route("/destinations", name="poste_backup_destinations", methods={"GET"})
-     */
+    #[Route(path: '/destinations', name: 'poste_backup_destinations', methods: ['GET'])]
     public function destinationsAction()
     {
         $cfg = Panel::config();
@@ -422,9 +412,8 @@ class PosteBackupController extends AbstractController
 
     /**
      * The space warnings (yellow and red from a percentage of used space).
-     *
-     * @Route("/settings/space", name="poste_backup_space_settings", methods={"POST"})
      */
+    #[Route(path: '/settings/space', name: 'poste_backup_space_settings', methods: ['POST'])]
     public function spaceSettingsAction(Request $request)
     {
         if ($this->csrf($request, 'poste_backup_space')) {
@@ -450,9 +439,8 @@ class PosteBackupController extends AbstractController
 
     /**
      * Verify now: a request to the engine (it starts within a minute).
-     *
-     * @Route("/destinations/{id}/verify", name="poste_backup_destination_verify", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
      */
+    #[Route(path: '/destinations/{id}/verify', name: 'poste_backup_destination_verify', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationVerifyAction(Request $request, string $id)
     {
         if (!isset(Panel::config()['destinations'][$id])) {
@@ -476,10 +464,8 @@ class PosteBackupController extends AbstractController
         return $used;
     }
 
-    /**
-     * @Route("/destinations/new", name="poste_backup_destination_new", methods={"GET", "POST"})
-     * @Route("/destinations/{id}/edit", name="poste_backup_destination_edit", methods={"GET", "POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/destinations/new', name: 'poste_backup_destination_new', methods: ['GET', 'POST'])]
+    #[Route(path: '/destinations/{id}/edit', name: 'poste_backup_destination_edit', methods: ['GET', 'POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationFormAction(Request $request, ?string $id = null)
     {
         $cfg = Panel::config();
@@ -561,10 +547,9 @@ class PosteBackupController extends AbstractController
      * the saved one only for the same server and account). Nothing is saved
      * or remembered. An SFTP server whose keys are not confirmed yet only gets
      * its keys read: nothing is sent to it. JSON for the page.
-     *
-     * @Route("/destinations/check", name="poste_backup_destination_check", methods={"POST"})
-     * @Route("/destinations/{id}/check", name="poste_backup_destination_check_saved", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
      */
+    #[Route(path: '/destinations/check', name: 'poste_backup_destination_check', methods: ['POST'])]
+    #[Route(path: '/destinations/{id}/check', name: 'poste_backup_destination_check_saved', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationCheckAction(Request $request, ?string $id = null): JsonResponse
     {
         $old = null;
@@ -697,9 +682,7 @@ class PosteBackupController extends AbstractController
         return $d;
     }
 
-    /**
-     * @Route("/destinations/{id}/delete", name="poste_backup_destination_delete", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/destinations/{id}/delete', name: 'poste_backup_destination_delete', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationDeleteAction(Request $request, string $id)
     {
         if ($this->csrf($request, 'poste_backup_destination_delete')) {
@@ -727,9 +710,7 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_destinations');
     }
 
-    /**
-     * @Route("/destinations/{id}/test", name="poste_backup_destination_test", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/destinations/{id}/test', name: 'poste_backup_destination_test', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationTestAction(Request $request, string $id)
     {
         $d = Panel::config()['destinations'][$id] ?? null;
@@ -771,9 +752,7 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
     }
 
-    /**
-     * @Route("/destinations/{id}/trust", name="poste_backup_destination_trust", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/destinations/{id}/trust', name: 'poste_backup_destination_trust', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationTrustAction(Request $request, string $id)
     {
         $d = Panel::config()['destinations'][$id] ?? null;
@@ -827,9 +806,7 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_destination_edit', ['id' => $id]);
     }
 
-    /**
-     * @Route("/destinations/{id}/keypair", name="poste_backup_destination_keypair", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/destinations/{id}/keypair', name: 'poste_backup_destination_keypair', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function destinationKeyPairAction(Request $request, string $id)
     {
         $d = Panel::config()['destinations'][$id] ?? null;
@@ -845,9 +822,7 @@ class PosteBackupController extends AbstractController
 
     // ================================================================ jobs
 
-    /**
-     * @Route("/jobs", name="poste_backup_jobs", methods={"GET"})
-     */
+    #[Route(path: '/jobs', name: 'poste_backup_jobs', methods: ['GET'])]
     public function jobsAction()
     {
         $cfg = Panel::config();
@@ -870,10 +845,8 @@ class PosteBackupController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/jobs/new", name="poste_backup_job_new", methods={"GET", "POST"})
-     * @Route("/jobs/{id}/edit", name="poste_backup_job_edit", methods={"GET", "POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/jobs/new', name: 'poste_backup_job_new', methods: ['GET', 'POST'])]
+    #[Route(path: '/jobs/{id}/edit', name: 'poste_backup_job_edit', methods: ['GET', 'POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function jobFormAction(Request $request, ?string $id = null)
     {
         $cfg = Panel::config();
@@ -948,9 +921,8 @@ class PosteBackupController extends AbstractController
 
     /**
      * How long the logs of the runs and the history are kept (days).
-     *
-     * @Route("/settings/logs", name="poste_backup_logs_settings", methods={"POST"})
      */
+    #[Route(path: '/settings/logs', name: 'poste_backup_logs_settings', methods: ['POST'])]
     public function logsSettingsAction(Request $request)
     {
         if ($this->csrf($request, 'poste_backup_logs_settings')) {
@@ -971,9 +943,8 @@ class PosteBackupController extends AbstractController
 
     /**
      * The time zone of the schedules ('' = the container's).
-     *
-     * @Route("/settings/timezone", name="poste_backup_timezone", methods={"POST"})
      */
+    #[Route(path: '/settings/timezone', name: 'poste_backup_timezone', methods: ['POST'])]
     public function timezoneAction(Request $request)
     {
         if ($this->csrf($request, 'poste_backup_timezone')) {
@@ -991,9 +962,7 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_jobs');
     }
 
-    /**
-     * @Route("/jobs/{id}/delete", name="poste_backup_job_delete", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/jobs/{id}/delete', name: 'poste_backup_job_delete', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function jobDeleteAction(Request $request, string $id)
     {
         if ($this->csrf($request, 'poste_backup_job_delete')) {
@@ -1006,9 +975,7 @@ class PosteBackupController extends AbstractController
         return $this->redirectToRoute('poste_backup_jobs');
     }
 
-    /**
-     * @Route("/jobs/{id}/run", name="poste_backup_job_run", methods={"POST"}, requirements={"id"="[a-f0-9]{12}"})
-     */
+    #[Route(path: '/jobs/{id}/run', name: 'poste_backup_job_run', methods: ['POST'], requirements: ['id' => '[a-f0-9]{12}'])]
     public function jobRunAction(Request $request, string $id)
     {
         if (!isset(Panel::config()['jobs'][$id])) {
@@ -1055,9 +1022,8 @@ class PosteBackupController extends AbstractController
     /**
      * The snapshots of a destination (read when the page opens), the backups of
      * each job, the recent restores and removals.
-     *
-     * @Route("/snapshots", name="poste_backup_snapshots", methods={"GET"})
      */
+    #[Route(path: '/snapshots', name: 'poste_backup_snapshots', methods: ['GET'])]
     public function snapshotsAction(Request $request)
     {
         $cfg = Panel::config();
@@ -1098,10 +1064,8 @@ class PosteBackupController extends AbstractController
      * and their messages, an optional filter, the mailbox and folder to restore
      * into (never a mailbox chosen for the user, unless it is the same one).
      * POST: the request to the engine, checked again there.
-     *
-     * @Route("/snapshots/{dest}/{snap}/restore", name="poste_backup_snapshot_restore", methods={"GET", "POST"},
-     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
      */
+    #[Route(path: '/snapshots/{dest}/{snap}/restore', name: 'poste_backup_snapshot_restore', methods: ['GET', 'POST'], requirements: ['dest' => '[a-f0-9]{12}', 'snap' => '[a-f0-9]{64}'])]
     public function snapshotRestoreAction(Request $request, string $dest, string $snap)
     {
         $cfg = Panel::config();
@@ -1221,10 +1185,8 @@ class PosteBackupController extends AbstractController
      * The messages of a mailbox in a snapshot, one page at a time, to choose
      * single messages (JSON, read only): ?source=<address>&folder=<'*' every
      * folder, '' the inbox, '.Name'>&q=<sender or subject contains>&page=<0..>.
-     *
-     * @Route("/snapshots/{dest}/{snap}/messages", name="poste_backup_snapshot_messages", methods={"GET"},
-     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
      */
+    #[Route(path: '/snapshots/{dest}/{snap}/messages', name: 'poste_backup_snapshot_messages', methods: ['GET'], requirements: ['dest' => '[a-f0-9]{12}', 'snap' => '[a-f0-9]{64}'])]
     public function snapshotMessagesAction(Request $request, string $dest, string $snap): JsonResponse
     {
         $d = Panel::config()['destinations'][$dest] ?? null;
@@ -1286,9 +1248,8 @@ class PosteBackupController extends AbstractController
     /**
      * The folders of a mailbox of this server, for the "restore into" choice
      * (JSON, read only).
-     *
-     * @Route("/mailbox-folders", name="poste_backup_mailbox_folders", methods={"GET"})
      */
+    #[Route(path: '/mailbox-folders', name: 'poste_backup_mailbox_folders', methods: ['GET'])]
     public function mailboxFoldersAction(Request $request): JsonResponse
     {
         $f = Panel::mailboxFolders((string) $request->query->get('mailbox', ''));
@@ -1304,10 +1265,8 @@ class PosteBackupController extends AbstractController
      * Restoring the whole server is done on a new installation, from the
      * command line (the documentation, Backup and restore): the commands for this destination and
      * this snapshot, ready to copy (passwords are asked when they run).
-     *
-     * @Route("/snapshots/{dest}/{snap}/server", name="poste_backup_snapshot_server", methods={"GET"},
-     *        requirements={"dest"="[a-f0-9]{12}", "snap"="[a-f0-9]{64}"})
      */
+    #[Route(path: '/snapshots/{dest}/{snap}/server', name: 'poste_backup_snapshot_server', methods: ['GET'], requirements: ['dest' => '[a-f0-9]{12}', 'snap' => '[a-f0-9]{64}'])]
     public function snapshotServerAction(string $dest, string $snap)
     {
         $d = Panel::config()['destinations'][$dest] ?? null;
@@ -1382,9 +1341,8 @@ class PosteBackupController extends AbstractController
     /**
      * Removes every backup of a job from a destination (also of a job that no
      * longer exists): a request to the engine, after a confirmation.
-     *
-     * @Route("/snapshots/{dest}/forget", name="poste_backup_snapshots_forget", methods={"POST"}, requirements={"dest"="[a-f0-9]{12}"})
      */
+    #[Route(path: '/snapshots/{dest}/forget', name: 'poste_backup_snapshots_forget', methods: ['POST'], requirements: ['dest' => '[a-f0-9]{12}'])]
     public function snapshotsForgetAction(Request $request, string $dest)
     {
         $d = Panel::config()['destinations'][$dest] ?? null;
@@ -1409,9 +1367,7 @@ class PosteBackupController extends AbstractController
 
     // ================================================================ key
 
-    /**
-     * @Route("/key", name="poste_backup_key", methods={"GET"})
-     */
+    #[Route(path: '/key', name: 'poste_backup_key', methods: ['GET'])]
     public function keyAction()
     {
         return $this->render('Base/PosteBackup/key.html.twig', [
@@ -1421,9 +1377,7 @@ class PosteBackupController extends AbstractController
         ]);
     }
 
-    /**
-     * @Route("/key/download", name="poste_backup_key_download", methods={"POST"})
-     */
+    #[Route(path: '/key/download', name: 'poste_backup_key_download', methods: ['POST'])]
     public function keyDownloadAction(Request $request)
     {
         $key = Panel::key();

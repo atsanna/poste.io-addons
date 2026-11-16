@@ -13,9 +13,9 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Contracts\Translation\TranslatorInterface;
-use Symfony\Component\Routing\Annotation\Route;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Bridge\Twig\Attribute\Template;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -25,10 +25,8 @@ use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 
-/**
- * @Security("is_granted('ROLE_SUPER_ADMIN')")
- * @Route("/external-mailboxes")
- */
+#[IsGranted('ROLE_SUPER_ADMIN')]
+#[Route(path: '/external-mailboxes')]
 class ExternalMailboxController extends AbstractController
 {
     use AjaxTrait;
@@ -393,11 +391,10 @@ class ExternalMailboxController extends AbstractController
 
     /**
      * Creates a new external mailbox.
-     *
-     * @Route("/new", name="external_mailboxes_new", methods={"GET", "POST"})
-     * @Template("Base/ExternalMailbox/new.html.twig")
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/new', name: 'external_mailboxes_new', methods: ['GET', 'POST'])]
+    #[Template('Base/ExternalMailbox/new.html.twig')]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function newAction(Request $request)
     {
 
@@ -971,10 +968,9 @@ delivered_to = false
      * Tests the login on the remote server with the values of the form
      * (AJAX, "Test connection" button). One attempt per click: providers lock
      * accounts after too many failures.
-     *
-     * @Route("/test", name="external_mailboxes_test", methods={"POST"})
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/test', name: 'external_mailboxes_test', methods: ['POST'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function testAction(Request $request)
     {
         if (!$this->isCsrfTokenValid('external_mailboxes_test', $request->request->get('_token'))) {
@@ -990,10 +986,9 @@ delivered_to = false
     /**
      * Tests the login of a saved external mailbox with its saved configuration
      * (AJAX, "Test connection" button in the list).
-     *
-     * @Route("/{mailbox}/test", name="external_mailboxes_test_saved", methods={"POST"})
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/{mailbox}/test', name: 'external_mailboxes_test_saved', methods: ['POST'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function testSavedAction(string $mailbox, Request $request)
     {
         if (!$this->isCsrfTokenValid('external_mailboxes_test', $request->request->get('_token'))) {
@@ -1013,10 +1008,9 @@ delivered_to = false
 
     /**
      * Lists the folders of a remote IMAP account (AJAX helper for the form).
-     *
-     * @Route("/folders", name="external_mailboxes_folders", methods={"POST"})
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/folders', name: 'external_mailboxes_folders', methods: ['POST'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function foldersAction(Request $request)
     {
         // without a token an external page could make the server open IMAP
@@ -1060,10 +1054,8 @@ delivered_to = false
         return new JsonResponse(['folders' => $folders]);
     }
 
-    /**
-     * @Route("/", name="external_mailboxes", methods={"GET"})
-     * @Template("Base/ExternalMailbox/list.html.twig")
-     */
+    #[Route(path: '/', name: 'external_mailboxes', methods: ['GET'])]
+    #[Template('Base/ExternalMailbox/list.html.twig')]
     public function listAction(Request $request)
     {
         $this->unlockSession($request);
@@ -1078,9 +1070,7 @@ delivered_to = false
         return $request->isXmlHttpRequest() ? $this->render('Base/ExternalMailbox/_list.html.twig', $data) : $data;
     }
 
-    /**
-     * @Route("/{mailbox}/delete", name="external_mailboxes_delete", methods={"POST"})
-     */
+    #[Route(path: '/{mailbox}/delete', name: 'external_mailboxes_delete', methods: ['POST'])]
     public function deleteAction(string $mailbox, Request $request)
     {
         // explicit token in the template (Symfony form CSRF is disabled by fos_rest, see newAction)
@@ -1113,10 +1103,8 @@ delivered_to = false
         }
     }
 
-    /**
-     * @Route("/{mailbox}/{page}", name="external_mailboxes_show", defaults={"page" = 1}, requirements={"page" = "\d+"}, methods={"GET"})
-     * @Template("Base/ExternalMailbox/show.html.twig")
-     */
+    #[Route(path: '/{mailbox}/{page}', name: 'external_mailboxes_show', defaults: ['page' => 1], requirements: ['page' => '\\d+'], methods: ['GET'])]
+    #[Template('Base/ExternalMailbox/show.html.twig')]
     public function showAction(string $mailbox, int $page, Request $request)
     {
 
@@ -1150,11 +1138,10 @@ delivered_to = false
 
     /**
      * Edit an external mailbox.
-     *
-     * @Route("/{mailbox}/edit", name="external_mailboxes_edit", methods={"GET", "POST"})
-     * @Template("Base/ExternalMailbox/edit.html.twig")
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/{mailbox}/edit', name: 'external_mailboxes_edit', methods: ['GET', 'POST'])]
+    #[Template('Base/ExternalMailbox/edit.html.twig')]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function editAction(string $mailbox, Request $request)
     {
 		
@@ -1185,10 +1172,9 @@ delivered_to = false
 
     /**
      * Save an external mailbox (edit form).
-     *
-     * @Route("/{mailbox}/save", name="external_mailboxes_save", methods={"POST"})
-     * @Security("is_granted('ROLE_SUPER_ADMIN')")
      */
+    #[Route(path: '/{mailbox}/save', name: 'external_mailboxes_save', methods: ['POST'])]
+    #[IsGranted('ROLE_SUPER_ADMIN')]
     public function saveaction(string $mailbox, Request $request){
         // data of the edit form (setupForm); explicit token in the template (Symfony
         // form CSRF is disabled by fos_rest, see newAction); the values are

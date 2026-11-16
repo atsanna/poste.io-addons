@@ -1,6 +1,6 @@
 # Kalendáře a kontakty přes ActiveSync {#calendars-and-contacts-over-activesync}
 
-Poste.io obsahuje dvě věci, které se nikdy nepotkají:
+Poste.io obsahuje dvě věci, které se do verze 2.5.23 nikdy nepotkaly:
 
 - **Z-Push**, server ActiveSync, který telefony používají pro typ účtu
   „Exchange“, nastavený **jen pro poštu**: přepínače kalendáře a kontaktů
@@ -8,15 +8,19 @@ Poste.io obsahuje dvě věci, které se nikdy nepotkají:
 - **server CalDAV/CardDAV** (SabreDAV, na `https://<your host>/dav/`), kde
   každá schránka může mít kalendáře a adresáře, vytvořené v administraci.
 
-Tento doplněk je propojuje. S jedním účtem ActiveSync dostane telefon poštu
-**i** kalendáře a kontakty ze serveru DAV: stejná data, jaká vidí klient
-CalDAV/CardDAV, a to oběma směry.
+S jedním účtem ActiveSync dostane telefon poštu **i** kalendáře a kontakty
+ze serveru DAV: stejná data, jaká vidí klient CalDAV/CardDAV, a to oběma
+směry. **Od verze 2.5.24 je Poste.io propojuje samo**, se standardními
+backendy CalDAV a CardDAV ze Z-Push. Tento doplněk (Poste.io 2.5.24 nebo
+novější) to zachovává a nahrazuje jen tyto dva backendy opravenými: událost
+odmítnutá serverem se telefonu nehlásí jako uložená a vypnutý server DAV
+nevyřadí ActiveSync (viz obejité problémy níže).
 
 ## Co uživatelé dostanou {#what-users-get}
 
 | Schránka má (v administraci) | Telefon zobrazí |
 |---|---|
-| nic | jen poštu, přesně jako dřív |
+| nic | poštu + „Calendar“ a „Contacts“, které pro ni vytvoří Poste.io (viz níže) |
 | kalendář | poštu + tento kalendář (jako **výchozí** kalendář) + jeho úkoly |
 | adresář | poštu + kontakty |
 | kalendář sdílený kolegou | tento kalendář jako **další** kalendář |
@@ -26,8 +30,11 @@ na serveru a změny na serveru se dostanou do telefonu.
 
 ## Zapnutí kalendářů a kontaktů pro schránku {#enabling-calendars-and-contacts-for-a-mailbox}
 
-Nic se nevytváří automaticky: kalendáře a adresáře se zapínají pro každou
-schránku zvlášť, jako dosud, v administraci.
+Kalendáře a adresáře se vytvářejí pro každou schránku v administraci. Od
+verze 2.5.24, když je DAV zapnutý, server DAV Poste.io navíc dá schránce, která
+žádné nemá, prázdný „Calendar“ a „Contacts“ při jejím prvním přístupu k DAV
+(kalendář webmailu, ActiveSync a pozvánky potřebují kam ukládat): doplněk tomu
+nemůže a ani nebrání.
 
 1. **Settings → DAV (Experimental) → Enabled** musí být zaškrtnuto (zapíná
    samotný server DAV).
@@ -36,6 +43,9 @@ schránku zvlášť, jako dosud, v administraci.
 3. V telefonu musí být v nastavení účtu ActiveSync zapnutá synchronizace
    kalendáře a kontaktů; pak synchronizujte (nebo počkejte na příští
    synchronizaci).
+4. Po zapnutí nebo vypnutí DAV **restartujte kontejner**: od verze 2.5.24
+   Poste.io vybírá backend ActiveSync (jen pošta, nebo pošta + kalendáře
+   a kontakty) při startu kontejneru.
 
 Schránka bez kalendáře a bez adresáře má v telefonu dál jen poštu. Když se
 kalendář nebo adresář v administraci vytvoří nebo smaže, telefon složku
@@ -144,14 +154,15 @@ přeruší, místo aby vytvořilo napůl nakonfigurovaný image.
 ## Jak to funguje {#how-it-works}
 
 Konfigurace měněná skriptem `activesync-dav/activesync-dav-install.sh`
-(19 řádků ve 4 souborech; každý se zkontroluje dřív, než se cokoli zapíše):
+(3 řádky ve 2 souborech; každý, i nastavení Poste.io, na která backendy
+spoléhají, se zkontroluje dřív, než se cokoli zapíše):
 
 | Soubor (v `/opt/z-push`) | Změna |
 |---|---|
-| `config.php` | `BACKEND_PROVIDER`: `BackendIMAP` → `BackendCombined` |
-| `backend/combined/config.php` | kalendáře a úkoly → `BackendPosteCalDAV`, kontakty → `BackendPosteCardDAV`, vše ostatní → IMAP (výchozí mapování ukazovalo na Kopano, které není nainstalováno) |
-| `backend/caldav/config.php` | server `localhost`, cesta `/dav/calendars/%u/` |
-| `backend/carddav/config.php` | cesty `/dav/addressbooks/%u/`; globální seznam adres je vypnutý (Poste.io žádný nemá) |
+| `config.php` | žádná: Poste.io nastavuje `BACKEND_PROVIDER` při každém startu (`BackendCombined`, když je DAV zapnutý) |
+| `backend/combined/config.php` | backend kalendářů `c` → `BackendPosteCalDAV`, backend kontaktů `d` → `BackendPosteCardDAV` (mapování složek z Poste.io zůstává) |
+| `backend/caldav/config.php` | žádná: server, port a cesta jsou ty, které zapisuje Poste.io |
+| `backend/carddav/config.php` | výchozí cesta `/dav/addressbooks/%u/` místo `…/default/`: nové kontakty jdou do prvního adresáře uživatele, žádný „default“ se nevytváří |
 
 Soubory nainstalované v `/opt/z-push/backend/`:
 
@@ -161,12 +172,13 @@ Soubory nainstalované v `/opt/z-push/backend/`:
 | `postecarddav/postecarddav.php` | `BackendPosteCardDAV`, rozšiřuje `BackendCardDAV` ze Z-Push |
 | `postecaldav/postedav.php` | pomocník pro PROPFIND sdílený oběma |
 
-Oba backendy komunikují s `https://localhost/dav/` uvnitř kontejneru pomocí
-přihlašovacích údajů, se kterými se přihlásil telefon (HTTP Basic, heslo
+Oba backendy komunikují se serverem DAV uvnitř kontejneru, na adrese, kterou
+nastavuje Poste.io, pomocí přihlašovacích údajů, se kterými se přihlásil telefon (HTTP Basic, heslo
 schránky). Každé přihlášení začíná jedním PROPFIND, který je zároveň
-kontrolou stavu serveru DAV. Balíček Debianu `libawl-php` je nainstalován,
-protože ho potřebuje klient CalDAV v Z-Push; jeho adresář přidává do include
-path PHP pouze backend.
+kontrolou stavu serveru DAV. Balíček Debianu `libawl-php` (potřebuje ho klient
+CalDAV v Z-Push) je součástí Poste.io od verze 2.5.24; Dockerfile ho přesto
+instaluje, neškodně, aby doplněk na tom nezávisel; jeho adresář přidává do
+include path PHP pouze backend.
 
 ## Obejité problémy Z-Push {#z-push-issues-worked-around}
 
@@ -198,7 +210,7 @@ ve dvou backendech bez úprav vlastních souborů Z-Push:
 
 ## Testováno {#tested}
 
-Poste.io 2.5.22 se Z-Push 2.7.5, Pro (v produkci) a open source (sestaveno
+Poste.io 2.5.24 se Z-Push 2.7.5, Pro (v produkci) a open source (sestaveno
 a otestováno v kontejneru). V testovacím kontejneru sestaveném z Dockerfile:
 typy složek a výchozí kalendář, server ↔ telefon pro události a kontakty,
 sdílení jen pro čtení, uživatelé bez zapnutých funkcí, adresář odstraněný,

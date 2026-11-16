@@ -111,9 +111,14 @@ def main_checks():
     check("alice: contacts folder (type 9)", fa.get("d/contacts", ("",))[0] == "9", fa.get("d/contacts"))
     k, fb = folders(cb)
     check("bob: own calendar is the default (type 8)", ("8", "Bob calendar") in fb.values(), sorted(v for f, v in fb.items() if f.startswith("c/")))
-    check("bob: no address book, no contacts folder", "d/contacts" not in fb, [f for f in fb if f.startswith("d/")])
+    # since 2.5.24 Poste.io's DAV server gives every mailbox a "Calendar" and a
+    # "Contacts" at its first DAV access when it has none (DavController.php)
+    check("bob: the address book Poste.io creates (Contacts)", fb.get("d/contacts", ("",))[0] == "9", fb.get("d/contacts"))
     k, fc = folders(cc)
-    check("carol: nothing enabled, mail only", len(fc) >= 5 and all(f.startswith("i/") for f in fc), sorted(v[1] for v in fc.values()))
+    cmail = {v[1] for f, v in fc.items() if f.startswith("i/")}
+    check("carol: nothing created in the admin: mail + the Calendar and Contacts Poste.io creates",
+          {"Inbox", "Sent", "Drafts", "Trash", "Junk"} <= cmail and ("8", "Calendar") in fc.values() and fc.get("d/contacts", ("",))[0] == "9",
+          sorted(v[1] for v in fc.values()))
     own, shared = own[0], shared[0]
     cal_a, cal_b = own[3:], [f for f, v in fb.items() if v == ("8", "Bob calendar")][0][3:]
     book_a = sql("select uri from addressbooks where principaluri='principals/%s'" % E["ALICE"])
@@ -138,10 +143,10 @@ def main_checks():
 
     print("--- phone -> server")
     s = perform(ca, own, ("AirSync", "Add", [("AirSync", "ClientEntryId", "x1"), ("AirSync", "Data", event("Created on phone", "20300120T090000Z", "20300120T100000Z"))]))
-    n = sql("select count(*) from calendarobjects where calendardata like '%SUMMARY:Created on phone%'")
+    n = sql("select count(*) from calendarobjects where cast(calendardata as text) like '%SUMMARY:Created on phone%'")
     check("event added on the phone is stored", s == ["1"] and n == "1", (s, n))
     s = perform(ca, "d/contacts", ("AirSync", "Add", [("AirSync", "ClientEntryId", "x2"), ("AirSync", "Data", [("POOMCONTACTS", "FileAs", "Dario Phone"), ("POOMCONTACTS", "FirstName", "Dario")])]))
-    n = sql("select count(*) from cards where carddata like '%FN:Dario Phone%'")
+    n = sql("select count(*) from cards where cast(carddata as text) like '%FN:Dario Phone%'")
     check("contact added on the phone is stored", s == ["1"] and n == "1", (s, n))
     q = "select count(*)||'/'||group_concat(etag) from calendarobjects where calendarid=(select calendarid from calendarinstances where uri='%s')" % shared[3:]
     before = sql(q)
@@ -157,20 +162,27 @@ def main_checks():
 
 
 def stale_checks():
-    print("--- address book removed while the phone still has the folder")
+    print("--- address books deleted while the phone still has the folder")
     b = E["BOB"]
-    ADMIN.submit(f"/admin/box/{b}/dav/addressbook/new?return={b}", {"address_book[displayName]": "Bob contacts"})
     cb = phone("bob", "test-b2")
     k, fb = folders(cb)
-    check("bob with an address book gets a contacts folder", fb.get("d/contacts", ("",))[0] == "9", fb.get("d/contacts"))
+    check("bob gets a contacts folder", fb.get("d/contacts", ("",))[0] == "9", fb.get("d/contacts"))
     kc, t = cb.sync_all("d/contacts")
-    delete = [l for l in ADMIN.links(f"/admin/box/{b}") if "/addressbook/" in l and "/delete" in l][0]
-    ADMIN.submit(delete, {})
-    check("address book deleted in the admin", sql("select count(*) from addressbooks where principaluri='principals/%s'" % b) == "0", "0")
+    for _ in range(5):
+        dl = [l for l in ADMIN.links(f"/admin/box/{b}") if "/addressbook/" in l and "/delete" in l]
+        if not dl:
+            break
+        ADMIN.submit(dl[0], {})
+    q = "select count(*) from addressbooks where principaluri='principals/%s'" % b
+    check("all of bob's address books deleted in the admin", sql(q) == "0", sql(q))
+    # since 2.5.24 Poste.io recreates an empty "Contacts" at the next DAV access:
+    # the contact must be stored there, never crash the sync (HTTP 500)
     st, t = cb.sync([("d/contacts", kc)], {"d/contacts": [("AirSync", "Add", [("AirSync", "ClientEntryId", "x4"), ("AirSync", "Data", [("POOMCONTACTS", "FileAs", "Eva NoBook")])])]})
-    check("contact on the stale folder: error 6, not HTTP 500", st == 200 and replies(t) == ["6"], (st, replies(t)))
+    check("contact on the stale folder: HTTP 200, a status, no crash", st == 200 and replies(t) in (["1"], ["6"]), (st, replies(t)))
+    n = sql("select count(*) from cards where cast(carddata as text) like '%FN:Eva NoBook%'")
+    check("...stored in the address book Poste.io recreated (or refused, never lost)", (replies(t) == ["1"]) == (n == "1"), (replies(t), n, sql(q)))
     st, k2, adds, removes = cb.foldersync(k)
-    check("next FolderSync removes the contacts folder", "d/contacts" in removes, removes)
+    check("next FolderSync answers HTTP 200", st == 200, st)
 
 
 def down_checks():

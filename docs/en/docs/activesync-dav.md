@@ -1,6 +1,6 @@
 # Calendars and contacts over ActiveSync
 
-Poste.io ships two things that never meet:
+Poste.io ships two things that, up to 2.5.23, never met:
 
 - **Z-Push**, the ActiveSync server phones use for the "Exchange" account
   type, configured for **mail only**: the phone's calendar and contacts
@@ -8,15 +8,20 @@ Poste.io ships two things that never meet:
 - a **CalDAV/CardDAV server** (SabreDAV, at `https://<your host>/dav/`) where
   each mailbox can have calendars and address books, created from the admin.
 
-This add-on connects them. With one ActiveSync account the phone gets the
-mail **and** the calendars and contacts of the DAV server: the same data a
-CalDAV/CardDAV client sees, both ways.
+With one ActiveSync account the phone gets the mail **and** the calendars and
+contacts of the DAV server: the same data a CalDAV/CardDAV client sees, both
+ways. **Since 2.5.24 Poste.io connects them itself**, with the stock CalDAV
+and CardDAV backends of Z-Push. This add-on (Poste.io 2.5.24 or later) keeps
+that and replaces only those two backends with corrected ones: an event
+refused by the server is not reported to the phone as saved, and the DAV
+server switched off does not take ActiveSync down (see the issues worked
+around, below).
 
 ## What users get
 
 | The mailbox has (in the admin) | The phone shows |
 |---|---|
-| nothing | mail only, exactly as before |
+| nothing | mail + the "Calendar" and "Contacts" Poste.io creates for it (see below) |
 | a calendar | mail + that calendar (as the **default** calendar) + its tasks |
 | an address book | mail + contacts |
 | a calendar shared by a colleague | that calendar as an **additional** calendar |
@@ -26,8 +31,11 @@ stored on the server, and changes on the server reach the phone.
 
 ## Enabling calendars and contacts for a mailbox
 
-Nothing is created automatically: calendars and address books are enabled per
-mailbox, as before, from the admin.
+Calendars and address books are created per mailbox from the admin. Since
+2.5.24, while DAV is enabled, Poste.io's DAV server also gives a mailbox that
+has none an empty "Calendar" and "Contacts" at its first DAV access (the
+webmail calendar, ActiveSync and invitations need somewhere to put things):
+the add-on cannot and does not prevent it.
 
 1. **Settings → DAV (Experimental) → Enabled** must be ticked (it enables the
    DAV server itself).
@@ -35,6 +43,9 @@ mailbox, as before, from the admin.
    *Create address book*.
 3. On the phone, in the ActiveSync account settings, calendar and contacts
    synchronisation must be on; then sync (or wait for the next sync).
+4. After switching DAV on or off, **restart the container**: since 2.5.24
+   Poste.io chooses the ActiveSync backend (mail only, or mail + calendars
+   and contacts) when the container starts.
 
 A mailbox without a calendar or an address book keeps mail only on the phone.
 When a calendar or an address book is created or deleted in the admin, the
@@ -138,15 +149,16 @@ loudly instead of producing a half-configured image.
 
 ## How it works
 
-Configuration changed by `activesync-dav/activesync-dav-install.sh` (19 lines in
-4 files; each one is checked before anything is written):
+Configuration changed by `activesync-dav/activesync-dav-install.sh` (3 lines in
+2 files; each one, and the settings of Poste.io the backends rely on, is
+checked before anything is written):
 
 | File (in `/opt/z-push`) | Change |
 |---|---|
-| `config.php` | `BACKEND_PROVIDER`: `BackendIMAP` → `BackendCombined` |
-| `backend/combined/config.php` | calendars and tasks → `BackendPosteCalDAV`, contacts → `BackendPosteCardDAV`, everything else → IMAP (the default mapping pointed to Kopano, which is not installed) |
-| `backend/caldav/config.php` | server `localhost`, path `/dav/calendars/%u/` |
-| `backend/carddav/config.php` | paths `/dav/addressbooks/%u/`; the global address list is disabled (Poste.io has none) |
+| `config.php` | none: Poste.io sets `BACKEND_PROVIDER` at every start (`BackendCombined` while DAV is enabled) |
+| `backend/combined/config.php` | the calendar backend `c` → `BackendPosteCalDAV`, the contacts backend `d` → `BackendPosteCardDAV` (the folder mapping of Poste.io is kept) |
+| `backend/caldav/config.php` | none: server, port and path are the ones Poste.io writes |
+| `backend/carddav/config.php` | default path `/dav/addressbooks/%u/` instead of `…/default/`: new contacts go to the user's first address book, no "default" one is created |
 
 Files installed in `/opt/z-push/backend/`:
 
@@ -156,12 +168,13 @@ Files installed in `/opt/z-push/backend/`:
 | `postecarddav/postecarddav.php` | `BackendPosteCardDAV`, extends Z-Push's `BackendCardDAV` |
 | `postecaldav/postedav.php` | PROPFIND helper shared by both |
 
-Both backends talk to `https://localhost/dav/` inside the container with the
-credentials the phone logged in with (HTTP Basic, the mailbox password). Each
+Both backends talk to the DAV server inside the container, at the address
+Poste.io configures, with the credentials the phone logged in with (HTTP Basic, the mailbox password). Each
 login starts with one PROPFIND that is also the health check of the DAV
-server. The Debian package `libawl-php` is installed because Z-Push's CalDAV
-client needs it; its directory is appended to PHP's include path by the
-backend only.
+server. The Debian package `libawl-php` (needed by Z-Push's CalDAV client) is
+part of Poste.io since 2.5.24; the Dockerfile still installs it, harmless, so
+the add-on does not depend on it; its directory is appended to PHP's include
+path by the backend only.
 
 ## Z-Push issues worked around
 
@@ -193,7 +206,7 @@ the two backends without modifying Z-Push's own files:
 
 ## Tested
 
-Poste.io 2.5.22 with Z-Push 2.7.5, Pro (in production) and open source (built
+Poste.io 2.5.24 with Z-Push 2.7.5, Pro (in production) and open source (built
 and tested in a container). In a test container built from the Dockerfile:
 folder types and default calendar, server ↔ phone for events and contacts,
 read-only sharing, users with nothing enabled, an address book removed while

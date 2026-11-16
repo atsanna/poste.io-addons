@@ -10,11 +10,18 @@ oficiálním image Poste.io, takže vždy víte, co v něm je.
 - **Edice Pro**: licence Poste.io Pro a přístup do registru Poste.io
   (`docker login` s přihlašovacími údaji, které vám Poste.io poskytne), protože
   základní image je `poste.io/mailserver`.
-- Testováno s **Poste.io 2.5.22**: Pro v produkci, open source
-  (`analogic/poste.io:2.5.22`) sestavený a spuštěný v testovacím kontejneru.
+- **Poste.io 2.5.24 nebo novější**: jeho administrace běží na Symfony 7, pro které
+  jsou stránky doplňků napsány. Pro starší Poste.io použijte vydání 2.0.1.
+- Testováno s **Poste.io 2.5.24**: Pro v produkci, open source
+  (`analogic/poste.io:2.5.24`) sestavený a spuštěný v testovacím kontejneru.
   Jiné verze mohou fungovat; sestavení se
   záměrně zastaví, pokud Poste.io změní soubory, do kterých se doplňky
   zapojují (viz [Aktualizace Poste.io](#upgrading-posteio)).
+- **Starší verze, open source**: Docker Hub uchovává jen poslední tag
+  `analogic/poste.io`, předchozí zmizí, jakmile vyjde nová verze. Pro
+  sestavení staršího vydání tohoto repozitáře pro edici open source potřebujete
+  jeho základní image stále v místní cache Dockeru. Registr Pro uchovává
+  všechny verze.
 
 ## 1. Sestavení image {#1-build-the-image}
 
@@ -23,10 +30,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.22 -t my/poste.io:2.5.22 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
 ```
 
 Jak sestavit jen některé doplňky, viz [Výběr doplňků](choosing-addons.md).
