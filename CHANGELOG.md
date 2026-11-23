@@ -15,6 +15,15 @@ and tested end to end in CI).
   Symfony 7.4 admin, same Z-Push configuration, same spam-learning scripts as
   2.5.24, and nothing in the add-ons depends on the PHP version. The SPF
   temperror workaround of the private build is still needed on 2.5.26.
+- 2.5.26 also moves the base image from Debian 12 to **Debian 13**, so the
+  backup add-on gets restic **0.18** (was 0.14) from Debian.
+
+### Fixed
+- **Backup: the progress of a short backup was not shown.** restic 0.17 and
+  later write the first progress line only after 1/`RESTIC_PROGRESS_FPS`
+  seconds: with 1 a second, a backup shorter than a second (or the first
+  second of any backup) showed no percent at all. The engine now asks for 4
+  progress lines a second; the state is still saved at most every 3 seconds.
 
 ## [3.0.0] - 2026-11-16
 

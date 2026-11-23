@@ -1326,7 +1326,10 @@ final class Engine
             }
             $env['RESTIC_PASSWORD_FILE'] = Store::KEY;
             $env['RESTIC_CACHE_DIR'] = Store::CACHE . '/restic';
-            $env['RESTIC_PROGRESS_FPS'] = '1';          // one progress line a second (--json)
+            // restic 0.17+ writes its first progress line only after 1/FPS seconds:
+            // 4 a second, so a short backup shows its progress too (progress() saves
+            // the state at most every 3 seconds anyway)
+            $env['RESTIC_PROGRESS_FPS'] = '4';
             $repo = Destination::repository($did, $d);
 
             [$exists, $err] = $this->repositoryExists($did, $d, $env, $log);
