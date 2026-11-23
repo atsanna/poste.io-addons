@@ -206,7 +206,7 @@ the two backends without modifying Z-Push's own files:
 
 ## Tested
 
-Poste.io 2.5.24 with Z-Push 2.7.5, Pro (in production) and open source (built
+Poste.io 2.5.26 with Z-Push 2.7.5, Pro (in production) and open source (built
 and tested in a container). In a test container built from the Dockerfile:
 folder types and default calendar, server ↔ phone for events and contacts,
 read-only sharing, users with nothing enabled, an address book removed while

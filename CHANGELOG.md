@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.1] - 2026-11-23
+
+Tested on Poste.io **2.5.26** (Pro #470 in production; open source #470 built
+and tested end to end in CI).
+
+### Changed
+- Default and documented base version is 2.5.26, the security update of
+  Poste.io (PHP 8.2.35 → **8.4.28**). The add-ons apply unchanged: same
+  Symfony 7.4 admin, same Z-Push configuration, same spam-learning scripts as
+  2.5.24, and nothing in the add-ons depends on the PHP version. The SPF
+  temperror workaround of the private build is still needed on 2.5.26.
+
 ## [3.0.0] - 2026-11-16
 
 Tested on Poste.io **2.5.24** (Pro #425 in production; open source #425 built

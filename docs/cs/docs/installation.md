@@ -12,8 +12,8 @@ oficiálním image Poste.io, takže vždy víte, co v něm je.
   základní image je `poste.io/mailserver`.
 - **Poste.io 2.5.24 nebo novější**: jeho administrace běží na Symfony 7, pro které
   jsou stránky doplňků napsány. Pro starší Poste.io použijte vydání 2.0.1.
-- Testováno s **Poste.io 2.5.24**: Pro v produkci, open source
-  (`analogic/poste.io:2.5.24`) sestavený a spuštěný v testovacím kontejneru.
+- Testováno s **Poste.io 2.5.26**: Pro v produkci, open source
+  (`analogic/poste.io:2.5.26`) sestavený a spuštěný v testovacím kontejneru.
   Jiné verze mohou fungovat; sestavení se
   záměrně zastaví, pokud Poste.io změní soubory, do kterých se doplňky
   zapojují (viz [Aktualizace Poste.io](#upgrading-posteio)).
@@ -30,10 +30,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.26 -t my/poste.io:2.5.26 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.26 -t my/poste.io:2.5.26 .
 ```
 
 Jak sestavit jen některé doplňky, viz [Výběr doplňků](choosing-addons.md).

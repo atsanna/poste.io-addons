@@ -12,8 +12,8 @@ the official Poste.io image, so you always know what is inside it.
   image is `poste.io/mailserver`.
 - **Poste.io 2.5.24 or later**: its admin runs on Symfony 7, which the add-ons'
   pages are written for. For an older Poste.io use release 2.0.1.
-- Tested with **Poste.io 2.5.24**: Pro in production, open source
-  (`analogic/poste.io:2.5.24`) built and started in a test container. Other
+- Tested with **Poste.io 2.5.26**: Pro in production, open source
+  (`analogic/poste.io:2.5.26`) built and started in a test container. Other
   versions may work; the build
   stops on purpose if Poste.io changes the files the add-ons hook into (see
   [Upgrading Poste.io](#upgrading-posteio)).
@@ -30,10 +30,10 @@ git clone https://github.com/atsanna/poste.io-addons.git
 cd poste.io-addons
 
 # open source
-docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
+docker build -f Dockerfile     --build-arg POSTE_IO_VERSION=2.5.26 -t my/poste.io:2.5.26 .
 
 # Pro (after docker login to the Poste.io registry)
-docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.24 -t my/poste.io:2.5.24 .
+docker build -f Dockerfile-pro --build-arg POSTE_IO_VERSION=2.5.26 -t my/poste.io:2.5.26 .
 ```
 
 To build only some of the add-ons, see [Choosing the add-ons](choosing-addons.md).
